@@ -231,7 +231,7 @@ export const prevote: FlowDef = new B(332)
     add: [msg('rx', 'l3', 'l2', 200, 216, 'RequestVote', { lost: true, tone: 'red' })],
   })
   .step('The link heals. S3’s RequestVote arrives carrying term 9.', {
-    add: [msg('rv', 'l3', 'l2', 236, 252, 'RequestVote', { tone: 'red' })],
+    add: [msg('rv', 'l3', 'l2', 246, 262, 'RequestVote', { tone: 'red' })],
   })
   .step('S2 sees 9 > 5, adopts it and steps down. Here it refuses the vote too, because S3 missed committed entries. No leader until a new election.', {
     set: { n2: { text: 'T9', tone: 'red' }, l2: { sub: 'follower', tone: 'ink' } },
@@ -269,8 +269,8 @@ const RY = { a: 40, b: 140, c: 240 } // S2, S1 (leader), S3
 const gridBase: El[] = [
   ...Array.from({ length: 8 }, (_, i) => txt(`h${i + 1}`, colX(i + 1), 22, String(i + 1), { size: 13, tone: 'grey' })),
   txt('la', 12, RY.a + 11, 'S2', { anchor: 'start' }),
-  txt('lb', 12, RY.b + 11, 'S1', { anchor: 'start' }),
-  txt('ld', 12, RY.b + 27, 'leader', { anchor: 'start', size: 12, tone: 'grey' }),
+  txt('lb', 12, RY.b + 9, 'S1', { anchor: 'start' }),
+  txt('ld', 12, RY.b + 29, 'leader', { anchor: 'start', size: 13, tone: 'grey' }),
   txt('lc', 12, RY.c + 11, 'S3', { anchor: 'start' }),
 ]
 const logState = (s1: (C | null)[], s2: (C | null)[], s3: (C | null)[], extra: El[] = []): El[] => [

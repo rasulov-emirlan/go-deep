@@ -106,7 +106,7 @@ export function msgLabelY(m: MsgEl, els: Shown[]): number {
 
 export type Rect = { x: number; y: number; w: number; h: number }
 const CH = 0.6 // mono glyph width / font size
-export const FS = { text: 15, sub: 13, label: 12, msg: 14 }
+export const FS = { text: 15, sub: 13, label: 13, msg: 14 }
 
 const lines = (s?: string) => (s ? s.split('\n') : [])
 const textW = (s: string | undefined, size: number) => Math.max(0, ...lines(s).map((l) => l.length)) * size * CH
@@ -127,9 +127,10 @@ export function footprint(e: El, els: Shown[]): Rect[] {
     case 'text': {
       const size = e.size ?? FS.text
       const w = textW(e.text, size)
-      const h = lines(e.text).length * size * 1.25
+      // rendered centred on y (dominant-baseline: central), lines 1.2em apart
+      const h = ((lines(e.text).length - 1) * 1.2 + 1.3) * size
       const x = e.anchor === 'middle' || !e.anchor ? e.x - w / 2 : e.anchor === 'end' ? e.x - w : e.x
-      return [{ x, y: e.y - size, w, h }]
+      return [{ x, y: e.y - h / 2, w, h }]
     }
     case 'msg': {
       if (!e.text) return []

@@ -31,6 +31,33 @@ for (const size of sizes) {
       for (let f = 0; f < dots; f++) {
         await story.locator('.story-dots button').nth(f).click()
         const issues = await story.evaluate((el, minFont) => {
+          if (el.classList.contains('flow')) {
+            // <Flow> SVG diagrams: rendered font size, text leaving the drawing, text on text
+            const svg = el.querySelector('.fl-stage svg')
+            const box = svg.getBoundingClientRect()
+            const scale = box.width / svg.viewBox.baseVal.width
+            const shown = (t) => t.textContent.trim() && [...el.querySelectorAll('.fl-el')].every((g) => !g.contains(t) || getComputedStyle(g).opacity !== '0')
+            const texts = [...svg.querySelectorAll('text')].filter(shown)
+            const name = (t) => `"${t.textContent.trim().slice(0, 18)}"`
+            const rects = texts.map((t) => t.getBoundingClientRect())
+            const res = []
+            texts.forEach((t, i) => {
+              const r = rects[i]
+              const fs = parseFloat(t.getAttribute('font-size')) * scale
+              if (fs < minFont) res.push(`${name(t)} font ${fs.toFixed(1)}px`)
+              if (r.left < box.left - 1 || r.right > box.right + 1 || r.top < box.top - 1 || r.bottom > box.bottom + 1) res.push(`${name(t)} leaves the diagram`)
+            })
+            for (let i = 0; i < rects.length; i++)
+              for (let j = i + 1; j < rects.length; j++) {
+                const a = rects[i]
+                const b = rects[j]
+                const ox = Math.min(a.right, b.right) - Math.max(a.left, b.left)
+                const oy = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)
+                const same = texts[i].closest('.fl-el') === texts[j].closest('.fl-el')
+                if (ox > 3 && oy > 3 && !same) res.push(`${name(texts[i])} overlaps ${name(texts[j])}`)
+              }
+            return res
+          }
           const st = el.querySelector('.stage').getBoundingClientRect()
           const head = el.querySelector('.story-head').getBoundingClientRect()
           const cap = el.querySelector('.story-cap').getBoundingClientRect()

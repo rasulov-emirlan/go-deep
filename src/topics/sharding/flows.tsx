@@ -24,7 +24,7 @@ const modPos = (h: number, n: number) => {
 const H12 = Array.from({ length: 12 }, (_, h) => h)
 
 export const modFlow: FlowDef = {
-  h: 215,
+  h: 222,
   steps: [
     {
       caption: 'Pretend each key hashes to 0…11. Shard = hash mod 3. Simple, and every shard holds four keys.',

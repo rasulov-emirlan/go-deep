@@ -65,7 +65,7 @@ export const ladder: FlowDef = {
 
 /* ---------- 01 · linearizable vs sequential ---------- */
 export const linVsSeq: FlowDef = {
-  h: 252,
+  h: 256,
   steps: [
     {
       caption: 'One register `x`, starting at 0. Every operation is an interval, from the client’s call to the reply.',
@@ -103,7 +103,7 @@ export const linVsSeq: FlowDef = {
 
 /* ---------- 01 · serializable vs strict ---------- */
 export const serVsStrict: FlowDef = {
-  h: 252,
+  h: 256,
   steps: [
     {
       caption: 'Transaction T1 writes two objects, x and y, and commits.',
@@ -309,7 +309,7 @@ export const capScene: FlowDef = {
     {
       caption: 'The link between G1 and G2 is cut. Both nodes stay up and both still get client requests. That is P, the partition.',
       drop: ['w1', 'rp', 'ak', 'ok'],
-      add: [{ t: 'path', id: 'cut', d: cut, tone: 'red', dashed: true }, label('cuttx', 280, 338, 'partition', 'red')],
+      add: [{ t: 'path', id: 'cut', d: cut, tone: 'red', dashed: true }, label('cuttx', 280, 335, 'partition', 'red')],
     },
     {
       caption: 'Client 1 writes v2 to G1. The copy to G2 is lost (✕). G1 has v2; G2 still has v1.',
