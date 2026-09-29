@@ -94,7 +94,7 @@ export const crossing: FlowDef = {
     {
       caption: 'Hardware, not software, saves the return address and flags, masks interrupts, enters privilege 0 and jumps to `MSR_LSTAR`, set at boot.',
       add: [box('c1', 195, 92, 170, 68, 'RCX ← RIP\nR11 ← RFLAGS\nRIP ← LSTAR', { tone: 'red' })],
-      set: { c: { sub: 'CPL 0', tone: 'red' } },
+      set: { c: { sub: 'CPL 0', tone: 'red' }, sy: { tone: 'ink' } },
       stop: {
         title: 'Why r10, not rcx?',
         body: <p>The <code>syscall</code> instruction overwrites <code>rcx</code> with the return address and <code>r11</code> with the flags, so the 4th argument moves to <code>r10</code>.</p>,
@@ -102,7 +102,7 @@ export const crossing: FlowDef = {
     },
     {
       caption: 'No hardware stack switch. The entry stub picks the kernel stack and pushes every register (`pt_regs`). Spectre mitigations run here too.',
-      add: [msg('en', 'c', 'k', 186, 'entry_SYSCALL_64', { tone: 'red' }), box('k1', 385, 200, 170, 56, 'swapgs\nkernel stack\nsave pt_regs', { tone: 'red' })],
+      add: [msg('en', 'c', 'k', 186, 'entry_SYSCALL_64'), box('k1', 385, 200, 170, 56, 'swapgs\nkernel stack\nsave pt_regs', { tone: 'red' })],
       set: { c1: { tone: 'ink' } },
     },
     {
@@ -136,7 +136,7 @@ export const crossing: FlowDef = {
     {
       caption: 'A result in −4095…−1 means `-errno`. libc turns it into `errno` and −1; Go’s assembly negates it into a `syscall.Errno`.',
       add: [{ t: 'text', id: 'er', x: 80, y: 376, text: '−4095…−1\nmeans −errno', tone: 'red', size: 13 }],
-      set: { rt2: { text: 'rax = −errno', tone: 'red' } },
+      set: { rt2: { text: 'rax = −errno', tone: 'red' }, rt1: { tone: 'ink' } },
     },
   ],
 }

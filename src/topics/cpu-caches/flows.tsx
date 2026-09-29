@@ -181,7 +181,7 @@ export const branch: FlowDef = {
       set: { br: { tone: 'red', text: 'not taken' }, g0: { tone: 'red' }, g1: { tone: 'red' }, g2: { tone: 'red' }, gl: { text: 'flush ≈15–20 cycles', tone: 'red' } },
     },
     {
-      caption: 'In Go on amd64 and arm64, `if v >= 128 { t += v }` compiles to a branchless conditional move. There is no branch to predict: sorted and unsorted ran about equal.',
+      caption: 'In Go (amd64, arm64), `if v >= 128 { t += v }` compiles to a branchless conditional move. Nothing to predict: sorted and unsorted ran about equal.',
       drop: [...stages.map((_, i) => `st${i}`), 'br', 'g0', 'g1', 'g2', 'gl'],
       add: [
         name('k1', 60, 'unsorted'),
@@ -539,7 +539,7 @@ export const numa: FlowDef = {
     },
     {
       caption: 'Go’s runtime is not NUMA-aware: goroutines move between threads on any node, and the heap is not split by node.',
-      add: [{ t: 'line', id: 'hop', x1: 130, y1: 106, x2: 130, y2: 260, arrow: true, dashed: true }, text('hoplab', 118, 190, 'goroutine hops', { anchor: 'end' })],
+      add: [{ t: 'line', id: 'hop', x1: 130, y1: 106, x2: 130, y2: 260, arrow: true, dashed: true }, text('hoplab', 118, 190, 'hops', { anchor: 'end' })],
       stop: {
         edge: true,
         title: 'The fix is outside Go',

@@ -157,7 +157,7 @@ export const memory: FlowDef = {
       ],
     },
     {
-      caption: 'Writing a 30 MB file fills the page cache, and cache is charged to the same bucket. Measured on cgroup v1: cache 31.5 MB, dirty 31.5 MB, RSS under 200 KB.',
+      caption: 'Writing a 30 MB file fills the page cache, charged to the same bucket. Measured on cgroup v1: cache 31.5 MB, dirty 31.5 MB, RSS under 200 KB.',
       add: [{ t: 'box', id: 'cache', x: 130, y: 62, w: 264, h: 50, text: 'page cache', sub: '30 MB, all dirty', tone: 'soft' }],
       set: { status: { text: '38 / 50 MB charged' } },
     },
