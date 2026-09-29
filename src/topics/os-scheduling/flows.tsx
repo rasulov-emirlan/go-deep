@@ -36,7 +36,11 @@ export const clone: FlowDef = {
       stop: {
         title: 'Thread vs process',
         edge: true,
-        body: 'One kernel object either way; the flags decide what is shared. The scheduler only sees tasks, and `ps -L` lists threads as tasks.',
+        body: (
+          <>
+            One kernel object either way; the flags decide what is shared. The scheduler only sees tasks, and <code>ps -L</code> lists threads as tasks.
+          </>
+        ),
       },
     },
     {
@@ -81,7 +85,11 @@ export const lifecycle: FlowDef = {
       stop: {
         title: 'Why SIGTERM does nothing',
         edge: true,
-        body: 'Only signals with a handler reach PID 1 inside its namespace. `SIGKILL` from outside is forced through, with no cleanup. The grace period is typically 10 to 30 s.',
+        body: (
+          <>
+            Only signals with a handler reach PID 1 inside its namespace. <code>SIGKILL</code> from outside is forced through, with no cleanup. The grace period is typically 10 to 30 s.
+          </>
+        ),
       },
     },
     {
@@ -121,7 +129,7 @@ export const switchCost: FlowDef = {
       caption: 'Two tasks hand a token back and forth through a pipe, pinned to one CPU. Each hand-off, with its context switch, took about 1.8 µs (measured).',
       add: [
         text('r1', 10, 25, 'one CPU', { anchor: 'start', tone: 'grey' }),
-        box('a1', 10, 40, 80, 40, 'A', { label: 'CPU 0' }),
+        box('a1', 10, 36, 80, 46, 'A', { label: 'CPU 0' }),
         box('b1', 95, 40, 80, 40, 'B'),
         box('a2', 180, 40, 80, 40, 'A'),
         box('b2', 265, 40, 80, 40, 'B'),
@@ -132,9 +140,9 @@ export const switchCost: FlowDef = {
       caption: 'Pinned to two CPUs, the same hand-off took 12.5 µs. The other CPU has to be woken with an interrupt, and inside a VM that costs extra.',
       add: [
         text('r2', 10, 112, 'two CPUs', { anchor: 'start', tone: 'grey' }),
-        box('c0a', 10, 128, 80, 40, 'A', { label: 'CPU 0' }),
+        box('c0a', 10, 124, 80, 46, 'A', { label: 'CPU 0' }),
         box('w1', 95, 180, 120, 40, 'IPI, wake', { dashed: true, tone: 'red' }),
-        box('c1b', 220, 180, 80, 40, 'B', { label: 'CPU 1' }),
+        box('c1b', 220, 178, 80, 46, 'B', { label: 'CPU 1' }),
         box('w2', 305, 128, 120, 40, 'IPI, wake', { dashed: true, tone: 'red' }),
         box('c0c', 430, 128, 80, 40, 'A'),
         text('h2', 10, 246, 'hand-off ≈ 12.5 µs', { anchor: 'start', tone: 'red' }),
@@ -169,9 +177,9 @@ export const switchCost: FlowDef = {
 }
 
 /* ---------- 02 · EEVDF ---------- */
-const tick = (k: number): El => ({ t: 'line', id: 'tk' + k, x1: 20 + 60 * k, y1: 200, x2: 20 + 60 * k, y2: 212, tone: 'grey' }) as El
+const tick = (k: number): El => ({ t: 'line', id: 'tk' + k, x1: 20 + 60 * k, y1: 155, x2: 20 + 60 * k, y2: 167, tone: 'grey' }) as El
 export const eevdf: FlowDef = {
-  h: 318,
+  h: 274,
   steps: [
     {
       caption: 'Each CPU keeps its own run queue and picks from it, with no global lock. A balancer moves tasks between queues. Weight comes from `nice`.',
@@ -203,10 +211,10 @@ export const eevdf: FlowDef = {
     {
       caption: 'A runs. The timer tick fires every 4 ms (`HZ=250`) and checks whether A used its slice (about 2 ms here) or a woken task has an earlier deadline.',
       add: [
-        { t: 'line', id: 'axis', x1: 20, y1: 206, x2: 540, y2: 206, tone: 'grey' } as El,
+        { t: 'line', id: 'axis', x1: 20, y1: 161, x2: 540, y2: 161, tone: 'grey' } as El,
         ...Array.from({ length: 9 }, (_, k) => tick(k)),
-        text('tl', 540, 182, 'tick = 4 ms', { anchor: 'end', tone: 'grey' }),
-        box('ra', 20, 222, 60, 34, 'A', { tone: 'red' }),
+        text('tl', 540, 137, 'tick = 4 ms', { anchor: 'end', tone: 'grey' }),
+        box('ra', 20, 177, 60, 34, 'A', { tone: 'red' }),
       ],
       stop: {
         title: 'Taking the CPU back',
@@ -220,16 +228,16 @@ export const eevdf: FlowDef = {
     {
       caption: 'Preempted while runnable: involuntary switch. Blocked on I/O, a futex or `sleep`: voluntary. Two spinners sharing a CPU: 243 involuntary each in 2 s (`/proc/PID/status`).',
       add: [
-        box('rb', 85, 222, 55, 34, 'B'),
-        box('ra2', 145, 222, 60, 34, 'A'),
-        text('c1', 20, 282, 'A preempted: involuntary +1', { size: 13, anchor: 'start', tone: 'red' }),
-        text('c2', 20, 302, 'B blocks on read: voluntary +1', { size: 13, anchor: 'start' }),
+        box('rb', 85, 177, 55, 34, 'B'),
+        box('ra2', 145, 177, 60, 34, 'A'),
+        text('c1', 20, 237, 'A preempted: involuntary +1', { size: 13, anchor: 'start', tone: 'red' }),
+        text('c2', 20, 257, 'B blocks on read: voluntary +1', { size: 13, anchor: 'start' }),
       ],
       set: { ra: { tone: 'ink' } },
     },
     {
       caption: 'A sleeper that wakes with a short requested slice gets an earlier deadline and preempts at once: lower latency without a bigger share.',
-      add: [box('rw', 175, 222, 40, 34, 'W', { tone: 'red' }), text('tw', 225, 244, 'W wakes: earlier deadline', { anchor: 'start', size: 13, tone: 'red' })],
+      add: [box('rw', 175, 177, 40, 34, 'W', { tone: 'red' }), text('tw', 225, 199, 'W wakes: earlier deadline', { anchor: 'start', size: 13, tone: 'red' })],
       set: { ra2: { w: 30 } },
     },
   ],
@@ -306,11 +314,11 @@ export const futex: FlowDef = {
       caption: 'Go’s `sync.Mutex` is not a futex: it spins briefly, then parks the goroutine in the runtime. Only a thread with nothing to run sleeps on a futex.',
       drop: ['a', 'b', 'k', 'w', 'c1', 'c2', 'wt', 'q', 'u1', 'wk', 'bw'],
       add: [
-        text('sm', 280, 40, 'sync.Mutex is not a futex', { tone: 'grey' }),
-        box('gp', 20, 70, 250, 70, 'goroutine blocks', { sub: 'parked by the runtime, no syscall' }),
-        box('mp', 290, 70, 250, 70, 'idle thread (M)', { sub: 'FUTEX_WAIT_PRIVATE', tone: 'red' }),
-        text('ms1', 280, 190, '2M lock/unlock, alone: 9 futex calls', { size: 14 }),
-        text('ms2', 280, 220, '8 goroutines, same 2M: 1,346 calls', { size: 14, tone: 'red' }),
+        text('sm', 280, 80, 'sync.Mutex is not a futex', { tone: 'grey' }),
+        box('gp', 20, 110, 250, 70, 'goroutine blocks', { sub: 'runtime parks it' }),
+        box('mp', 290, 110, 250, 70, 'idle thread (M)', { sub: 'FUTEX_WAIT_PRIVATE', tone: 'red' }),
+        text('ms1', 280, 230, '2M lock/unlock, alone: 9 futex calls', { size: 14 }),
+        text('ms2', 280, 262, '8 goroutines, same 2M: 1,346 calls', { size: 14, tone: 'red' }),
       ],
     },
   ],
@@ -319,7 +327,7 @@ export const futex: FlowDef = {
 /* ---------- 04 · CFS bandwidth throttling ---------- */
 const trow = (i: number) => 90 + 34 * i
 export const throttle: FlowDef = {
-  h: 306,
+  h: 318,
   steps: [
     {
       caption: 'A quota is time, not cores. `cpu.max = 200000 100000` gives the container 200 ms of CPU per 100 ms window, however many threads spend it.',
@@ -346,11 +354,11 @@ export const throttle: FlowDef = {
     },
     {
       caption: 'Frozen for the rest of the window. A 1 ms sleeper probe overslept p99 49.6 ms with 4 spinners under this quota, 0.4 ms unthrottled.',
-      add: [box('fz', 280, 86, 260, 138, 'all threads frozen', { sub: '~50 ms', dashed: true, tone: 'red' }), arrow('rq', 332, 290, 540, 290, { tone: 'red', text: 'request waits' })],
+      add: [box('fz', 280, 86, 260, 138, 'all threads frozen', { sub: '~50 ms', dashed: true, tone: 'red' }), arrow('rq', 332, 296, 540, 296, { tone: 'red', text: 'request waits' })],
     },
     {
       caption: 'The kernel counts it in `cpu.stat`: 40 of 40 periods throttled. Watch `nr_throttled / nr_periods`, not average CPU%.',
-      add: [box('cs', 20, 262, 300, 40, 'nr_throttled 40 / 40 periods', { tone: 'red' })],
+      add: [box('cs', 20, 270, 300, 40, 'nr_throttled 40 / 40 periods', { tone: 'red' })],
       stop: {
         title: 'Low average, still throttled',
         edge: true,
@@ -371,7 +379,7 @@ export const throttle: FlowDef = {
 
 /* ---------- 04 · Go container-aware GOMAXPROCS ---------- */
 export const gomax: FlowDef = {
-  h: 270,
+  h: 244,
   steps: [
     {
       caption: 'Go 1.25 reads the CPU quota. GOMAXPROCS is quota / period rounded up, capped at the real CPU count, and never below 2 (unless the machine has one CPU).',
@@ -386,20 +394,20 @@ export const gomax: FlowDef = {
     {
       caption: 'Measured on a 4-core VM: quotas 0.5, 1.5 and 2.0 give 2; 3.2 rounds up to 4; 4.0 gives 4.',
       add: [
-        box('x0', 10, 120, 100, 56, '0.5 CPU', { sub: '→ 2', tone: 'red' }),
-        box('x1', 118, 120, 100, 56, '1.5 CPU', { sub: '→ 2' }),
-        box('x2', 226, 120, 100, 56, '2.0 CPU', { sub: '→ 2' }),
-        box('x3', 334, 120, 100, 56, '3.2 CPU', { sub: '→ 4' }),
-        box('x4', 442, 120, 100, 56, '4.0 CPU', { sub: '→ 4' }),
+        box('x0', 10, 108, 100, 56, '0.5 CPU', { sub: '→ 2', tone: 'red' }),
+        box('x1', 118, 108, 100, 56, '1.5 CPU', { sub: '→ 2' }),
+        box('x2', 226, 108, 100, 56, '2.0 CPU', { sub: '→ 2' }),
+        box('x3', 334, 108, 100, 56, '3.2 CPU', { sub: '→ 4' }),
+        box('x4', 442, 108, 100, 56, '4.0 CPU', { sub: '→ 4' }),
       ],
     },
     {
-      caption: 'It is gated on the `go` line in `go.mod`. Built with the Go 1.25 toolchain, a module saying `go 1.24` keeps the old behaviour (measured: 4 vs 2 under a 2-CPU quota).',
+      caption: 'It is gated on the `go` line in `go.mod`: with the 1.25 toolchain, a module saying `go 1.24` keeps the old behaviour (measured: 4 vs 2).',
       drop: ['x0', 'x1', 'x2', 'x3', 'x4'],
       add: [
-        box('g1', 10, 120, 250, 70, 'go.mod: go 1.24', { sub: 'GOMAXPROCS = 4', tone: 'red' }),
-        box('g2', 290, 120, 250, 70, 'go.mod: go 1.25', { sub: 'GOMAXPROCS = 2' }),
-        text('gt', 280, 225, 'same code, same 2-CPU quota', { tone: 'grey' }),
+        box('g1', 10, 108, 250, 70, 'go.mod: go 1.24', { sub: 'GOMAXPROCS = 4', tone: 'red' }),
+        box('g2', 290, 108, 250, 70, 'go.mod: go 1.25', { sub: 'GOMAXPROCS = 2' }),
+        text('gt', 280, 205, 'same code, same 2-CPU quota', { tone: 'grey' }),
       ],
       stop: {
         title: 'Upgraded Go, still 4',
@@ -414,15 +422,15 @@ export const gomax: FlowDef = {
     {
       caption: 'The value is live: the runtime re-checks about once a second. Raising the quota from 2 to 3.5 CPUs moved GOMAXPROCS from 2 to 4 within 2.5 s.',
       drop: ['g1', 'g2', 'gt'],
-      add: [box('l1', 10, 120, 200, 70, 'GOMAXPROCS 2', { sub: 'quota 2 CPUs' }), box('l2', 350, 120, 200, 70, 'GOMAXPROCS 4', { sub: 'quota 3.5 CPUs', tone: 'red' }), arrow('le', 210, 155, 350, 155, { tone: 'red', text: 'within 2.5 s' })],
+      add: [box('l1', 10, 108, 200, 70, 'GOMAXPROCS 2', { sub: 'quota 2 CPUs' }), box('l2', 350, 108, 200, 70, 'GOMAXPROCS 4', { sub: 'quota 3.5 CPUs', tone: 'red' }), arrow('le', 210, 155, 350, 155, { tone: 'red', text: 'within 2.5 s' })],
     },
     {
       caption: 'It shrinks throttling but does not remove it: the floor of 2, GC and cgo threads, and a tighter limit on a parent cgroup still burn or hide quota.',
       drop: ['l1', 'l2', 'le'],
       add: [
-        box('r1', 10, 120, 170, 70, 'floor of 2', { sub: '0.5 CPU, 2 Ps', dashed: true, tone: 'red' }),
-        box('r2', 195, 120, 170, 70, 'GC, cgo', { sub: 'extra threads', dashed: true, tone: 'red' }),
-        box('r3', 380, 120, 170, 70, 'parent cgroup', { sub: 'limit unseen', dashed: true, tone: 'red' }),
+        box('r1', 10, 108, 170, 70, 'floor of 2', { sub: '0.5 CPU, 2 Ps', dashed: true, tone: 'red' }),
+        box('r2', 195, 108, 170, 70, 'GC, cgo', { sub: 'extra threads', dashed: true, tone: 'red' }),
+        box('r3', 380, 108, 170, 70, 'parent cgroup', { sub: 'limit unseen', dashed: true, tone: 'red' }),
       ],
       stop: {
         title: 'Still throttled after upgrading',

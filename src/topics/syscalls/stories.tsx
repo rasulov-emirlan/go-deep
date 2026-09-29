@@ -2,7 +2,7 @@ import type { Actor, Frame, Prop } from '../../components/Story'
 
 /* The gatekeeper: apps on the left, the kernel (knight) behind the wall on the right. */
 const app = (x: number, bubble?: string, hot?: boolean): Actor => ({ id: 'app', sprite: 'misc-standing-left', x, y: 320, h: 120, tag: 'your app', bubble, hot })
-const buggy = (bubble?: string, hot?: boolean): Actor => ({ id: 'bug', sprite: 'science-experiment-mishap', x: 70, y: 320, h: 120, tag: 'buggy app', bubble, hot })
+const buggy = (bubble?: string, hot?: boolean): Actor => ({ id: 'bug', sprite: 'science-experiment-mishap', x: 100, y: 320, h: 120, tag: 'buggy app', bubble, hot })
 const stuff = (x: number, tone: Prop['tone'] = 'ink'): Prop => ({ id: 'stuff', x, y: 60, w: 170, h: 70, tone, text: 'hardware' })
 const wall: Prop = { id: 'wall', x: 520, y: 20, w: 16, h: 320, tone: 'ink' }
 

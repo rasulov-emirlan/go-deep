@@ -1,4 +1,8 @@
+import type { ReactNode } from 'react'
 import type { El, FlowDef } from '../../components/flow'
+
+/** stop-card text: `x` becomes <code> */
+const md = (s: string): ReactNode => s.split(/(`[^`]+`)/).map((p, i) => (p.startsWith('`') && p.length > 1 ? <code key={i}>{p.slice(1, -1)}</code> : p))
 
 /*
  * Visual language for this topic: ink = normal, grey = old / inactive / freed, red = what the step is about,
@@ -113,8 +117,8 @@ export const worlds: FlowDef = {
       add: [
         box('cr3', 9, 100, 110, 40, 'CR3 -> B', { tone: 'red' }),
         box('tlb2', 150, 60, 260, 130, undefined, { label: 'TLB on one core' }),
-        box('e1', 165, 92, 230, 34, 'PCID A: 0x1000>7'),
-        box('e2', 165, 136, 230, 34, 'PCID B: 0x1000>3'),
+        box('e1', 165, 92, 230, 34, 'PCID A: 0x1000 -> 7'),
+        box('e2', 165, 136, 230, 34, 'PCID B: 0x1000 -> 3'),
         tx('n2', 280, 235, 'without PCID, the CR3 write would flush these', { tone: 'grey' }),
       ],
       stop: {
@@ -152,7 +156,7 @@ export const shootdown: FlowDef = {
       ],
     },
     {
-      caption: 'Each CPU invalidates P. Measured: 20,000 mmap+touch+munmap took 6.5 us alone, 24 us with three busy sibling threads (about 3 IPIs each).',
+      caption: 'Each CPU invalidates P. Measured: 20,000 mmap+touch+munmap took 6.5 µs alone, 24 µs with three busy sibling threads (about 3 IPIs each).',
       set: { t1: { tone: 'grey', dashed: true, text: 'P gone' }, t2: { tone: 'grey', dashed: true, text: 'P gone' }, t3: { tone: 'grey', dashed: true, text: 'P gone' } },
       add: [tx('cost', 280, 232, 'more threads, more CPUs to interrupt', { tone: 'red' })],
     },
@@ -198,7 +202,7 @@ export const demand: FlowDef = {
       set: { p0: { tone: 'ink' }, g: { text: 'RSS +4 KiB' } },
       stop: {
         title: 'Why untouched make() is free',
-        body: 'Go 1.25.1, `make([]byte, 1<<30)`: VSZ +1 GiB, RSS +1.3 MB. Writing one byte per page then cost 262,144 minor faults and +1 GiB of RSS.',
+        body: md('Go 1.25.1, `make([]byte, 1<<30)`: VSZ +1 GiB, RSS +1.3 MB. Writing one byte per page then cost 262,144 minor faults and +1 GiB of RSS.'),
       },
     },
     {
@@ -236,11 +240,11 @@ export const cow: FlowDef = {
         tx('h1', 84, 16, 'parent', { tone: 'grey' }),
         tx('h2', 280, 16, 'RAM', { tone: 'grey' }),
         box('pp1', 9, 50, 150, 44, 'P: page 1 rw'),
-        box('pp2', 9, 130, 150, 44, 'P: page 2 rw'),
+        box('pp2', 9, 190, 150, 44, 'P: page 2 rw'),
         box('fa', 205, 50, 150, 44, 'frame A'),
-        box('fb', 205, 130, 150, 44, 'frame B'),
+        box('fb', 205, 190, 150, 44, 'frame B'),
         ln('lp1', 159, 72, 205, 72),
-        ln('lp2', 159, 152, 205, 152),
+        ln('lp2', 159, 212, 205, 212),
       ],
     },
     {
@@ -248,16 +252,16 @@ export const cow: FlowDef = {
       add: [
         tx('h3', 475, 16, 'child', { tone: 'grey' }),
         box('cp1', 400, 50, 150, 44, 'C: page 1 r/o', { tone: 'red' }),
-        box('cp2', 400, 130, 150, 44, 'C: page 2 r/o', { tone: 'red' }),
+        box('cp2', 400, 190, 150, 44, 'C: page 2 r/o', { tone: 'red' }),
         ln('lc1', 400, 72, 355, 72, { tone: 'red' }),
-        ln('lc2', 400, 152, 355, 152, { tone: 'red' }),
+        ln('lc2', 400, 212, 355, 212, { tone: 'red' }),
       ],
       set: { pp1: { text: 'P: page 1 r/o', tone: 'red' }, pp2: { text: 'P: page 2 r/o', tone: 'red' } },
     },
     {
       caption: 'The child writes page 1: fault. The kernel copies just that one 4 KiB frame for the child. Page 2 stays shared until someone writes it.',
       drop: ['lc1'],
-      add: [box('fa2', 205, 200, 150, 44, 'copy of A', { tone: 'red' }), ln('lc1b', 420, 94, 355, 215, { tone: 'red' })],
+      add: [box('fa2', 205, 120, 150, 44, 'copy of A', { tone: 'red' }), ln('lc1b', 400, 90, 355, 130, { tone: 'red' })],
       set: { cp1: { text: 'C: page 1 rw' }, pp1: { tone: 'ink' }, pp2: { tone: 'ink' }, cp2: { tone: 'ink' } },
     },
     {
@@ -266,7 +270,7 @@ export const cow: FlowDef = {
       stop: {
         title: 'fork cost, and Go',
         edge: true,
-        body: 'Big heap means slow fork, then a COW fault per page written (32,776 for a child writing half of 256 MiB). Go never plain-forks: `os/exec` uses clone with CLONE_VFORK|CLONE_VM, so no page-table copy.',
+        body: md('Big heap means slow fork, then a COW fault per page written (32,776 for a child writing half of 256 MiB). Go never plain-forks: `os/exec` uses clone with CLONE_VFORK|CLONE_VM, so no page-table copy.'),
       },
     },
   ],
@@ -308,7 +312,7 @@ export const rss: FlowDef = {
       set: { chi: { w: 256, text: 'private 128 MB', tone: 'red' } },
       stop: {
         title: 'Which number to trust',
-        body: 'PSS splits shared pages between their users; USS counts private pages only. In Go, read `/proc/self/smaps_rollup`, or the container\'s `memory.stat`.',
+        body: md('PSS splits shared pages between their users; USS counts private pages only. In Go, read `/proc/self/smaps_rollup`, or the container\'s `memory.stat`.'),
       },
     },
   ],
@@ -331,7 +335,7 @@ export const oom: FlowDef = {
       stop: {
         title: 'Overcommit modes',
         edge: true,
-        body: 'Mode 0 is heuristic, 1 always says yes, 2 refuses beyond swap plus 50% of RAM by default, so `mmap` fails up front with ENOMEM. PROT_NONE reservations are not counted, which is how Go reserves.',
+        body: md('Mode 0 is heuristic, 1 always says yes, 2 refuses beyond swap plus 50% of RAM by default, so `mmap` fails up front with ENOMEM. PROT_NONE reservations are not counted, which is how Go reserves.'),
       },
     },
     {
@@ -351,7 +355,7 @@ export const oom: FlowDef = {
       stop: {
         title: 'Which process dies?',
         edge: true,
-        body: 'The highest `oom_badness`, not the last to allocate and not the biggest VSZ. `oom_score_adj` shifts the score; -1000 exempts a process.',
+        body: md('The highest `oom_badness`, not the last to allocate and not the biggest VSZ. `oom_score_adj` shifts the score; -1000 exempts a process.'),
       },
     },
     {
@@ -417,7 +421,7 @@ export const goheap: FlowDef = {
       stop: {
         title: 'The MADV_FREE variant',
         edge: true,
-        body: '`GODEBUG=madvdontneed=0` uses MADV_FREE: pages are only lazily freeable. After freeing 1 GiB and `debug.FreeOSMemory()`: RSS 3.9 MB by default, still 1,052 MB with MADV_FREE, until the kernel needs the memory.',
+        body: md('`GODEBUG=madvdontneed=0` uses MADV_FREE: pages are only lazily freeable. After freeing 1 GiB and `debug.FreeOSMemory()`: RSS 3.9 MB by default, still 1,052 MB with MADV_FREE, until the kernel needs the memory.'),
       },
     },
   ],
@@ -426,7 +430,7 @@ export const goheap: FlowDef = {
 /* ---------- 04b · container limit and GOMEMLIMIT ---------- */
 const mx = (m: number) => 20 + 2 * m
 export const limit: FlowDef = {
-  h: 250,
+  h: 215,
   steps: [
     {
       caption: 'A container limit is a wall the kernel enforces, and Go does not read it. Example: 200 MiB cgroup, 120 MiB of live heap.',

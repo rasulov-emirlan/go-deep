@@ -210,7 +210,7 @@ export const cost: FlowDef = {
       add: [
         ...ticks.flatMap(([ns, t]) => [
           { t: 'text', id: 'tk' + ns, x: xOf(ns), y: 14, text: t, size: 13, tone: 'grey' } as El,
-          { t: 'line', id: 'gr' + ns, x1: xOf(ns), y1: 30, x2: xOf(ns), y2: 340, tone: 'grey', dashed: true } as El,
+          { t: 'line', id: 'gr' + ns, x1: xOf(ns), y1: 26, x2: xOf(ns), y2: 38, tone: 'grey' } as El,
         ]),
       ],
     },
@@ -337,7 +337,7 @@ export const handoff: FlowDef = {
     {
       caption: 'A goroutine inside a syscall cannot be preempted; only retaking its P helps. With `GOMAXPROCS=1` and async preemption off, this froze the whole program for 300 ms.',
       add: [g('r3', 145, 290, 130, 44, 'G2 starves', { sub: 'P1 never freed', tone: 'red' })],
-      set: { su: { tone: 'grey' }, r2: { tone: 'grey', text: 'no EINTR' } },
+      set: { su: { tone: 'red', lost: true, text: 'no SIGURG' }, r2: { tone: 'grey', text: 'still asleep' }, q: { tone: 'red' } },
     },
   ],
 }
