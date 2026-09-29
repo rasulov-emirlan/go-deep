@@ -2,9 +2,9 @@ import { expect, test } from '@playwright/test'
 
 const pages = [
   { path: '/', text: 'Watch' },
-  { path: '/scheduler', text: 'The scheduler lab' },
+  { path: '/scheduler', text: 'Watch the scheduler work' },
   { path: '/maps', text: 'Swiss map lab' },
-  { path: '/gc', text: 'Why Go needs the hybrid barrier' },
+  { path: '/gc', text: 'Paint the reachable town' },
 ]
 
 for (const p of pages)
@@ -16,11 +16,31 @@ for (const p of pages)
     expect(errors).toEqual([])
   })
 
-test('scheduler lab steps and reproduces the runnext order', async ({ page }) => {
+test('guided tour stops to explain, and reproduces the runnext order', async ({ page }) => {
   await page.goto('/scheduler')
-  const lab = page.locator('#runnext .lab')
-  for (let i = 0; i < 8; i++) await lab.getByRole('button', { name: 'Step', exact: true }).click()
-  await expect(lab.locator('.log')).toContainText('P0 runs g4 — from runnext')
+  const tour = page.locator('#lab .story')
+  let explained = 0
+  for (let i = 0; i < 30; i++) {
+    const ok = tour.getByRole('button', { name: /^OK/ })
+    if (await ok.count()) {
+      explained++
+      await ok.click()
+      continue
+    }
+    if (await tour.getByText('P0 runs g2 — from runnext').count()) break
+    await tour.getByRole('button', { name: 'Step →' }).click()
+  }
+  await expect(tour.getByText('P0 runs g2 — from runnext')).toBeVisible()
+  expect(explained).toBeGreaterThan(2)
+})
+
+test('story steps forward with Next', async ({ page }) => {
+  await page.goto('/scheduler')
+  const story = page.locator('#model .story').first()
+  await expect(story.getByText('1/5')).toBeVisible()
+  await story.getByRole('button', { name: 'Next →' }).click()
+  await expect(story.getByText('2/5')).toBeVisible()
+  await expect(story.locator('img').first()).toBeVisible()
 })
 
 test('predict-the-output puzzle accepts the verified answer', async ({ page }) => {
@@ -32,19 +52,63 @@ test('predict-the-output puzzle accepts the verified answer', async ({ page }) =
 
 test('swiss lab grows from small map to a table on the 9th key', async ({ page }) => {
   await page.goto('/maps')
-  const lab = page.locator('#lab .lab')
+  const box = page.locator('#sandbox details').filter({ hasText: 'Swiss map lab' })
+  await box.locator('summary').click()
+  const lab = box.locator('.lab')
   await lab.getByRole('button', { name: '+8 keys' }).click()
   await expect(lab.getByText('Small map — a single group')).toBeVisible()
   await lab.getByRole('button', { name: '+1 key' }).click()
   await expect(lab.getByText(/Table T\d/).first()).toBeVisible()
 })
 
-test('tri-color lab: no barrier loses C, hybrid keeps it', async ({ page }) => {
+test('tri-color sandbox: no barrier loses C, hybrid keeps it', async ({ page }) => {
   await page.goto('/gc')
-  const lab = page.locator('#barrier .lab')
+  await page.locator('#sandbox summary', { hasText: 'Tri-color' }).click()
+  const lab = page.locator('#sandbox .lab').first()
   await lab.getByRole('button', { name: 'Run all' }).click()
   await expect(lab.getByText('use-after-free: C')).toBeVisible()
   await lab.getByRole('button', { name: 'Hybrid (Go 1.8+)' }).click()
   await lab.getByRole('button', { name: 'Run all' }).click()
   await expect(lab.getByText('every reachable object survived').first()).toBeVisible()
+})
+
+test('gc guided tour stops on each case and ends in use-after-free without a barrier', async ({ page }) => {
+  await page.goto('/gc')
+  const tour = page.locator('#guided-gc')
+  await tour.getByRole('button', { name: /hide it in the heap/ }).click()
+  const step = tour.getByRole('button', { name: /^Step/ })
+  const ok = tour.getByRole('button', { name: /^OK/ })
+  for (let i = 0; i < 40 && !(await tour.getByText('Saved by:').count()); i++) {
+    if (await ok.count()) await ok.first().click()
+    else await step.click()
+  }
+  await expect(tour.getByText(/use-after-free/).first()).toBeVisible()
+  await expect(tour.getByText('Saved by: Dijkstra, Yuasa, Hybrid (Go 1.8+)')).toBeVisible()
+  await tour.getByRole('button', { name: 'Hybrid (Go 1.8+)' }).click()
+  for (let i = 0; i < 40 && !(await tour.getByText(/^Safe with|Safe with/).count()); i++) {
+    if (await ok.count()) await ok.first().click()
+    else await step.click()
+  }
+  await expect(tour.getByText(/Safe with “Hybrid/)).toBeVisible()
+})
+
+test('gc story autoplay halts at a stop until OK', async ({ page }) => {
+  await page.goto('/gc')
+  const story = page.locator('#story-mark')
+  await story.getByRole('button', { name: /Autoplay/ }).click()
+  await expect(story.getByRole('button', { name: /OK, next/ })).toBeVisible({ timeout: 6000 })
+  await expect(story.getByText(/the first of two short pauses/)).toBeVisible()
+})
+
+test('maps guided tour stops on the false positive and explains it', async ({ page }) => {
+  await page.goto('/maps')
+  const tour = page.locator('#tour .story')
+  await tour.getByRole('button', { name: /^2 · insert/ }).click()
+  for (let i = 0; i < 40 && !(await tour.getByText('the fingerprint matched, but it’s someone else').count()); i++) {
+    const ok = tour.getByRole('button', { name: /^OK, next/ })
+    if (await ok.count()) await ok.click()
+    else await tour.getByRole('button', { name: /^Step/ }).click()
+  }
+  await expect(tour.getByText('the fingerprint matched, but it’s someone else')).toBeVisible()
+  await expect(tour.locator('.story-chips span.on', { hasText: 'false positive' })).toHaveCount(1)
 })

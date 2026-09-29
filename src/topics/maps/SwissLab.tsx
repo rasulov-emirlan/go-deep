@@ -91,6 +91,10 @@ function describe(s: Step): string {
       return `group ${s.group} has an empty slot → key cannot be further along. Not found.`
     case 'grow':
       return s.note
+    case 'prune':
+      return s.freed
+        ? `table full, but ${s.tombstones} tombstones (≥10%) → pruneTombstones frees ${s.freed} that no probe path needs`
+        : `table full, ${s.tombstones} tombstones (≥10%) → pruneTombstones: every one is still on some key's probe path → grow instead`
     case 'dirDouble':
       return `directory doubles → globalDepth ${s.depth}: every entry duplicated, other tables now span 2 entries`
   }

@@ -106,3 +106,77 @@ import type { SwissMap } from './swiss'
 function hashOf(m: SwissMap, k: string) {
   return hash64(k, m.seed)
 }
+
+import { cloneMap, type Step } from './swiss'
+
+describe('swiss map model: runtime-faithful edge cases', () => {
+  it('a full small map converts to a table even when the write is an update', () => {
+    const m = newMap()
+    for (let i = 0; i < 8; i++) put(m, 'k' + i, i)
+    const steps = put(m, 'k3', 33)
+    expect(steps.some((s) => s.t === 'grow' && s.kind === 'small→table')).toBe(true)
+    expect(steps.at(-1)).toMatchObject({ t: 'place', reuse: 'update' })
+    expect(len(m)).toBe(8)
+    expect(get(m, 'k3').val).toBe(33)
+  })
+
+  it('onMutate sees the grown map before the insert is retried', () => {
+    const m = newMap()
+    for (let i = 0; i < 8; i++) put(m, 'k' + i, i)
+    const seen: number[] = []
+    put(m, 'k8', 8, (mm) => seen.push(mm.used, mm.dir.length))
+    expect(seen).toEqual([8, 1])
+    expect(len(m)).toBe(9)
+  })
+
+  it('pruneTombstones frees tombstones no probe path needs instead of growing', () => {
+    // hunt for a state where a 16-slot table fills up with ≥2 prunable tombstones
+    let pruned: Extract<Step, { t: 'prune' }> | undefined
+    for (let trial = 0; trial < 200 && !pruned; trial++) {
+      const m = newMap(1024, BigInt(trial + 1))
+      for (let i = 0; i < 12; i++) put(m, 'p' + i, i)
+      const t = tables(m)[0]
+      const full = t.groups.findIndex((g) => g.ctrl.every((c) => c !== EMPTY))
+      if (full < 0) continue
+      for (const k of t.groups[full].keys.slice(0, 2)) del(m, k!)
+      for (let i = 100; i < 200 && tables(m).length === 1 && tables(m)[0].capacity === 16; i++) {
+        const before = cloneMap(m)
+        const steps = put(m, 'p' + i, i)
+        const p = steps.find((s): s is Extract<Step, { t: 'prune' }> => s.t === 'prune')
+        if (p && p.freed > 0) {
+          pruned = p
+          expect(tables(m)[0].capacity).toBe(16) // did not grow
+          expect(tombstones(m)).toBeLessThan(tombstones(before))
+          for (const g of tables(before)[0].groups) for (const k of g.keys) if (k) expect(get(m, k).found).toBe(true)
+          break
+        }
+      }
+    }
+    expect(pruned).toBeDefined()
+  })
+
+  it('prune is skipped below 10% tombstones, so the table grows', () => {
+    const m = newMap(1024)
+    for (let i = 0; i < 14; i++) put(m, 'x' + i, i)
+    const t = tables(m)[0]
+    const full = t.groups.find((g) => g.ctrl.every((c) => c !== EMPTY))!
+    del(m, full.keys.find((k) => k)!) // 1 tombstone in 16 slots < 10%
+    expect(tombstones(m)).toBe(1)
+    let steps: Step[] = []
+    for (let i = 100; !steps.some((s) => s.t === 'grow'); i++) steps = put(m, 'x' + i, i)
+    expect(steps.some((s) => s.t === 'prune')).toBe(false)
+    expect(tables(m)[0].capacity).toBe(32)
+    expect(tombstones(m)).toBe(0) // growing drops tombstones
+  })
+
+  it('cloneMap is deep and keeps shared directory entries shared', () => {
+    const m = newMap(16)
+    for (let i = 0; i < 60; i++) put(m, 'c' + i, i)
+    const c = cloneMap(m)
+    expect(m.dir.some((t, i) => i > 0 && m.dir[i - 1] === t)).toBe(true) // some table spans 2 entries
+    for (let i = 1; i < m.dir.length; i++) expect(c.dir[i - 1] === c.dir[i]).toBe(m.dir[i - 1] === m.dir[i])
+    expect(c.dir.every((t, i) => t !== m.dir[i])).toBe(true)
+    put(c, 'new', 1)
+    expect(get(m, 'new').found).toBe(false)
+  })
+})

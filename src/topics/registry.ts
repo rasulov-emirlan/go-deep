@@ -7,7 +7,7 @@ export type Topic = {
   kicker: string
   blurb: string
   /** progress keys are prefixed with this; total = puzzles + interview questions */
-  total?: number
+  gopher?: string
   page?: LazyExoticComponent<ComponentType>
 }
 
@@ -17,6 +17,7 @@ export const topics: Topic[] = [
     n: '01',
     title: 'GMP scheduler',
     kicker: 'runtime/proc.go',
+    gopher: 'convict-working-hard',
     blurb: 'Gs, Ms and Ps. Run queues, runnext, work stealing, syscall handoff, sysmon and async preemption.',
     page: lazy(() => import('./gmp/Page')),
   },
@@ -25,6 +26,7 @@ export const topics: Topic[] = [
     n: '02',
     title: 'Maps & Swiss tables',
     kicker: 'internal/runtime/maps',
+    gopher: 'adventure-hiking',
     blurb: 'From buckets + overflow chains to Go 1.24 Swiss tables: control words, H1/H2, probing, extendible-hash splits.',
     page: lazy(() => import('./maps/Page')),
   },
@@ -33,6 +35,7 @@ export const topics: Topic[] = [
     n: '03',
     title: 'GC & Green Tea',
     kicker: 'runtime/mgc.go',
+    gopher: 'fairy-tale-witch-broom',
     blurb: 'Tri-color marking, the hybrid write barrier, the pacer, GOGC/GOMEMLIMIT, and span-based Green Tea scanning.',
     page: lazy(() => import('./gc/Page')),
   },
