@@ -93,7 +93,7 @@ export const ndotsFlow: FlowDef = {
       set: { hd: { text: 'lookup api.stripe.com.  (trailing dot)' }, r4: { y: 190, text: 'api.stripe.com.' }, x4: { y: 190 } },
       add: [{ id: 'n2', t: 'text', x: 280, y: 250, text: '2 queries', size: 18 }],
       stop: {
-        title: 'Not the 5 s stall',
+        title: 'A different stall: 5 s',
         edge: true,
         body: (
           <>
@@ -135,7 +135,7 @@ export const l4Flow: FlowDef = {
       stop: {
         title: 'Why no rebalance?',
         edge: true,
-        body: <>L4 sees connections, not calls. One connection is one decision, made once; <code>least_conn</code> at L4 only affects new ones. A Go HTTP/2 client also pins to one connection per host.</>,
+        body: <>L4 sees connections, not calls. One connection is one decision, made once; <code>least_conn</code> at L4 only affects new ones. A Go HTTP/2 client also tends to keep one connection per host.</>,
       },
     },
     {
@@ -211,7 +211,7 @@ export const idleFlow: FlowDef = {
       stop: {
         title: 'NLB is different',
         edge: true,
-        body: <>After its idle timeout (TCP: 350 s by default) an NLB silently drops the flow: no FIN. The next packet gets RST. Send TCP keepalives below the timeout.</>,
+        body: <>After its idle timeout (TCP: 350 s by default) an NLB silently drops the flow: no FIN. The next packet gets RST. Send TCP keepalives below the timeout (an ALB needs real data, not keepalives).</>,
       },
     },
   ],
@@ -241,13 +241,13 @@ export const retryFlow: FlowDef = {
       ],
     },
     {
-      caption: 'A POST without an Idempotency-Key is not replayed. The app gets EOF or connection reset.',
+      caption: 'A POST without an Idempotency-Key is not replayed once its bytes were written. The app gets EOF or connection reset.',
       drop: ['fin', 'g1', 'g2', 'ok'],
       add: [{ id: 'p1', t: 'msg', from: 'c', to: 's', y: 120, y2: 140, text: 'POST /pay', tone: 'red', lost: true }],
       stop: {
         title: 'Only reused conns',
         edge: true,
-        body: <>Go retries only when the connection was reused and the request is replayable: GET, HEAD, OPTIONS, TRACE, or an <code>Idempotency-Key</code> header. PUT and DELETE are idempotent in HTTP but not in Go’s list.</>,
+        body: <>Go retries only on a reused connection, and only if nothing was written yet or the request is replayable (GET, HEAD, OPTIONS, TRACE, or an <code>Idempotency-Key</code> header) and the failure came before the first response byte. PUT and DELETE are idempotent in HTTP but not in Go’s list.</>,
       },
     },
   ],

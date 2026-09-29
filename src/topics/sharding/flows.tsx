@@ -128,10 +128,10 @@ const prevOf = (id: string) => {
 const vDots = LET.split('').map((l, i): El => ({ t: 'node', id: `v${i}`, r: 10, text: l, ...P(vAng(i)) }))
 const dDots = (tone: 'red' | 'ink'): El[] => D_GAPS.map((g, i) => ({ t: 'node', id: `d${i}`, r: 10, text: 'D', tone, ...P(dAng(g)) }))
 const cvRows: [string, number, string][] = [
-  ['v=1', 48, '48%'],
-  ['v=10', 22, '22%'],
-  ['v=100', 6.6, '6.6%'],
-  ['v=1000', 3.1, '3.1%'],
+  ['v=1', 88, '88%'],
+  ['v=10', 29, '29%'],
+  ['v=100', 9.6, '9.6%'],
+  ['v=1000', 2.9, '2.9%'],
 ]
 const cvIds = ['cvh', ...cvRows.flatMap((_, i) => [`cl${i}`, `cb${i}`, `cv${i}`])]
 const CVX = 345
@@ -173,7 +173,7 @@ export const ringFlow: FlowDef = {
       ],
       stop: {
         title: 'Why is one point per node unbalanced?',
-        body: 'Random points make exponentially distributed gaps. In a 10-node run with one point each, the busiest node held 1.86× its fair share and the quietest 0.23×.',
+        body: 'Random points make exponentially distributed gaps. In simulated 10-node rings with one point each, the busiest node held about 2.9× its fair share on average (a single lucky draw can look better).',
       },
     },
     {
@@ -182,15 +182,15 @@ export const ringFlow: FlowDef = {
       add: vDots,
     },
     {
-      caption: 'Measured on 10 nodes: the spread of load (std-dev ÷ mean) falls as points per node grow, roughly like 1/√v.',
+      caption: 'Measured on 10 nodes, averaged over 100 random rings: the spread of load (std-dev ÷ mean) falls roughly like 1/√v.',
       add: [
         { t: 'text', id: 'cvh', x: CVX, y: 60, anchor: 'start', size: 13, tone: 'grey', text: 'load spread, 10 nodes\n(std-dev ÷ mean)' },
         ...cvRows.flatMap(([l, cv, v], i): El[] => {
           const y = 128 + i * 52
           return [
             { t: 'text', id: `cl${i}`, x: CVX, y, anchor: 'start', text: l },
-            { t: 'box', id: `cb${i}`, x: CVX + 68, y: y - 10, w: Math.max(cv * 2.1, 3), h: 20, tone: i === 0 ? 'red' : 'ink' },
-            { t: 'text', id: `cv${i}`, x: CVX + 68 + Math.max(cv * 2.1, 3) + 6, y, anchor: 'start', text: v, tone: i === 0 ? 'red' : 'ink' },
+            { t: 'box', id: `cb${i}`, x: CVX + 68, y: y - 10, w: Math.max(cv, 3), h: 20, tone: i === 0 ? 'red' : 'ink' },
+            { t: 'text', id: `cv${i}`, x: CVX + 68 + Math.max(cv, 3) + 6, y, anchor: 'start', text: v, tone: i === 0 ? 'red' : 'ink' },
           ]
         }),
       ],
@@ -255,7 +255,7 @@ export const replicaFlow: FlowDef = {
       stop: {
         edge: true,
         title: 'A data-loss bug, not a perf nit',
-        body: 'Lose machine A and two of the three copies go together. In a 10-node, 200-points-each run, 29% of keys had fewer than 3 distinct machines.',
+        body: 'Lose machine A and two of the three copies go together. With 10 machines and many points each, about 28% of keys (1 − 0.9 × 0.8) get fewer than 3 distinct machines.',
       },
     },
     {
@@ -297,7 +297,7 @@ export const placeFlow: FlowDef = {
       add: [{ t: 'text', id: 'ru', x: rvx(3) + 55, y: 160, tone: 'red', text: 'runner-up' }],
     },
     {
-      caption: 'Jump hash: buckets are numbered 0…n−1, no state. Grow to n+1 and exactly 1/(n+1) of the keys hop into the new bucket, from every old one.',
+      caption: 'Jump hash: buckets are numbered 0…n−1, no state. Grow to n+1 and 1/(n+1) of the keys (on average) hop into the new bucket, from every old one.',
       drop: ['key', 'nA', 'nB', 'nC', 'nD', 'ru'],
       add: [
         ...[0, 1, 2, 3, 4].map((i): El => ({ t: 'box', id: 'b' + i, x: jx(i), y: 90, w: jw, h: 50, text: String(i), sub: '1/6' })),
@@ -309,7 +309,7 @@ export const placeFlow: FlowDef = {
       ],
     },
     {
-      caption: 'Bucket 2 dies. Jump hash can only drop the last number, so the last bucket is renumbered into slot 2 and its data must be copied there.',
+      caption: 'Bucket 2 dies. Jump hash can only drop the last number, so the last machine takes over number 2 and needs bucket 2’s data (from a replica).',
       drop: [...[0, 1, 2, 3, 4].map((i) => 'g' + i), 'bus', 'up', 'jl'],
       set: { b2: { tone: 'grey', dashed: true, sub: 'dead' }, b5: { text: '5→2', sub: 'copy' } },
       add: [
@@ -449,7 +449,7 @@ export const askFlow: FlowDef = {
   h: 360,
   steps: [
     {
-      caption: 'Redis slot 7 is moving from A to B. A client asks A for a key that has already moved. A answers with a one-off redirect.',
+      caption: 'Redis slot 7 is moving from A to B. A client asks A for a key A does not hold. A answers with a one-off redirect.',
       add: [
         { t: 'lane', id: 'c', x: 70, y: 10, len: 340, text: 'client' },
         { t: 'lane', id: 'a', x: 280, y: 10, len: 340, text: 'A', sub: 'MIGRATING', w: 96 },
@@ -498,7 +498,7 @@ export const hotFlow: FlowDef = {
   h: 290,
   steps: [
     {
-      caption: 'Hashing evens out keys, not traffic. In a 10-node test with skewed (Zipf) traffic, one node took 27.3% of requests, not 10%.',
+      caption: 'Hashing evens out keys, not traffic. In a 10-node Zipf-traffic simulation, the hottest node took about 25–27% of requests, not 10%.',
       add: [
         ...[0, 1, 2].map((i): El => ({ t: 'box', id: 'h' + i, x: 20 + 180 * i, y: 50, w: 160, h: 150, label: `shard ${i}` })),
         bar('b0', 60, 80, 34, 'soft'),
@@ -522,7 +522,7 @@ export const hotFlow: FlowDef = {
       },
     },
     {
-      caption: 'Salt it: write k#0 … k#7 instead of k. Writes scatter across shards. In the test the hottest node fell from 27.3% to 19.0%.',
+      caption: 'Salt it: write k#0 … k#7 instead of k. Writes scatter across shards. In the simulation the hottest node fell to about 16–19%.',
       drop: ['hk', 'hkt'],
       set: { u2: { h: 40, y: 150 }, u0: { h: 44, y: 146 }, u4: { h: 44, y: 146 }, u5: { h: 36, y: 154 } },
       add: (

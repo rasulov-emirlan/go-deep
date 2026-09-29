@@ -79,7 +79,7 @@ export const acceptQueue: FlowDef = {
         edge: true,
         body: (
           <p>
-            The server keeps resending SYN-ACK until there is room, so requests stall in 1 s / 3 s steps with no errors. Look for “listen queue overflowed” in <code>netstat -s</code>. Fix the accept loop; <code>tcp_abort_on_overflow=1</code> sends RST but the kernel docs warn it can harm clients.
+            The server resends SYN-ACK (1 s, 3 s, ...) until there is room, so requests can stall in 1 s / 3 s steps with no errors. Look for “listen queue overflowed” in <code>netstat -s</code>. Fix the accept loop; <code>tcp_abort_on_overflow=1</code> sends RST but the kernel docs warn it can harm clients.
           </p>
         ),
       },
@@ -189,7 +189,7 @@ export const closing: FlowDef = {
       set: { c: { sub: 'Read…' }, s: { sub: 'unread data', tone: 'red' } },
     },
     {
-      caption: 'Closing with unread bytes sends RST, not FIN. RST aborts and discards data in flight: the 413 never arrives.',
+      caption: 'Closing with unread bytes sends RST, not FIN. RST aborts: unsent data is dropped and the client’s next Read errors, so the 413 is often lost.',
       add: [{ t: 'msg', id: 'rst', from: 's', to: 'c', y: 152, y2: 170, text: 'RST', tone: 'red' }],
       set: { e413: { lost: true }, c: { sub: 'ECONNRESET', tone: 'red' } },
       stop: {
@@ -197,7 +197,7 @@ export const closing: FlowDef = {
         edge: true,
         body: (
           <p>
-            The client’s <code>Read</code> fails with <code>connection reset by peer</code> and the error body is lost. Send <code>CloseWrite()</code>, then drain reads before closing; net/http’s server does a lingering read for this.
+            The client’s <code>Read</code> fails with <code>connection reset by peer</code> and the error body is often lost (my Linux loopback test still delivered bytes that had already arrived; BSD and slow paths lose more). Send <code>CloseWrite()</code>, drain reads, then close; net/http’s server does <code>CloseWrite</code> and sleeps 500 ms first.
           </p>
         ),
       },
@@ -250,13 +250,13 @@ export const nagle: FlowDef = {
         edge: true,
         body: (
           <p>
-            Nagle waits for an ACK; the ACK waits on a timer for data to ride with. The pattern is write(header), write(body), then read. In my loopback run: worst 48 ms with Nagle, 113 µs without.
+            Nagle waits for an ACK; the ACK waits on a timer for data to ride with. The pattern is write(header), write(body), then read. Loopback run of 20 requests: 44–48 ms each with Nagle (all but the first), under 50 µs with NODELAY.
           </p>
         ),
       },
     },
     {
-      caption: 'The timer fires, the ACK leaves, and only then does the body go. That is +40 ms on every request.',
+      caption: 'The timer fires, the ACK leaves, and only then does the body go. That is about +40 ms per request once the connection leaves its initial quick-ACK phase.',
       drop: ['held'],
       add: [
         { t: 'msg', id: 'ak', from: 's', to: 'c', y: 190, y2: 206, text: 'ACK' },
@@ -315,7 +315,7 @@ export const deadPeer: FlowDef = {
         edge: true,
         body: (
           <p>
-            Probes only test the peer’s kernel; a hung process still ACKs them. Use app heartbeats (HTTP/2 PING, gRPC keepalive) and deadlines. <code>http.DefaultTransport</code> dials with 30 s.
+            Probes only test the peer’s kernel; a hung process still ACKs them. Use app heartbeats (HTTP/2 PING, gRPC keepalive) and deadlines. <code>http.DefaultTransport</code> sets a 30 s dial timeout and a 30 s keepalive.
           </p>
         ),
       },

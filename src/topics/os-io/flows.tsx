@@ -180,12 +180,12 @@ export const netpollFile: FlowDef = {
       add: [msg('f3', 'g', 'k', 135, 'read(file)', { y2: 160 }), { t: 'box', id: 'stuck', x: 15, y: 175, w: 130, h: 30, text: 'M blocked', tone: 'red' }],
     },
     {
-      caption: 'After a short wait `sysmon` sees the thread stuck in a syscall, retakes the P and hands it to another thread. Other goroutines keep running.',
+      caption: '`sysmon` sees the thread stuck in a syscall and, once other goroutines are waiting for a P, retakes it and hands it to another thread (idle: after 10 ms).',
       add: [{ t: 'box', id: 'retake', x: 205, y: 205, w: 150, h: 46, text: 'sysmon retakes\nP → M2', tone: 'red' }],
       stop: {
         title: 'Threads pile up',
         edge: true,
-        body: '500 goroutines reading files at once can mean hundreds of threads, one per blocked read. Go\'s standard library does not use io_uring; issue #31908 is open and unplanned.',
+        body: '500 goroutines stuck in slow file reads at once can mean hundreds of threads, one per blocked read (limit 10,000). Go\'s standard library does not use io_uring; issue #31908 is open and unplanned.',
       },
     },
   ],
@@ -234,7 +234,7 @@ export const writeCache: FlowDef = {
       set: { inc: { tone: 'grey' } },
     },
     {
-      caption: 'Only then does `fsync` return. On this VM, 200 appends of 4 KiB took 91 ms with `fsync` and 15 ms without: about 6x.',
+      caption: 'Only then does `fsync` return. On this VM, 200 appends of 4 KiB took about 50 ms with `fsync` and under 1 ms without. Only the ratio matters; disks differ.',
       add: [msg('w7', 'dc', 'pc', 434, 'done'), msg('w8', 'pc', 'app', 460, 'fsync = 0', { tone: 'red' })],
       stop: {
         title: 'When fsync lies',
@@ -265,11 +265,11 @@ export const layers: FlowDef = {
       stop: {
         title: 'O_DIRECT is not durability',
         edge: true,
-        body: <><code>O_DIRECT</code> skips the page cache but promises no flush. It needs an aligned buffer, length and offset (else <code>EINVAL</code>), and you still need <code>fsync</code>.</>,
+        body: <><code>O_DIRECT</code> skips the page cache but promises no flush. It needs an aligned buffer, length and offset (else typically <code>EINVAL</code>), and you still need <code>fsync</code>.</>,
       },
     },
     {
-      caption: 'A new file\'s name lives in its directory\'s blocks, which `fsync(file)` does not cover. Safe replace: write temp, `fsync`, `rename`, then `fsync` the directory.',
+      caption: 'A new file\'s name lives in its directory\'s blocks, which `fsync(file)` does not necessarily cover. Safe replace: write temp, `fsync`, `rename`, then `fsync` the directory.',
       add: [{ t: 'box', id: 'dir', x: 215, y: 170, w: 130, h: 60, label: 'KERNEL RAM', text: 'dir entry', sub: 'not synced', tone: 'red', dashed: true }],
       set: { fl: { tone: 'grey' }, fs: { tone: 'grey' } },
     },
@@ -324,18 +324,18 @@ export const zeroCopy: FlowDef = {
       ],
     },
     {
-      caption: 'In Go, `io.Copy(conn, file)` gets this for free. `strace` on Go 1.24 shows one `sendfile` call; `io.LimitReader` keeps it.',
-      add: [note('st', 205, 'sendfile(7, 6, NULL,', { x: 250, size: 13, tone: 'grey' } as Partial<El>), note('st2', 222, '  2147483647) = 1048576', { x: 250, size: 13, tone: 'grey' } as Partial<El>)],
+      caption: 'In Go, `io.Copy(conn, file)` gets this for free. `strace` on Go 1.24 to 1.26 shows `sendfile` calls and no 32 KiB copies; `io.LimitReader` and `bufio.Reader` keep it.',
+      add: [note('st', 205, 'sendfile(6, 8, NULL,', { x: 250, size: 13, tone: 'grey' } as Partial<El>), note('st2', 222, '  2147483647) = 3922432', { x: 250, size: 13, tone: 'grey' } as Partial<El>)],
     },
     {
-      caption: 'Put something else in the path (`io.TeeReader`, your own reader, a `bufio.Writer` on the conn) and Go falls back to a 32 KiB read/write loop.',
+      caption: 'Put your own reader, `io.TeeReader` or `io.SectionReader` in the path and Go falls back to a 32 KiB read/write loop.',
       drop: ['sf', 'nsf', 'st', 'st2'],
       set: { ub: { tone: 'soft', dashed: false }, a2: { tone: 'red', dashed: false }, a3: { tone: 'red', dashed: false } },
       add: [note('nl', 122, '32 KiB read', { tone: 'red' }), note('nl2', 198, '32 KiB write', { tone: 'red' })],
       stop: {
-        title: 'Does bufio.Reader break it?',
+        title: 'Does bufio break it?',
         edge: true,
-        body: <>Not on Go 1.24: <code>bufio.Reader</code> hands over to the file's own <code>WriteTo</code> and <code>strace</code> still shows <code>sendfile</code>. A <code>bufio.Writer</code> on the conn does break it. Check with strace, do not guess.</>,
+        body: <>No: <code>bufio.Reader</code> hands over to the file's <code>WriteTo</code>, still <code>sendfile</code>. A <code>bufio.Writer</code> on the conn broke it in Go 1.24 but not in 1.25 or 1.26 (strace-checked). It varies by version: check with strace.</>,
       },
     },
     {

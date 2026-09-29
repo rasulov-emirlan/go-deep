@@ -649,7 +649,8 @@
    "scaling#cache"
   ],
   "architecture-cache-stampede": [
-   "scaling#cache"
+   "scaling#cache",
+   "resilience#meta"
   ],
   "architecture-caching-basics": [
    "scaling#cache"
@@ -658,34 +659,41 @@
    "scaling#cache"
   ],
   "architecture-cap-theorem": [
-   "scaling#replicas"
+   "consistency#cap",
+   "consistency#models"
   ],
   "architecture-circuit-breaker": [
-   "scaling#retries"
+   "resilience#breaker",
+   "resilience#retries"
   ],
   "architecture-error-logging-layer": [
    "interfaces#errors"
   ],
   "architecture-eventual-consistency": [
-   "scaling#replicas"
+   "consistency#models",
+   "replication#repair"
   ],
   "architecture-fault-tolerance-patterns": [
-   "scaling#retries"
+   "resilience#breaker",
+   "resilience#overload"
   ],
   "architecture-gateway-caching-design": [
    "scaling#cache"
   ],
   "architecture-idempotency": [
+   "dist-transactions#idempotency",
    "http#anatomy"
   ],
   "architecture-idempotency-keys-payments": [
+   "dist-transactions#idempotency",
    "http#anatomy"
   ],
   "architecture-monolith-migration": [
    "kafka#outbox"
   ],
   "architecture-payment-timeout-reconciliation": [
-   "http#anatomy"
+   "failure-detection#silence",
+   "dist-transactions#idempotency"
   ],
   "architecture-review-currency-updater": [
    "defer#stack",
@@ -693,6 +701,18 @@
   ],
   "architecture-review-visits-handler": [
    "scaling#pool"
+  ],
+  "architecture-saga-booking-design": [
+   "dist-transactions#saga",
+   "dist-transactions#saga-edges"
+  ],
+  "architecture-saga-pattern": [
+   "dist-transactions#saga",
+   "dist-transactions#saga-edges"
+  ],
+  "architecture-two-phase-commit": [
+   "dist-transactions#twopc",
+   "dist-transactions#saga"
   ],
   "channels-buffered-vs-unbuffered": [
    "channels#handoff"
@@ -795,13 +815,14 @@
   ],
   "concurrency-patterns-fast-and-slow-dependency": [
    "patterns#fan",
-   "scaling#retries"
+   "resilience#overload"
   ],
   "concurrency-patterns-gather-from-many-services": [
    "patterns#fan"
   ],
   "concurrency-patterns-graceful-shutdown": [
-   "patterns#shutdown"
+   "patterns#shutdown",
+   "containers#pid1"
   ],
   "concurrency-patterns-job-processor-review": [
    "patterns#pool",
@@ -825,14 +846,15 @@
    "patterns#pool"
   ],
   "concurrency-patterns-stuck-pending-task": [
+   "locks#leases",
    "queues#sqs"
   ],
   "concurrency-patterns-thread-safe-cache": [
    "sync#mutex"
   ],
   "concurrency-patterns-timeouts-retries-backoff": [
-   "scaling#retries",
-   "patterns#context"
+   "resilience#retries",
+   "resilience#deadlines"
   ],
   "concurrency-patterns-url-checker": [
    "patterns#pool",
@@ -848,11 +870,12 @@
    "patterns#context"
   ],
   "context-passing-through-layers": [
-   "patterns#context"
+   "patterns#context",
+   "resilience#deadlines"
   ],
   "context-timeout-wrapper": [
-   "channels#deadlock",
-   "patterns#context"
+   "patterns#context",
+   "resilience#deadlines"
   ],
   "context-usage-example": [
    "patterns#context"
@@ -883,9 +906,13 @@
   "databases-connection-pooler": [
    "scaling#pool"
   ],
+  "databases-consistency-without-transactions": [
+   "dist-transactions#saga",
+   "dist-transactions#idempotency"
+  ],
   "databases-distributed-transactions-nosql": [
-   "kafka#outbox",
-   "kafka#commit"
+   "dist-transactions#saga",
+   "dist-transactions#outbox"
   ],
   "databases-explain-analyze": [
    "indexes#ignored"
@@ -929,11 +956,19 @@
   "databases-keyset-pagination": [
    "indexes#costs"
   ],
+  "databases-locks-types": [
+   "locks#kinds"
+  ],
   "databases-lost-update": [
    "transactions#writes"
   ],
   "databases-masters-replicas-count": [
+   "replication#leader",
    "scaling#replicas"
+  ],
+  "databases-multi-master": [
+   "replication#conflicts",
+   "replication#leader"
   ],
   "databases-mvcc": [
    "transactions#mvcc"
@@ -952,6 +987,10 @@
   "databases-redis-cache-commands": [
    "scaling#cache"
   ],
+  "databases-redis-cluster-scaling": [
+   "sharding#others",
+   "sharding#move"
+  ],
   "databases-redis-ttl-eviction": [
    "scaling#cache"
   ],
@@ -960,28 +999,32 @@
    "scaling#replicas"
   ],
   "databases-replication-types": [
-   "scaling#replicas",
-   "mongo-vs-postgres#writes"
+   "replication#leader",
+   "scaling#replicas"
   ],
   "databases-scaling": [
    "scaling#replicas",
    "scaling#cache"
   ],
   "databases-sharding-basics": [
-   "scaling#replicas",
-   "mongo-vs-postgres#scale"
+   "sharding#mod",
+   "sharding#ring"
   ],
   "databases-sharding-experience": [
-   "mongo-vs-postgres#scale"
+   "sharding#cost",
+   "sharding#move"
   ],
   "databases-sharding-key": [
-   "mongo-vs-postgres#scale"
+   "sharding#cost",
+   "sharding#mod"
   ],
   "databases-sharding-problems": [
-   "mongo-vs-postgres#scale"
+   "sharding#cost",
+   "sharding#move"
   ],
   "databases-sharding-vs-replication": [
-   "scaling#replicas"
+   "sharding#cost",
+   "replication#leader"
   ],
   "databases-slow-query-troubleshooting": [
    "indexes#ignored",
@@ -999,32 +1042,52 @@
    "transactions#mvcc"
   ],
   "databases-wal": [
-   "transactions#acid"
+   "transactions#acid",
+   "os-io#cache"
   ],
   "databases-write-heavy-scaling": [
    "indexes#costs",
    "scaling#replicas"
   ],
   "devops-behavioral-failure-handling": [
-   "scaling#retries"
+   "resilience#breaker",
+   "resilience#retries"
+  ],
+  "devops-context-switch": [
+   "os-scheduling#sched",
+   "syscalls#cost"
   ],
   "devops-cooperative-vs-preemptive-multitasking": [
+   "os-scheduling#sched",
    "scheduler#model"
   ],
   "devops-cpu-over-100-percent": [
-   "scheduler#procs"
+   "scheduler#procs",
+   "os-scheduling#sched"
   ],
   "devops-distributed-tracing": [
    "profiling#traces"
   ],
   "devops-epoll": [
+   "os-io#wait",
    "scheduler#wait"
+  ],
+  "devops-file-descriptor": [
+   "os-io#copies"
+  ],
+  "devops-fork": [
+   "os-scheduling#tasks",
+   "virtual-memory#faults"
+  ],
+  "devops-k8s-readiness-liveness": [
+   "failure-detection#k8s"
   ],
   "devops-latency-regression-investigation": [
    "profiling#metrics",
    "profiling#traces"
   ],
   "devops-linux-kill-process": [
+   "os-scheduling#tasks",
    "patterns#shutdown"
   ],
   "devops-monitoring-and-logging": [
@@ -1036,13 +1099,29 @@
    "profiling#metrics"
   ],
   "devops-os-sync-primitives": [
+   "os-scheduling#futex",
    "sync#mutex"
+  ],
+  "devops-process-vs-thread": [
+   "os-scheduling#tasks",
+   "virtual-memory#translate"
   ],
   "devops-prometheus-metric-types": [
    "profiling#metrics"
   ],
   "devops-service-metrics-red-use": [
    "profiling#metrics"
+  ],
+  "devops-syscalls": [
+   "syscalls#door",
+   "syscalls#wall"
+  ],
+  "devops-top-and-load-average": [
+   "os-scheduling#sched"
+  ],
+  "devops-virtualization-vs-containers": [
+   "containers#process",
+   "containers#limits"
   ],
   "errors-custom-errors": [
    "interfaces#errors"
@@ -1138,6 +1217,7 @@
    "scheduler#model"
   ],
   "goroutines-scheduler-gomaxprocs-kubernetes": [
+   "os-scheduling#limits",
    "scheduler#procs"
   ],
   "goroutines-scheduler-goroutine-leaks": [
@@ -1145,15 +1225,18 @@
    "profiling#memory"
   ],
   "goroutines-scheduler-goroutine-vs-thread": [
-   "scheduler#model"
+   "scheduler#model",
+   "os-scheduling#tasks"
   ],
   "goroutines-scheduler-loop-closure-no-wait": [
    "sync#wg"
   ],
   "goroutines-scheduler-max-goroutines": [
-   "scheduler#wait"
+   "scheduler#wait",
+   "syscalls#go"
   ],
   "goroutines-scheduler-netpoller": [
+   "os-io#go",
    "scheduler#wait"
   ],
   "goroutines-scheduler-preemption": [
@@ -1171,7 +1254,12 @@
   "goroutines-scheduler-spawn-10000-sleepers": [
    "sync#wg"
   ],
+  "goroutines-scheduler-switch-cost": [
+   "os-scheduling#sched",
+   "scheduler#model"
+  ],
   "goroutines-scheduler-syscalls-handoff": [
+   "syscalls#go",
    "scheduler#wait"
   ],
   "interfaces-comparison-and-map-keys": [
@@ -1269,6 +1357,10 @@
    "gc#mark",
    "gc#barrier"
   ],
+  "memory-gc-lazy-allocation": [
+   "virtual-memory#faults",
+   "virtual-memory#go"
+  ],
   "memory-gc-leak-diagnosis": [
    "profiling#memory",
    "channels#deadlock"
@@ -1277,7 +1369,8 @@
    "maps#grow"
   ],
   "memory-gc-oom-behavior": [
-   "gc#when"
+   "virtual-memory#numbers",
+   "containers#limits"
   ],
   "memory-gc-reduce-gc-pressure": [
    "gc#when",
@@ -1301,11 +1394,16 @@
    "kafka#commit"
   ],
   "messaging-delivery-guarantees-exactly-once": [
+   "dist-transactions#idempotency",
    "kafka#commit"
   ],
+  "messaging-document-stream-processor": [
+   "clocks#logical",
+   "dist-transactions#idempotency"
+  ],
   "messaging-idempotent-consumer-dedup": [
-   "kafka#commit",
-   "http#anatomy"
+   "dist-transactions#idempotency",
+   "kafka#commit"
   ],
   "messaging-inmemory-broker": [
    "channels#nil-closed"
@@ -1323,6 +1421,9 @@
   "messaging-kafka-partitioning": [
    "kafka#log"
   ],
+  "messaging-kafka-replication-fault-tolerance": [
+   "replication#kafka"
+  ],
   "messaging-kafka-retention-unconsumed": [
    "queues#log"
   ],
@@ -1336,6 +1437,7 @@
    "kafka#outbox"
   ],
   "messaging-outbox-relay-concurrency": [
+   "dist-transactions#outbox",
    "kafka#outbox"
   ],
   "messaging-poison-message-handling": [
@@ -1345,10 +1447,18 @@
    "queues#pubsub"
   ],
   "messaging-transactional-outbox": [
+   "dist-transactions#outbox",
    "kafka#outbox"
   ],
+  "networking-debug-requests-not-arriving": [
+   "tcp#queues"
+  ],
+  "networking-dns": [
+   "dns-lb#dns"
+  ],
   "networking-grpc-basics": [
-   "http#versions"
+   "http#versions",
+   "dns-lb#grpc"
   ],
   "networking-http-handler-proxy-filter": [
    "http#pool",
@@ -1358,7 +1468,8 @@
    "http#anatomy"
   ],
   "networking-http-methods-idempotency": [
-   "http#anatomy"
+   "http#anatomy",
+   "dist-transactions#idempotency"
   ],
   "networking-http-server-internals-go": [
    "scheduler#wait"
@@ -1367,23 +1478,41 @@
    "http#anatomy"
   ],
   "networking-http-timeouts": [
-   "http#pool",
-   "scaling#retries"
+   "resilience#deadlines",
+   "http#pool"
   ],
   "networking-http-transport-config": [
-   "http#pool"
+   "http#pool",
+   "dns-lb#timeouts"
   ],
   "networking-http-versions": [
-   "http#versions"
+   "http#versions",
+   "tls-quic#path"
   ],
   "networking-keep-alive": [
-   "http#pool"
+   "http#pool",
+   "dns-lb#timeouts"
+  ],
+  "networking-long-lived-tcp-connections": [
+   "tcp#timing",
+   "dns-lb#grpc"
+  ],
+  "networking-mtu": [
+   "tls-quic#path"
+  ],
+  "networking-sockets": [
+   "tcp#queues"
+  ],
+  "networking-tcp-acks": [
+   "tcp#timing"
   ],
   "networking-tcp-vs-udp": [
+   "tls-quic#path",
    "http#versions"
   ],
   "networking-url-to-response-flow": [
-   "http#url"
+   "http#url",
+   "dns-lb#dns"
   ],
   "networking-websocket-concurrent-writes-race": [
    "sync#mutex"
@@ -1451,7 +1580,8 @@
    "sync#race"
   ],
   "sync-atomics-vs-mutex": [
-   "sync#tools"
+   "sync#tools",
+   "cpu-caches#sharing"
   ],
   "sync-concurrency-problems-deadlock": [
    "sync#race",
@@ -1478,7 +1608,8 @@
    "sync#mutex"
   ],
   "sync-mutex-internals": [
-   "sync#mutex"
+   "sync#mutex",
+   "os-scheduling#futex"
   ],
   "sync-mutex-vs-rwmutex": [
    "sync#mutex"
@@ -1529,9 +1660,13 @@
   "system-design-airline-tickets": [
    "transactions#writes"
   ],
+  "system-design-async-resource-provisioning": [
+   "dist-transactions#saga",
+   "dist-transactions#idempotency"
+  ],
   "system-design-bank-transfers": [
-   "transactions#acid",
-   "transactions#writes"
+   "transactions#writes",
+   "dist-transactions#idempotency"
   ],
   "system-design-cross-cluster-document-transfer": [
    "kafka#log"
@@ -1541,7 +1676,8 @@
    "patterns#shutdown"
   ],
   "system-design-distributed-cache-challenges": [
-   "scaling#cache"
+   "sharding#ring",
+   "sharding#cost"
   ],
   "system-design-exchange-rate-proxy": [
    "scaling#cache"
@@ -1550,8 +1686,8 @@
    "scaling#replicas"
   ],
   "system-design-survive-until-more-cpu": [
-   "scaling#retries",
-   "scheduler#procs"
+   "resilience#overload",
+   "scaling#retries"
   ],
   "system-design-telemetry-ingestion": [
    "kafka#log"

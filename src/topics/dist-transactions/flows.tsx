@@ -66,7 +66,7 @@ export const twoPC: FlowDef = {
       ],
     },
     {
-      caption: 'The fix: keep the coordinator log on a consensus group (Paxos). If the leader dies, a new leader reads the log and finishes COMMIT.',
+      caption: 'The fix: keep the coordinator log on a Paxos group. If the leader dies, a new leader reads the log and finishes the job: commit if decided, else abort.',
       drop: ['t1', 't2', 'q'],
       add: [box('px', 190, 372, 180, 52, { text: 'log on 3 replicas', sub: 'Paxos', tone: 'red' }), msg('k3', 'c', 'a', 316, 'COMMIT', { tone: 'red' }), msg('k4', 'c', 'b', 316, 'COMMIT', { tone: 'red' })],
       set: {
@@ -213,7 +213,7 @@ export const sagaIsolation: FlowDef = {
       set: { t1: { tone: 'grey' } },
     },
     {
-      caption: 'Then the saga fails and undoes T1. That read was dirty: 4 never really existed.',
+      caption: 'Then the saga fails and undoes T1. That read was dirty: the 4 was later undone.',
       add: [msg('c1', 's', 'd', 254, 'C1 qty=5', { tone: 'red' })],
       set: { row: { text: 'qty 5', tone: 'ink' }, rr: { tone: 'ink' } },
       stop: {
@@ -343,7 +343,7 @@ export const pollSkip: FlowDef = {
       stop: {
         title: 'Polling by id can skip rows',
         edge: true,
-        body: <>Caveat, our own reasoning rather than a vendor doc: advance last only past ids that no open transaction can still commit, or tail the DB log (CDC), which keeps commit order.</>,
+        body: <>Our own reasoning, not a vendor doc. Skipping needs a cursor like <code>id &gt; last</code>; a <code>sent_at IS NULL</code> flag never skips but can publish 10 after 11. Fix: advance last only past ids no open transaction can still commit, or tail the log (CDC).</>,
       },
     },
   ],

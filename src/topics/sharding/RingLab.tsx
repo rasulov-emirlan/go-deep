@@ -37,7 +37,7 @@ export function RingLab() {
           />
         </>
       }
-      foot="Points per node, then the change. Bars: keys per node after it. Dashed line: a fair share. Busiest node is shown as a multiple of that."
+      foot="Points per node, then the change. Bars: keys per node after it. Dashed line: a fair share. Busiest node is shown as a multiple of that. One fixed random draw, so single numbers wobble (the average spread at 1 point is worse than any one draw suggests)."
     >
       <div className="sharding-lab">
         <div className="sharding-stats">
