@@ -112,19 +112,19 @@ export const failoverFlow: FlowDef = {
       caption: 'Two histories now share one past and split at the promotion point. Write A exists only on the old leader’s branch.',
       drop: ['cl', 'ld', 'f1', 'f2', 'cut', 'hb', 'wa', 'wb', 'old'],
       add: [
-        txt('pp', 200, 50, 'promotion point'),
-        { t: 'line', id: 'tl1', x1: 30, y1: 130, x2: 200, y2: 130 },
-        txt('tl1t', 115, 108, 'timeline 1', { tone: 'grey' }),
-        { t: 'line', id: 'tlo', x1: 200, y1: 130, x2: 500, y2: 130, tone: 'grey' },
-        txt('tlot', 350, 152, 'old leader: write A', { tone: 'red' }),
-        { t: 'path', id: 'tln', d: 'M200 130 L240 210 L520 210' },
-        txt('tlnt', 390, 234, 'timeline 2: write B'),
-        { t: 'node', id: 'fk', x: 200, y: 130, r: 7, tone: 'red' },
+        txt('pp', 200, 75, 'promotion point'),
+        { t: 'line', id: 'tl1', x1: 30, y1: 155, x2: 200, y2: 155 },
+        txt('tl1t', 115, 133, 'timeline 1', { tone: 'grey' }),
+        { t: 'line', id: 'tlo', x1: 200, y1: 155, x2: 500, y2: 155, tone: 'grey' },
+        txt('tlot', 350, 177, 'old leader: write A', { tone: 'red' }),
+        { t: 'path', id: 'tln', d: 'M200 155 L240 235 L520 235' },
+        txt('tlnt', 390, 259, 'timeline 2: write B'),
+        { t: 'node', id: 'fk', x: 200, y: 155, r: 7, tone: 'red' },
       ],
     },
     {
       caption: 'pg_rewind finds the fork, copies back the blocks that changed since, and the old leader rejoins as a follower. The alternative is a full re-clone.',
-      add: [{ t: 'line', id: 'rw', x1: 500, y1: 100, x2: 208, y2: 100, tone: 'red', arrow: true, text: 'pg_rewind' }],
+      add: [{ t: 'line', id: 'rw', x1: 500, y1: 125, x2: 208, y2: 125, tone: 'red', arrow: true, text: 'pg_rewind' }],
     },
   ],
 }
@@ -138,7 +138,7 @@ export const lagFlow: FlowDef = {
     },
     {
       caption: 'A read routed to R1 sees the new value.',
-      add: [msg('q1', 'cl', 'r1', 118, 130, 'read x'), msg('a1', 'r1', 'cl', 136, 148, 'x = 2')],
+      add: [msg('q1', 'cl', 'r1', 124, 136, 'read x'), msg('a1', 'r1', 'cl', 144, 156, 'x = 2')],
     },
     {
       caption: 'The next read lands on R2, which has not replayed the write yet. The client sees x = 1: time went backwards.',
@@ -171,6 +171,8 @@ export const counterFlow: FlowDef = {
         msg('wa', 'cl', 'a', 56, 74, 'v1', { dashed: true }),
         msg('wb', 'cl', 'b', 56, 270, '', { dashed: true }),
         msg('wc', 'cl', 'c', 56, 292, '', { dashed: true }),
+        txt('wbt', 352, 264, 'v1', { tone: 'grey', anchor: 'start' }),
+        txt('wct', 492, 286, 'v1', { tone: 'grey', anchor: 'start' }),
       ],
     },
     {
@@ -191,7 +193,7 @@ export const counterFlow: FlowDef = {
     },
     {
       caption: 'The write completes only now, after both reads. Until it completes, quorum overlap gives no ordering guarantee.',
-      set: { wb: { dashed: false }, wc: { dashed: false } },
+      set: { wb: { dashed: false, tone: 'red' }, wc: { dashed: false, tone: 'red' }, wbt: { tone: 'red' }, wct: { tone: 'red' } },
       stop: {
         title: 'More ways quorums lie',
         edge: true,
@@ -386,25 +388,25 @@ export const isrFlow: FlowDef = {
     },
     {
       caption: 'Followers pull m1 from the leader. A record is committed once every replica currently in the ISR has it.',
-      add: [msg('p1', 'ld', 'f1', 96, 112, 'm1'), msg('p2', 'ld', 'f2', 96, 126, 'm1')],
+      add: [msg('p1', 'ld', 'f1', 94, 106, 'm1'), msg('p2', 'ld', 'f2', 116, 138, 'm1')],
     },
     {
       caption: 'All ISR members have m1, so it is committed. The high watermark (HWM) moves, consumers may read up to it, and the producer gets its ack.',
-      add: [msg('k1', 'ld', 'pr', 134, 146, 'ack')],
+      add: [msg('k1', 'ld', 'pr', 148, 160, 'ack')],
       set: { ld: { sub: 'HWM 1' } },
     },
     {
       caption: 'F2 stops fetching. After replica.lag.time.max.ms (30 s by default) the leader drops it from the ISR. Until then writes wait for F2.',
-      add: [txt('sil', X.c, 170, 'silent 30 s', { tone: 'red' })],
+      add: [txt('sil', X.c, 180, 'silent 30 s', { tone: 'red' })],
       set: { f2: { tone: 'grey' }, isr: st('ISR = {Leader, F1}', 'min.insync.replicas = 2', 'red') },
     },
     {
       caption: 'm2 needs acks only from Leader and F1. ISR size 2 still meets min.insync.replicas 2, so the write succeeds.',
-      add: [msg('m2', 'pr', 'ld', 190, 202, 'm2'), msg('p3', 'ld', 'f1', 208, 222, 'm2'), msg('k2', 'ld', 'pr', 228, 240, 'ack')],
+      add: [msg('m2', 'pr', 'ld', 196, 208, 'm2'), msg('p3', 'ld', 'f1', 214, 228, 'm2'), msg('k2', 'ld', 'pr', 236, 248, 'ack')],
     },
     {
       caption: 'F1 dies: ISR = {Leader}, below the minimum. Kafka rejects m3 with NotEnoughReplicas: durability over availability.',
-      add: [msg('m3', 'pr', 'ld', 262, 274, 'm3'), msg('e3', 'ld', 'pr', 282, 294, 'rejected', { tone: 'red' })],
+      add: [msg('m3', 'pr', 'ld', 264, 276, 'm3'), msg('e3', 'ld', 'pr', 292, 304, 'rejected', { tone: 'red' })],
       set: { f1: { dead: true }, isr: st('ISR = {Leader}', 'size 1 < min 2: writes rejected', 'red') },
       stop: {
         title: 'min.insync.replicas = 1?',
@@ -414,7 +416,8 @@ export const isrFlow: FlowDef = {
     },
     {
       caption: 'The leader dies. unclean=false: partition offline until Leader or an ISR member returns. unclean=true: F2 leads without m2.',
-      add: [txt('u0', X.a, 335, 'unclean=false:\nstays offline'), txt('u1', X.c, 335, 'unclean=true:\nF2 leads, m2 lost', { tone: 'red' })],
+      add: [txt('u0', X.a, 340, 'unclean=false:\nstays offline'), txt('u1', X.c, 340, 'unclean=true:\nF2 leads,\nm2 lost', { tone: 'red' })],
+      drop: ['m1', 'p1', 'p2', 'k1'],
       set: { ld: { dead: true }, f2: { tone: 'red' } },
       stop: {
         title: 'Unclean leader election',
@@ -426,8 +429,8 @@ export const isrFlow: FlowDef = {
       caption: 'Kafka needs f+1 copies to survive f failures but waits for its slowest ISR member. Raft needs 2f+1 and waits only for a majority.',
       drop: ['pr', 'ld', 'f1', 'f2', 'isr', 'm1', 'p1', 'p2', 'k1', 'sil', 'm2', 'p3', 'k2', 'm3', 'e3', 'u0', 'u1'],
       add: [
-        { t: 'box', id: 'kb', x: 15, y: 120, w: 255, h: 130, label: 'Kafka ISR', text: 'f+1 copies survive\nf failures. Latency:\nslowest ISR member.' },
-        { t: 'box', id: 'rb', x: 290, y: 120, w: 255, h: 130, label: 'Raft (majority)', text: '2f+1 copies survive\nf failures. Latency:\nfastest majority.' },
+        { t: 'box', id: 'kb', x: 15, y: 150, w: 255, h: 130, label: 'Kafka ISR', text: 'f+1 copies survive\nf failures. Latency:\nslowest ISR member.' },
+        { t: 'box', id: 'rb', x: 290, y: 150, w: 255, h: 130, label: 'Raft (majority)', text: '2f+1 copies survive\nf failures. Latency:\nfastest majority.' },
       ],
     },
   ],

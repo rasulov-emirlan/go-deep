@@ -14,12 +14,12 @@ export const resumeFlow: FlowDef = {
       add: [
         { t: 'lane', id: 'c', x: C, y: 6, len: 370, text: 'Client' },
         { t: 'lane', id: 's', x: S, y: 6, len: 370, text: 'Server' },
-        { t: 'msg', id: 'syn', from: 'c', to: 's', y: 62, y2: 74, text: 'SYN' },
-        { t: 'msg', id: 'synack', from: 's', to: 'c', y: 84, y2: 96, text: 'SYN-ACK' },
-        { t: 'msg', id: 'ch', from: 'c', to: 's', y: 112, y2: 124, text: 'ClientHello' },
-        { t: 'msg', id: 'sh', from: 's', to: 'c', y: 136, y2: 148, text: 'cert+Finished' },
-        { t: 'msg', id: 'fin', from: 'c', to: 's', y: 166, y2: 178, text: 'Finished+GET' },
-        { t: 'text', id: 'rtt', x: 280, y: 236, text: '1 RTT TCP + 1 RTT TLS', tone: 'red' },
+        { t: 'msg', id: 'syn', from: 'c', to: 's', y: 66, y2: 78, text: 'SYN' },
+        { t: 'msg', id: 'synack', from: 's', to: 'c', y: 104, y2: 116, text: 'SYN-ACK' },
+        { t: 'msg', id: 'ch', from: 'c', to: 's', y: 148, y2: 160, text: 'ClientHello' },
+        { t: 'msg', id: 'sh', from: 's', to: 'c', y: 188, y2: 200, text: 'cert+Finished' },
+        { t: 'msg', id: 'fin', from: 'c', to: 's', y: 234, y2: 246, text: 'Finished+GET' },
+        { t: 'text', id: 'rtt', x: 280, y: 310, text: '1 RTT TCP + 1 RTT TLS', tone: 'red' },
       ],
     },
     {
@@ -34,20 +34,20 @@ export const resumeFlow: FlowDef = {
       caption: 'Resuming: the ClientHello carries the ticket. No certificate flight, but the request still waits one TLS round trip.',
       drop: ['tk'],
       add: [
-        { t: 'msg', id: 'r1', from: 'c', to: 's', y: 62, y2: 74, text: 'Hello+ticket' },
-        { t: 'msg', id: 'r2', from: 's', to: 'c', y: 90, y2: 102, text: 'Finished' },
-        { t: 'msg', id: 'r3', from: 'c', to: 's', y: 120, y2: 132, text: 'GET /img' },
-        { t: 'text', id: 'rt', x: 280, y: 200, text: 'no cert flight', tone: 'red' },
+        { t: 'msg', id: 'r1', from: 'c', to: 's', y: 66, y2: 78, text: 'Hello+ticket' },
+        { t: 'msg', id: 'r2', from: 's', to: 'c', y: 110, y2: 122, text: 'Finished' },
+        { t: 'msg', id: 'r3', from: 'c', to: 's', y: 156, y2: 168, text: 'GET /img' },
+        { t: 'text', id: 'rt', x: 280, y: 230, text: 'no cert flight', tone: 'red' },
       ],
     },
     {
       caption: '0-RTT: the request rides in the first flight, encrypted with a key derived from the ticket. Zero extra round trips.',
       drop: ['r1', 'r2', 'r3', 'rt'],
       add: [
-        { t: 'msg', id: 'z1', from: 'c', to: 's', y: 62, y2: 74, text: 'Hello+ticket' },
-        { t: 'msg', id: 'z2', from: 'c', to: 's', y: 92, y2: 104, text: 'GET /img', tone: 'red' },
-        { t: 'msg', id: 'z3', from: 's', to: 'c', y: 126, y2: 138, text: 'reply' },
-        { t: 'text', id: 'zt', x: 280, y: 200, text: '0 extra RTT', tone: 'red' },
+        { t: 'msg', id: 'z1', from: 'c', to: 's', y: 66, y2: 78, text: 'Hello+ticket' },
+        { t: 'msg', id: 'z2', from: 'c', to: 's', y: 108, y2: 120, text: 'GET /img', tone: 'red' },
+        { t: 'msg', id: 'z3', from: 's', to: 'c', y: 160, y2: 172, text: 'reply' },
+        { t: 'text', id: 'zt', x: 280, y: 236, text: '0 extra RTT', tone: 'red' },
       ],
     },
     {
@@ -57,10 +57,10 @@ export const resumeFlow: FlowDef = {
       add: [
         { t: 'lane', id: 'b', x: S, y: 6, len: 370, text: 'Server B' },
         { t: 'msg', id: 'p1', from: 'c', to: 's', y: 66, y2: 78, text: 'Hello+POST' },
-        { t: 'text', id: 'ta', x: 270, y: 112, text: 'POST ran', tone: 'grey' },
-        { t: 'box', id: 'cp', x: 110, y: 160, w: 110, h: 50, text: 'on-path', sub: 'copy', tone: 'red', dashed: true },
-        { t: 'msg', id: 'p2', x1: 220, to: 'b', y: 178, y2: 190, text: 'same bytes', tone: 'red' },
-        { t: 'text', id: 'tb', x: 490, y: 232, text: 'POST ran again', tone: 'red' },
+        { t: 'text', id: 'ta', x: 270, y: 118, text: 'POST ran', tone: 'grey' },
+        { t: 'box', id: 'cp', x: 110, y: 170, w: 110, h: 50, text: 'on-path', sub: 'copy', tone: 'red', dashed: true },
+        { t: 'msg', id: 'p2', x1: 220, to: 'b', y: 188, y2: 200, text: 'same bytes', tone: 'red' },
+        { t: 'text', id: 'tb', x: 470, y: 250, text: 'POST ran again', tone: 'red' },
       ],
       stop: {
         title: 'Safe in 0-RTT?',
@@ -78,9 +78,9 @@ export const resumeFlow: FlowDef = {
       set: { s: { tone: 'grey' } },
       add: [
         { t: 'msg', id: 'e1', from: 'c', to: 'b', y: 66, y2: 78, text: 'POST /pay' },
-        { t: 'msg', id: 'e2', from: 'b', to: 'c', y: 102, y2: 114, text: '425 Too Early', tone: 'red' },
-        { t: 'msg', id: 'e3', from: 'c', to: 'b', y: 144, y2: 156, text: 'POST again' },
-        { t: 'text', id: 'eh', x: 400, y: 224, text: 'proxy adds\nEarly-Data: 1', tone: 'ink' },
+        { t: 'msg', id: 'e2', from: 'b', to: 'c', y: 112, y2: 124, text: '425 Too Early', tone: 'red' },
+        { t: 'msg', id: 'e3', from: 'c', to: 'b', y: 162, y2: 174, text: 'POST again' },
+        { t: 'text', id: 'eh', x: 400, y: 225, text: 'proxy adds\nEarly-Data: 1', tone: 'ink' },
       ],
     },
     {
@@ -91,7 +91,7 @@ export const resumeFlow: FlowDef = {
         { t: 'box', id: 'ka', x: 220, y: 300, w: 100, h: 50, text: 'key K1' },
         { t: 'box', id: 'kb', x: 440, y: 300, w: 100, h: 50, text: 'key K2' },
         { t: 'msg', id: 'h1', from: 'c', to: 'b', y: 70, y2: 82, text: 'Hello+ticket' },
-        { t: 'msg', id: 'h2', from: 'b', to: 'c', y: 108, y2: 120, text: 'full handshake', tone: 'red' },
+        { t: 'msg', id: 'h2', from: 'b', to: 'c', y: 120, y2: 132, text: 'full handshake', tone: 'red' },
       ],
       stop: {
         title: 'Tickets in Go',
@@ -113,7 +113,7 @@ tr.TLSClientConfig = &tls.Config{
 
 /** 02 — chain of trust, then cert rotation */
 export const certFlow: FlowDef = {
-  h: 330,
+  h: 344,
   steps: [
     {
       caption: 'The client must build a path from the leaf up to a root it trusts. This server sends only the leaf.',
@@ -198,7 +198,7 @@ cfg.GetCertificate = func(
     },
     {
       caption: 'A resumed handshake skips GetCertificate, so it never sees the new cert. Go tickets stay valid up to 7 days.',
-      add: [{ t: 'box', id: 'res', x: 20, y: 274, w: 520, h: 48, text: 'resumed handshake', sub: 'GetCertificate not called', tone: 'red', dashed: true }],
+      add: [{ t: 'box', id: 'res', x: 20, y: 286, w: 520, h: 48, text: 'resumed handshake', sub: 'GetCertificate not called', tone: 'red', dashed: true }],
     },
   ],
 }
@@ -213,10 +213,10 @@ export const mtuFlow: FlowDef = {
         { t: 'lane', id: 'c', x: C, y: 6, len: 300, text: 'Client' },
         { t: 'lane', id: 't', x: 250, y: 6, len: 300, text: 'Tunnel', sub: 'MTU 1420' },
         { t: 'lane', id: 's', x: S, y: 6, len: 300, text: 'Server' },
-        { t: 'msg', id: 'm1', from: 'c', to: 's', y: 82, y2: 94, text: 'SYN' },
-        { t: 'msg', id: 'm2', from: 's', to: 'c', y: 108, y2: 120, text: 'SYN-ACK' },
-        { t: 'msg', id: 'm3', from: 'c', to: 's', y: 138, y2: 150, text: 'GET /small' },
-        { t: 'msg', id: 'm4', from: 's', to: 'c', y: 164, y2: 176, text: '200 · 300 B' },
+        { t: 'msg', id: 'm1', from: 'c', to: 's', y: 76, y2: 88, text: 'SYN' },
+        { t: 'msg', id: 'm2', from: 's', to: 'c', y: 112, y2: 124, text: 'SYN-ACK' },
+        { t: 'msg', id: 'm3', from: 'c', to: 's', y: 152, y2: 164, text: 'GET /small' },
+        { t: 'msg', id: 'm4', from: 's', to: 'c', y: 192, y2: 204, text: '200 · 300 B' },
       ],
     },
     {
@@ -247,7 +247,7 @@ export const mtuFlow: FlowDef = {
       add: [
         { t: 'msg', id: 'f1', from: 'c', to: 's', y: 82, y2: 94, text: 'SYN MSS 1460' },
         { t: 'text', id: 'ft', x: 250, y: 130, text: 'rewrites to 1380', tone: 'red' },
-        { t: 'msg', id: 'f2', from: 's', to: 'c', y: 166, y2: 178, text: '1380 B' },
+        { t: 'msg', id: 'f2', from: 's', to: 'c', y: 184, y2: 196, text: '1380 B' },
       ],
       stop: {
         title: 'Ways out',

@@ -241,7 +241,7 @@ export const commitModes: FlowDef = {
       caption: '`remote_apply` waits for the standby to replay the change. A standby read now sees the row: causal reads in simple cases, at higher commit latency.',
       drop: ['fl', 'ok1', 'rd', 'rr'],
       add: [
-        label('rp', 490, 165, 'replayed'),
+        label('rp', 490, 152, 'replayed'),
         { t: 'msg', id: 'ap', from: 'st', to: 'pr', y: 178, y2: 203, text: 'applied' },
         { t: 'msg', id: 'ok2', from: 'pr', to: 'cl', y: 205, y2: 228, text: 'ok', tone: 'red' },
         { t: 'msg', id: 'rd2', from: 'cl', to: 'st', y: 255, text: 'read row' },
@@ -352,7 +352,7 @@ export const raftSplit: FlowDef = {
     },
     {
       caption: 'The network splits 3 | 2. n4, the old leader, is on the small side and has not noticed yet.',
-      add: [{ t: 'path', id: 'sp', d: part, tone: 'red', dashed: true }, label('pt', 335, 25, 'partition', 'red'), label('mj', 170, 150, 'majority 3'), label('mn', 445, 150, 'minority 2')],
+      add: [{ t: 'path', id: 'sp', d: part, tone: 'red', dashed: true }, label('pt', 335, 25, 'partition', 'red'), label('mj', 170, 42, 'majority 3'), label('mn', 445, 42, 'minority 2')],
     },
     {
       caption: 'The majority elects a new leader, n2, and keeps serving. The minority cannot reach a majority, so it cannot commit.',
@@ -368,8 +368,8 @@ export const raftSplit: FlowDef = {
       caption: 'n4 may answer from local state and miss writes n2 committed. A safe read confirms leadership with a quorum, or holds a lease.',
       drop: ['stk'],
       add: [
-        { t: 'box', id: 'cli', x: 330, y: 240, w: 90, h: 36, text: 'client' },
-        { t: 'line', id: 'rq', x1: 375, y1: 240, x2: 388, y2: 118, arrow: true, tone: 'red', text: 'read x' },
+        { t: 'box', id: 'cli', x: 400, y: 240, w: 90, h: 36, text: 'client' },
+        { t: 'line', id: 'rq', x1: 430, y1: 240, x2: 396, y2: 117, arrow: true, tone: 'red', text: 'read x' },
         label('old', 445, 300, 'old leader answers v1', 'red'),
       ],
       stop: {
@@ -410,8 +410,8 @@ export const pacelc: FlowDef = {
       add: [
         { t: 'msg', id: 'ok2', from: 'a', to: 'cl', y: 100, y2: 118, text: 'ok', tone: 'red' },
         { t: 'msg', id: 'rp2', from: 'a', to: 'b', y: 125, y2: 245, dashed: true, text: 'replicate' },
-        { t: 'msg', id: 'rd', from: 'cl', to: 'b', y: 165, text: 'read' },
-        { t: 'msg', id: 'ra', from: 'b', to: 'cl', y: 190, text: 'old', tone: 'red' },
+        { t: 'msg', id: 'rd', from: 'cl', to: 'b', y: 205, text: 'read' },
+        { t: 'msg', id: 'ra', from: 'b', to: 'cl', y: 230, text: 'old', tone: 'red' },
       ],
     },
     {
@@ -422,7 +422,7 @@ export const pacelc: FlowDef = {
         { t: 'box', id: 'ee', x: 290, y: 20, w: 250, h: 60, label: 'ELSE', text: 'Latency or C' },
         { t: 'box', id: 'x1', x: 20, y: 110, w: 520, h: 52, text: 'PA/EL', sub: 'Dynamo · Cassandra · SimpleDB' },
         { t: 'box', id: 'x2', x: 20, y: 176, w: 520, h: 52, text: 'PC/EL', sub: 'PNUTS' },
-        { t: 'box', id: 'x3', x: 20, y: 242, w: 520, h: 62, text: 'per request', sub: 'DynamoDB ConsistentRead=true\nCassandra consistency level', tone: 'red' },
+        { t: 'box', id: 'x3', x: 20, y: 242, w: 520, h: 76, text: 'per request', sub: 'DynamoDB ConsistentRead=true\nCassandra consistency level', tone: 'red' },
       ],
     },
   ],
@@ -511,7 +511,7 @@ export const nemesis: FlowDef = {
       add: [
         lane('ck', 510, 'Checker', 320),
         { t: 'msg', id: 'hk', x1: 320, x2: 510, y: 250, text: 'history' },
-        { t: 'box', id: 'vd', x: 340, y: 282, w: 200, h: 50, text: 'not linearizable', sub: 'minimal witness', tone: 'red' },
+        { t: 'box', id: 'vd', x: 340, y: 282, w: 200, h: 50, text: 'legal order?', sub: 'no → minimal witness' },
       ],
     },
   ],

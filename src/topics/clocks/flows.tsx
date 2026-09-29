@@ -3,7 +3,7 @@ import { Code } from '../../components/Code'
 
 /* Shared map for the ladder diagrams: A at x=90, B at x=280, C at x=470. Ink = normal, grey = old, red = this step. */
 const X = { A: 90, B: 280, C: 470 }
-const lane = (id: string, x: number, text: string, len: number, sub?: string): LaneEl => ({ t: 'lane', id, x, y: 8, len, text, sub })
+const lane = (id: string, x: number, text: string, len: number, sub?: string): LaneEl => ({ t: 'lane', id, x, y: 8, len, text, sub, w: sub ? Math.max(100, Math.round(sub.length * 7.8 + 16)) : undefined })
 const dot = (id: string, x: number, y: number, text?: string, tone: 'ink' | 'red' = 'red'): El =>
   text ? { t: 'node', id, x, y, r: 14, text, tone } : { t: 'node', id, x, y, r: 7, tone }
 
@@ -110,7 +110,7 @@ const cells = (idp: string, y: number, texts: string[], tones: ('ink' | 'red')[]
   texts.map((text, i) => ({ t: 'box', id: `${idp}${i}`, x: 40 + i * 128, y, w: 120, h: 44, text, tone: tones[i] }))
 
 export const leapSecond: FlowDef = {
-  h: 300,
+  h: 250,
   steps: [
     {
       caption: 'UTC sometimes inserts a leap second, 23:59:60. Computers mostly have no 61st second, so each fleet handles it its own way.',
@@ -123,8 +123,8 @@ export const leapSecond: FlowDef = {
     {
       caption: 'Cloudflare, 1 Jan 2017: DNS code timed upstreams by subtracting wall-clock readings. Negative round-trip times reached `rand.Int63n`, which panics for n ≤ 0.',
       add: [
-        { t: 'text', id: 'neg', x: 280, y: 226, text: 'RTT = now − start < 0', tone: 'red' },
-        { t: 'text', id: 'pan', x: 280, y: 256, text: 'rand.Int63n(RTT) panics', tone: 'red' },
+        { t: 'text', id: 'neg', x: 280, y: 208, text: 'RTT = now − start < 0', tone: 'red' },
+        { t: 'text', id: 'pan', x: 280, y: 236, text: 'rand.Int63n(RTT) panics', tone: 'red' },
       ],
       stop: {
         title: 'Cloudflare, 2017',
@@ -136,22 +136,22 @@ export const leapSecond: FlowDef = {
       caption: 'Other way: smear. Google’s public NTP spreads the extra second over 24 h, noon to noon, changing the clock rate by about 11.6 ppm. No step, no repeat.',
       drop: ['ul', 'u0', 'u1', 'u2', 'u3', 'sl', 's0', 's1', 's2', 's3', 'neg', 'pan'],
       add: [
-        { t: 'line', id: 'ax', x1: 40, y1: 250, x2: 530, y2: 250, tone: 'grey', arrow: true },
-        { t: 'text', id: 'y0', x: 30, y: 250, text: '0', anchor: 'end' },
-        { t: 'text', id: 'y1', x: 30, y: 170, text: '1 s', anchor: 'end' },
-        { t: 'text', id: 'x0', x: 60, y: 276, text: 'noon' },
-        { t: 'text', id: 'x1', x: 280, y: 276, text: 'midnight: leap' },
-        { t: 'text', id: 'x2', x: 500, y: 276, text: 'noon' },
-        { t: 'text', id: 'sr', x: 280, y: 140, text: 'smear: 24 h, ~11.6 ppm' },
-        { t: 'line', id: 'ramp', x1: 60, y1: 250, x2: 500, y2: 170 },
+        { t: 'line', id: 'ax', x1: 40, y1: 200, x2: 530, y2: 200, tone: 'grey', arrow: true },
+        { t: 'text', id: 'y0', x: 30, y: 200, text: '0', anchor: 'end' },
+        { t: 'text', id: 'y1', x: 30, y: 130, text: '1 s', anchor: 'end' },
+        { t: 'text', id: 'x0', x: 60, y: 228, text: 'noon' },
+        { t: 'text', id: 'x1', x: 280, y: 228, text: 'midnight: leap' },
+        { t: 'text', id: 'x2', x: 500, y: 228, text: 'noon' },
+        { t: 'text', id: 'sr', x: 280, y: 96, text: 'smear: 24 h, ~11.6 ppm' },
+        { t: 'line', id: 'ramp', x1: 60, y1: 200, x2: 500, y2: 130 },
       ],
     },
     {
       caption: 'A source that steps instead of smearing sits half a second away from a smearing one at midnight.',
       add: [
-        { t: 'path', id: 'stp', d: 'M60,250 L280,250 L280,170 L500,170', tone: 'red', dashed: true },
-        { t: 'line', id: 'gap', x1: 280, y1: 210, x2: 280, y2: 250, tone: 'red' },
-        { t: 'text', id: 'gapt', x: 294, y: 236, text: '0.5 s apart', tone: 'red', anchor: 'start' },
+        { t: 'path', id: 'stp', d: 'M60,200 L280,200 L280,130 L500,130', tone: 'red', dashed: true },
+        { t: 'line', id: 'gap', x1: 280, y1: 165, x2: 280, y2: 200, tone: 'red' },
+        { t: 'text', id: 'gapt', x: 294, y: 188, text: '0.5 s apart', tone: 'red', anchor: 'start' },
       ],
       stop: {
         title: 'Never mix smear sources',
@@ -163,11 +163,11 @@ export const leapSecond: FlowDef = {
       caption: 'Ordinary NTP: slew (change the rate, at most 500 ppm) for small errors, step for big ones. 100 ms of slewing takes 200 s.',
       drop: ['ax', 'y0', 'y1', 'x0', 'x1', 'x2', 'sr', 'ramp', 'stp', 'gap', 'gapt'],
       add: [
-        { t: 'text', id: 'gt', x: 280, y: 60, text: 'clock offset (not to scale)' },
-        { t: 'box', id: 'g1', x: 30, y: 100, w: 150, h: 56, text: 'slew', sub: '≤ 128 ms', tone: 'soft' },
-        { t: 'box', id: 'g2', x: 190, y: 100, w: 210, h: 56, text: 'step', sub: '> 128 ms', tone: 'red' },
-        { t: 'box', id: 'g3', x: 410, y: 100, w: 120, h: 56, text: 'gives up', sub: '> 1000 s', tone: 'grey' },
-        { t: 'text', id: 'gx', x: 280, y: 210, text: 'ntpd defaults: 128 ms, 1000 s' },
+        { t: 'text', id: 'gt', x: 280, y: 36, text: 'clock offset (not to scale)' },
+        { t: 'box', id: 'g1', x: 30, y: 64, w: 150, h: 56, text: 'slew', sub: '≤ 128 ms', tone: 'soft' },
+        { t: 'box', id: 'g2', x: 190, y: 64, w: 210, h: 56, text: 'step', sub: '> 128 ms', tone: 'red' },
+        { t: 'box', id: 'g3', x: 410, y: 64, w: 120, h: 56, text: 'gives up', sub: '> 1000 s', tone: 'grey' },
+        { t: 'text', id: 'gx', x: 280, y: 150, text: 'ntpd defaults: 128 ms, 1000 s' },
       ],
     },
   ],
@@ -176,11 +176,11 @@ export const leapSecond: FlowDef = {
 /* ---------- 02 · Last-write-wins with skewed clocks ---------- */
 
 export const lww: FlowDef = {
-  h: 330,
+  h: 300,
   steps: [
     {
       caption: 'Three machines, three clocks. A reads 100 ms, B reads 98. A few ms of skew is normal; VMs and WANs can be far worse.',
-      add: [lane('A', X.A, 'A', 300, 'clock 100'), lane('S', X.B, 'Store', 300, 'keeps highest'), lane('B', X.C, 'B', 300, 'clock 98')],
+      add: [lane('A', X.A, 'A', 290, 'clock 100'), lane('S', X.B, 'Store', 290, 'keeps highest'), lane('B', X.C, 'B', 290, 'clock 98')],
     },
     {
       caption: 'A writes `x=1` and stamps it with its own clock: 100.',
