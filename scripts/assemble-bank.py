@@ -3,7 +3,7 @@
 import json, re, sys, glob, os
 
 src = sys.argv[1] if len(sys.argv) > 1 else '/tmp/gi/dedup'
-out = os.path.join(os.path.dirname(__file__), '..', 'src', 'bank', 'questions.json')
+out = os.path.join(os.path.dirname(__file__), '..', 'src', 'bank', 'questions.json')  # only its directory is used
 items = []
 for f in sorted(glob.glob(os.path.join(src, 'out_*.json'))):
     items += json.load(open(f))
@@ -77,5 +77,11 @@ for i, (a, wa) in enumerate(first):
             print(f"  {a['id']} <> {b['id']}")
 
 clean.sort(key=lambda c: (c['cat'], -c['n'], c['id']))
-json.dump(clean, open(out, 'w'), ensure_ascii=False, indent=1)
-print(len(clean), 'questions →', os.path.relpath(out))
+# one file per category so topic pages can import just their slice of the bank
+cats_dir = os.path.join(os.path.dirname(out), 'cats')
+os.makedirs(cats_dir, exist_ok=True)
+for f in glob.glob(os.path.join(cats_dir, '*.json')):
+    os.remove(f)
+for cat in sorted({c['cat'] for c in clean}):
+    json.dump([c for c in clean if c['cat'] == cat], open(os.path.join(cats_dir, cat + '.json'), 'w'), ensure_ascii=False, indent=1)
+print(len(clean), 'questions →', os.path.relpath(cats_dir))

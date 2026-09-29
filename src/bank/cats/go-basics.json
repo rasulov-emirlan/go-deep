@@ -1,0 +1,594 @@
+[
+ {
+  "id": "go-basics-pros-cons",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What are Go's main advantages and disadvantages? Why choose it?\nFollow-ups: why was Go created, and what makes it a \"simple\" language? How does it compare to C?",
+  "a": "Go was built at Google (2007–2009) to fix slow C++ builds, dependency sprawl and hard-to-write concurrent servers at scale. Its design goal is readability and fast engineering at team scale, not expressiveness.\n\n**Advantages**\n- Fast compilation to a single static native binary; trivial deploys and small containers.\n- Concurrency in the language: cheap goroutines (KB-sized growable stacks), channels, M:N scheduler.\n- Small spec (~25 keywords), one formatting style (`gofmt`), explicit code: easy onboarding and reviews.\n- Strong standard library (`net/http`, `encoding/json`, `context`, `testing`, pprof) and tooling (race detector, fuzzing, `go vet`).\n- Memory safety + low-latency concurrent GC vs C; much better throughput and memory than Python/Ruby.\n\n**Disadvantages**\n- GC and runtime: less control than C/C++/Rust; not for hard real-time.\n- Verbose error handling (`if err != nil`), no exceptions, no sum types/enums, generics are deliberately limited.\n- Nil pointers and nil maps still exist; interfaces are implicit (harder navigation).\n- Weaker for GUI, ML/data science and heavy numeric work.\n\nPitfall: saying \"Go is fast because it's compiled\" and stopping; interviewers want the trade-off (simplicity and throughput vs control and expressiveness).",
+  "level": 1,
+  "asked": [
+   "Forward",
+   "InfoWatch",
+   "RSHB",
+   "Tutu",
+   "Velme",
+   "WMX",
+   "ZeBrains"
+  ],
+  "n": 7
+ },
+ {
+  "id": "go-basics-pointers-basics-size",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What is a pointer in Go, where is it used, and how many bytes does it take?\nFollow-up: if the OS is 32-bit but the CPU is 64-bit, how big is a pointer?",
+  "a": "A pointer `*T` stores the memory address of a value of type `T`. You get one with `&x` or `new(T)` and dereference it with `*p`. Go has no pointer arithmetic (except through `unsafe`), and the GC tracks pointers, so returning `&local` is safe (the value escapes to the heap).\n\n**Size** equals the machine word size of the **target architecture the binary is compiled for**: 8 bytes on 64-bit (`amd64`, `arm64`), 4 bytes on 32-bit (`386`, `arm`). The pointee's type doesn't matter: `*int8` and `*[1<<20]byte` are both 8 bytes on amd64.\n\nWith a 32-bit OS on a 64-bit CPU, the CPU runs in 32-bit mode, so you run a 32-bit binary and pointers are **4 bytes**. What counts is the process ABI, not the hardware.\n\n**Used for:**\n- mutating a value in a callee or through a method (pointer receivers);\n- avoiding copies of large structs;\n- sharing one instance (config, DB pool, mutex holder);\n- representing \"optional\" (nil).\n\nGotchas: nil dereference panics; pointer-heavy data adds GC scanning work.",
+  "level": 1,
+  "asked": [
+   "Magnit",
+   "QROQO",
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 5
+ },
+ {
+  "id": "go-basics-strings-internals",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "How are strings structured in Go, and what gotchas do they have?",
+  "a": "A `string` is an **immutable** sequence of bytes. The header is 16 bytes on 64-bit: a pointer to the data plus a length. There's no terminating zero and no stored capacity. The content is conventionally **UTF-8**, but any bytes are allowed.\n\nConsequences:\n- `len(s)` is the number of **bytes**, `s[i]` is a **byte**, `for i, r := range s` decodes **runes** (`i` is a byte offset);\n- assignment and passing copy only the 16-byte header, and substrings `s[a:b]` share memory with the original;\n- strings can't be changed in place (`s[0] = 'x'` doesn't compile); every \"modification\" creates a new string.\n\nGotchas:\n- `s + t` in a loop reallocates every time, giving O(n²) work. Use `strings.Builder`;\n- `[]byte(s)` and `string(b)` usually **copy** (the compiler skips it in some cases, like map lookups `m[string(b)]` and comparisons);\n- a small substring keeps the whole large string alive. Use `strings.Clone` to detach it;\n- slicing by byte index can cut a multi-byte rune in half, producing invalid UTF-8;\n- comparison `==` is by content, O(n) worst case.",
+  "level": 1,
+  "asked": [
+   "MascotGames",
+   "RealIT",
+   "VseInstrumenty",
+   "ZeBrains"
+  ],
+  "n": 5
+ },
+ {
+  "id": "go-basics-pass-by-value",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "How are arguments passed to functions in Go: by value or by reference?\nFollow-ups: which types behave like references? When does copying happen?",
+  "a": "Go always passes **by value**: the callee gets a copy of the argument. The same goes for assignment, `range` values, channel sends and method calls on value receivers.\n\nWhat matters is what the copied value contains:\n- **plain values** (numbers, arrays, structs): the whole thing is copied, so changes in the callee aren't visible outside;\n- **pointers**: the address is copied, so the pointee is shared;\n- **reference-like types** hold a pointer inside a small header: slice (ptr, len, cap), map (pointer to the runtime map), channel (pointer to `hchan`), function values, interfaces (type + data pointer), strings (ptr, len, but immutable).\n\nSo a callee can change slice *elements* or map entries and the caller sees it, but reassigning the parameter, or `append` past capacity, doesn't affect the caller's variable.\n\nCopying cost: copying a big struct or array (`[1<<20]byte`) on every call is expensive; copying a struct that contains a `sync.Mutex` is a bug (`go vet` flags it).\n\nGotcha: `for _, v := range items` copies every element; use the index (`items[i].X = …`) to mutate in place.",
+  "level": 1,
+  "asked": [
+   "Magnit",
+   "T-Bank",
+   "Tehzor",
+   "Tutu"
+  ],
+  "n": 4
+ },
+ {
+  "id": "go-basics-pointer-vs-value",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "When should you pass or return a pointer, and when a value?\nFollow-ups: why is it bad to pass everything by pointer? Do pointers actually save memory? Why do constructors return pointers?",
+  "a": "**Use a pointer when:**\n- the callee or method must mutate the value;\n- the struct must not be copied (contains `sync.Mutex`, has identity, like a DB client or service);\n- the struct is large and copied often (hundreds of bytes and up; measure it);\n- you need nil as \"absent\";\n- for consistency: if some methods need pointer receivers, use them for all methods.\n\nThis is why constructors usually return `*T`: the object has identity and state, often holds a mutex, and all its methods are pointer-receiver.\n\n**Prefer values when:** the type is small and immutable-ish (`time.Time`, points, money, IDs), or it's already reference-like (slices, maps, channels, funcs, interfaces). A pointer to a slice/map/interface is almost never needed.\n\n**Why not pointers everywhere:**\n- escape analysis often moves pointed-to values to the heap, which means allocation plus GC work; values usually stay on the stack;\n- the GC has to scan pointer-containing memory, and pointer chasing hurts cache locality;\n- shared mutable state invites data races and nil-dereference panics.\n\n**Memory:** passing a pointer copies 8 bytes instead of the struct, but a heap allocation can cost far more than copying a 64-byte struct. Check with `go build -gcflags=-m` and benchmarks.\n\nAlso avoid: taking addresses of map values (not allowed), holding pointers into slice elements across `append` (they may point into the old array), and pointers to loop variables before Go 1.22.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "Magnit",
+   "ZeBrains"
+  ],
+  "n": 4
+ },
+ {
+  "id": "go-basics-string-length-runes",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What problems does `len` have on strings? How do you count characters in a Russian (non-ASCII) string?",
+  "a": "`len(s)` returns the number of **bytes**, not characters. For UTF-8 text that's different: `len(\"привет\")` is 12, because each Cyrillic letter takes 2 bytes.\n\nCounting characters (runes):\n```go\nn := utf8.RuneCountInString(s) // no allocation\nn = len([]rune(s))             // works, allocates a []rune (the compiler optimizes this exact pattern)\n```\nOr count iterations of `for range s`.\n\nRelated pitfalls:\n- `s[i]` is a byte, so `s[0]` of `\"привет\"` is `208`, not `'п'`;\n- `s[:n]` for truncation can split a rune and produce invalid UTF-8. Truncate by runes, or walk with `utf8.DecodeRuneInString`;\n- invalid bytes decode as `U+FFFD` during `range`; check with `utf8.ValidString`;\n- rune count isn't what the user sees either: combining marks and emoji sequences are several runes (grapheme clusters).\n\nSo use `len` for byte sizes (buffers, protocol limits, DB column limits in bytes) and rune counts for user-facing length validation.",
+  "level": 1,
+  "asked": [
+   "X5 Tech",
+   "ZeBrains"
+  ],
+  "n": 4
+ },
+ {
+  "id": "go-basics-defer-basics",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What is `defer` and what rules govern it?\nFollow-ups: when are a deferred call's arguments evaluated? Does defer still run on panic?",
+  "a": "`defer f(args)` schedules a call to run when the surrounding **function** returns (not at the end of a block).\n\nRules:\n1. **LIFO**: deferred calls run in reverse order.\n2. **Arguments are evaluated immediately**, at the `defer` statement; only the call is delayed. `defer fmt.Println(i)` prints the value `i` had at that moment. A deferred **closure** reads variables when it runs, so it sees later changes.\n3. Deferred functions run **after** the return values are set, and can modify **named** results.\n4. They run on normal return **and during a panic** (while the stack unwinds), which is why `recover` only works inside a deferred function. They also run on `runtime.Goexit`.\n5. They do **not** run on `os.Exit` or `log.Fatal`, or when a *different* goroutine crashes the process.\n\n```go\nfor i := 0; i < 3; i++ {\n    defer fmt.Print(i) // prints 210\n}\n```\n\nTypical uses: `Unlock`, `Close`, `cancel()`, `span.End()`, wrapping errors, recovering panics.\n\nGotcha: `defer` inside a loop piles up until the function returns (for example, file handles stay open). Move the loop body into its own function.",
+  "level": 1,
+  "asked": [
+   "RSHB",
+   "Sovkombank"
+  ],
+  "n": 3
+ },
+ {
+  "id": "go-basics-new-vs-make",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What's the difference between `new` and `make`?\nFollow-up: what arguments do you pass to `make` for slices and maps?",
+  "a": "- `new(T)` works for **any** type: it allocates a zeroed `T` and returns a **pointer** `*T`. Same as `var x T; p := &x`. Since Go 1.26 `new` also accepts an expression: `new(42)` gives an `*int` pointing to 42.\n- `make` works **only** for slices, maps and channels. It initializes their internal runtime structure and returns the **value** itself (not a pointer), ready to use.\n\nArguments:\n- `make([]T, len)` or `make([]T, len, cap)`: allocates a backing array of `cap` elements, the first `len` are zeroed and visible;\n- `make(map[K]V)` or `make(map[K]V, hint)`: `hint` is a size hint for preallocation, not a limit;\n- `make(chan T)` (unbuffered) or `make(chan T, n)` (buffered).\n\nWhy both exist: `new(map[string]int)` gives a pointer to a **nil** map (writes panic), and `new([]int)` gives a pointer to a nil slice. `make` builds the internal structures.\n\nGotcha: `make([]int, 5)` then `append(s, x)` gives 6 elements, the first 5 zero. Use `make([]int, 0, 5)` if you plan to append.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "Sovkombank"
+  ],
+  "n": 3
+ },
+ {
+  "id": "go-basics-string-concatenation",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "How do you efficiently concatenate many strings?",
+  "a": "Use **`strings.Builder`**, and preallocate if you know the size:\n\n```go\nvar b strings.Builder\nb.Grow(total) // optional\nfor _, p := range parts {\n    b.WriteString(p)\n}\ns := b.String() // no copy: Builder hands over its buffer\n```\n\nOptions:\n- `strings.Join(parts, sep)`: best when you already have a `[]string`; it computes the total length and allocates once;\n- `strings.Builder`: incremental building, amortized growth, `String()` without a copy;\n- `bytes.Buffer`: similar, but `String()` copies; useful when you also need an `io.Reader`;\n- a `[]byte` with `append` + `string(buf)`: works, costs one final copy;\n- `fmt.Sprintf`: convenient but slow (reflection, interface boxing);\n- `a + b + c` in **one expression** is fine: the compiler does a single allocation.\n\n**Why not `+=` in a loop:** strings are immutable, so each `+=` allocates a new string and copies everything so far. That's O(n²) bytes copied plus lots of garbage for the GC.\n\nGotcha: don't copy a non-zero `strings.Builder` by value (it panics).",
+  "level": 1,
+  "asked": [
+   "VseInstrumenty",
+   "ZeBrains"
+  ],
+  "n": 3
+ },
+ {
+  "id": "go-basics-where-go-fits",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "For which tasks is Go a great fit, and where is it better not to use it?\nFollow-up: why is Go well suited for microservices?",
+  "a": "**Great fit:** network services and APIs, microservices, proxies/gateways, CLIs, infrastructure and cloud tooling (Docker, Kubernetes, Terraform, Prometheus), data pipelines and workers with lots of I/O concurrency.\n\n**Why microservices:** static binary in a tiny image, fast startup, low memory per instance, first-class HTTP/gRPC, `context` for deadlines/cancellation across calls, goroutine-per-request model that scales to many concurrent connections, and easy cross-compilation. Go 1.25 also sets `GOMAXPROCS` from the container CPU limit, so it behaves well under Kubernetes quotas.\n\n**Poor fit:**\n- hard real-time or tight memory control (embedded, audio, HFT inner loops): C/C++/Rust;\n- ML/data science (ecosystem is in Python);\n- GUIs and mobile apps;\n- very expression-heavy domain logic where sum types/rich generics matter.\n\nPitfall: \"never use Go for CPU-heavy work\" is wrong; Go is fine for CPU work, it's the lack of SIMD intrinsics and GC-free control that limits the extreme cases.",
+  "level": 1,
+  "asked": [
+   "InfoWatch",
+   "WMX",
+   "ZeBrains"
+  ],
+  "n": 3
+ },
+ {
+  "id": "go-basics-why-go-and-dislikes",
+  "cat": "go-basics",
+  "kind": "behavioral",
+  "q": "Why did you choose Go, and what do you dislike about it?\nFollow-up: what are your technology preferences in general?",
+  "a": "They check whether your choice is **reasoned** and whether you know the language's real limits.\n\nWhy Go: simple language and fast onboarding; goroutines/channels and a great runtime scheduler for network services; fast compilation and a single static binary; strong standard library (`net/http`, `context`, `testing`, pprof); predictable performance with a low-latency GC.\n\nHonest dislikes (pick ones you can discuss):\n- verbose error handling;\n- generics are limited (no methods with type parameters);\n- nil interfaces holding nil pointers, nil maps, and other footguns;\n- no enums or sum types;\n- zero values that make \"unset\" vs \"empty\" ambiguous;\n- GC tuning is coarse (`GOGC`, `GOMEMLIMIT`).\n\nPitfall: \"nothing\" (no depth) or outdated complaints: generics exist since 1.18, and the loop-variable capture bug was fixed in 1.22.",
+  "level": 2,
+  "asked": [
+   "InDrive",
+   "Sarafan",
+   "SeniorSoft"
+  ],
+  "n": 3
+ },
+ {
+  "id": "go-basics-zero-values",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "How do zero values work in Go?\nFollow-up: what is a struct's zero value?",
+  "a": "Every variable declared without an initializer gets its type's **zero value**. There's no uninitialized memory.\n\n- numbers: `0`; `bool`: `false`; `string`: `\"\"`;\n- pointers, slices, maps, channels, functions, interfaces: `nil`;\n- arrays: every element zeroed;\n- **structs**: every field set to its own zero value (recursively). A struct is never nil; only a pointer to it can be.\n\nIdiom: \"make the zero value useful\". `sync.Mutex`, `sync.WaitGroup`, `bytes.Buffer` and `strings.Builder` work without constructors, and a `nil` slice works fine with `append`, `len` and `range`.\n\nGotchas:\n- a **nil map** can be read but writing to it panics, so initialize with `make` or a literal;\n- sending to or receiving from a nil channel blocks forever;\n- an interface holding a typed nil pointer is **not** nil (`var p *T; var i any = p; i != nil`);\n- you can't tell \"field not set\" from \"set to zero\". Use pointers, `sql.Null*`, or the `omitzero` JSON tag (Go 1.24) where it matters.",
+  "level": 1,
+  "asked": [
+   "DCloud",
+   "RSHB"
+  ],
+  "n": 3
+ },
+ {
+  "id": "go-basics-len-cyrillic-string",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "What does this program print? (`len` of Cyrillic strings)\n`len` on Cyrillic strings: \"Привет\", and a length check on \"Примет!\".",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Println(len(\"Привет\"))\n\n\tstr := \"Примет!\"\n\tif len(str) == 7 {\n\t\tfmt.Println(\"The string length is 7!\")\n\t} else {\n\t\tfmt.Println(\"NOT 7! length is:\", len(str))\n\t}\n}\n",
+  "a": "```text\n12\nNOT 7! length is: 13\n```\n`len` on a string returns **bytes**, not characters. Go strings are UTF-8, and each Cyrillic letter takes 2 bytes:\n- `\"Привет\"`: 6 letters × 2 = **12**;\n- `\"Примет!\"`: 6 letters × 2 + `!` (ASCII, 1 byte) = **13**, so the `len(str) == 7` check fails.\n\nTo count characters use `utf8.RuneCountInString(str)` (gives 7) or `len([]rune(str))`.\n\nPitfall in real code: length validation (`len(name) > 50`) and truncation (`s[:10]`) by bytes. The first rejects valid non-ASCII input early; the second can cut a rune in half and produce invalid UTF-8.",
+  "level": 1,
+  "asked": [
+   "Basis",
+   "IT One"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "go-basics-panic-in-goroutine",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What happens if a goroutine panics, and how do you catch a panic raised in another goroutine?",
+  "a": "An unrecovered panic in **any** goroutine crashes the **whole process**, and deferred calls in other goroutines don't run. A `recover` in `main` or in the parent goroutine can't catch it, because `recover` only works in the panicking goroutine's own deferred functions.\n\nSo each goroutine that could panic needs its own guard, usually a wrapper that turns the panic into an error:\n\n```go\nfunc Go(wg *sync.WaitGroup, errs chan<- error, fn func()) {\n    wg.Go(func() { // Go 1.25+\n        defer func() {\n            if r := recover(); r != nil {\n                errs <- fmt.Errorf(\"panic: %v\\n%s\", r, debug.Stack())\n            }\n        }()\n        fn()\n    })\n}\n```\n\nWhere it matters: worker pools, consumers, background jobs. `net/http` recovers panics per request for handler goroutines, but not in goroutines you start from a handler.\n\nGotchas:\n- fatal runtime errors (concurrent map writes, out of memory) can't be recovered at all;\n- recovering and continuing blindly can leave shared state corrupted. Log with the stack, fail the unit of work, and let supervision restart the process if unsure.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit",
+   "RSHB"
+  ],
+  "n": 2
+ },
+ {
+  "id": "go-basics-panic-recover",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "How do panic and recover work together with defer, and how is a panic different from an error?\nFollow-up: why does defer have such far-reaching powers?",
+  "a": "**Errors** are ordinary values (`error` interface) returned for expected failures: bad input, network timeouts, not found. The caller decides what to do. That's the normal Go way.\n\n**Panic** is for unrecoverable situations and programmer bugs: nil dereference, index out of range, broken invariants, impossible states. `panic(v)` stops normal execution of the goroutine and unwinds its stack, running deferred functions. If nothing recovers, the program crashes with a stack trace.\n\n`recover()` stops the unwinding and returns the panic value, but **only when called directly inside a deferred function** of the panicking goroutine. Elsewhere it returns nil.\n\n```go\nfunc safe(fn func()) (err error) {\n    defer func() {\n        if r := recover(); r != nil {\n            err = fmt.Errorf(\"panic: %v\", r)\n        }\n    }()\n    fn()\n    return nil\n}\n```\n\n**Why defer is so powerful:** deferred calls are the only code guaranteed to run while a panicking stack unwinds. That makes them the one place where cleanup and `recover` are possible, and they can still change named results, turning a panic into an error.\n\nRules of thumb: don't panic across package APIs, recover at boundaries (HTTP middleware, worker loops), and re-panic if you can't handle it.\n\nGotcha: some failures are **fatal errors**, not panics, and can't be recovered: concurrent map writes, deadlock (`all goroutines are asleep`), stack overflow, out of memory.",
+  "level": 2,
+  "asked": [
+   "RSHB",
+   "Sarafan"
+  ],
+  "n": 2
+ },
+ {
+  "id": "go-basics-regex-cyrillic-only",
+  "cat": "go-basics",
+  "kind": "code",
+  "q": "Write a regular expression that keeps only Russian (Cyrillic) letters in a string.\nFollow-up: how would you find all Cyrillic words with a regex?",
+  "a": "Replace everything that is **not** a Cyrillic letter with an empty string. Remember `ё`/`Ё`: they fall outside the `а-я` range in Unicode.\n\n```go\npackage main\n\nimport (\n\t\"fmt\"\n\t\"regexp\"\n)\n\nvar nonCyrillic = regexp.MustCompile(`[^а-яёА-ЯЁ]+`)\nvar cyrillicWord = regexp.MustCompile(`\\p{Cyrillic}+`)\n\nfunc OnlyCyrillic(s string) string {\n\treturn nonCyrillic.ReplaceAllString(s, \"\")\n}\n\nfunc main() {\n\tfmt.Println(OnlyCyrillic(\"Hello, Мир! 123 ёлка\"))                  // Мирёлка\n\tfmt.Println(cyrillicWord.FindAllString(\"Hello, Мир! 123 ёлка\", -1)) // [Мир ёлка]\n}\n```\n\nNotes:\n- Go's `regexp` (RE2) works on UTF-8 runes, so character classes with Cyrillic ranges work directly;\n- `\\p{Cyrillic}` is the Unicode script class. It's broader: it includes Ukrainian, Kazakh, Kyrgyz and other letters (`і`, `ң`, `ө`), which is often what you actually want;\n- compile once at package level (`MustCompile`), not per call;\n- RE2 guarantees linear time (no catastrophic backtracking) but has no backreferences or lookarounds;\n- for a hot path, a loop with `unicode.Is(unicode.Cyrillic, r)` and a `strings.Builder` is several times faster than regex.",
+  "level": 1,
+  "n": 2,
+  "asked": []
+ },
+ {
+  "id": "go-basics-reverse-string",
+  "cat": "go-basics",
+  "kind": "code",
+  "q": "Implement `reverse` that reverses a string (e.g. \"Magnit\" → \"tingaM\"). It must also work for non-ASCII text.",
+  "a": "Reverse **runes**, not bytes. Reversing bytes breaks multi-byte UTF-8 characters.\n\n```go\nfunc reverse(s string) string {\n\tr := []rune(s)\n\tfor i, j := 0, len(r)-1; i < j; i, j = i+1, j-1 {\n\t\tr[i], r[j] = r[j], r[i]\n\t}\n\treturn string(r)\n}\n```\n`reverse(\"Magnit\")` gives `tingaM`, and `reverse(\"Привет\")` gives `тевирП`.\n\nComplexity: O(n) time, O(n) extra memory (`[]rune` is 4 bytes per character, plus the result string).\n\nFollow-ups interviewers like:\n- **why not bytes?** `\"Привет\"` reversed byte-wise gives invalid UTF-8;\n- **combining characters/emoji**: rune reversal separates `e` + `◌́` or flag pairs. Correct handling needs grapheme clusters (`github.com/rivo/uniseg`);\n- a **no-`[]rune`** version: decode from the end with `utf8.DecodeLastRuneInString` into a `strings.Builder` with `Grow(len(s))`.",
+  "level": 1,
+  "asked": [
+   "Magnit"
+  ],
+  "n": 2
+ },
+ {
+  "id": "go-basics-rune",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What is a rune, what is it used for, and how many bytes does a Cyrillic letter take?",
+  "a": "`rune` is an alias for `int32` and holds one **Unicode code point**. Rune literals are in single quotes: `'я'`, `'\\n'`.\n\nWhy they're needed: strings are UTF-8 bytes, and one character takes 1–4 bytes. Runes let you work with characters rather than bytes:\n- `for i, r := range s` decodes UTF-8 into runes;\n- `[]rune(s)` for indexing or reversing by character;\n- `unicode.IsLetter(r)`, `unicode.ToUpper(r)` and friends;\n- `utf8.RuneCountInString`, `utf8.DecodeRuneInString`.\n\nUTF-8 sizes: ASCII takes 1 byte; **Cyrillic, Greek, Arabic, Hebrew take 2 bytes**; most CJK characters take 3; emoji take 4. A rune variable is always 4 bytes in memory.\n\nGotcha: a code point isn't always a user-visible character. `é` can be `e` plus a combining accent (2 runes), and emoji with modifiers or flags are several runes. For true \"characters\" (grapheme clusters) you need a library such as `github.com/rivo/uniseg`.",
+  "level": 1,
+  "n": 2,
+  "asked": []
+ },
+ {
+  "id": "go-basics-types-overview",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What types exist in Go?\nFollow-up: what data structures are there besides slices and maps?",
+  "a": "**Basic types:** `bool`; `string`; signed `int8/16/32/64`, `int`; unsigned `uint8..64`, `uint`, `uintptr`; `float32/64`; `complex64/128`; aliases `byte` (= `uint8`) and `rune` (= `int32`).\n\n**Composite types:** arrays `[N]T`, slices `[]T`, maps `map[K]V`, structs, pointers `*T`, functions, interfaces (including `any`), channels `chan T`. Plus user-defined named types (`type ID int64`) and generic type parameters.\n\n**Other data structures:**\n- arrays and structs (fixed layout, value semantics);\n- channels (thread-safe FIFO queue);\n- `container/list` (doubly linked list), `container/heap` (priority-queue helpers), `container/ring`;\n- `sync.Map` for concurrent maps;\n- helpers in `slices`, `maps` and `strings`/`bytes`, and `math/big` for arbitrary-precision numbers.\n\nSets are `map[T]struct{}`; stacks and queues are usually just slices. Anything else (trees, LRU caches) you build yourself or import.",
+  "level": 1,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 2
+ },
+ {
+  "id": "go-basics-value-receiver-increment",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "What does this program print? (incrementing through a value receiver)\nFollow-up: what's the difference between a pointer receiver and a value receiver, and why does it matter?",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Count int\n\nfunc (c Count) Increment() {\n\tc++\n}\n\nfunc main() {\n\tvar c Count\n\tc.Increment()\n\tfmt.Println(c)\n}\n",
+  "a": "```text\n0\n```\n`Increment` has a **value receiver**, so `c.Increment()` gets a copy of `c`, and `c++` increments that copy, which is thrown away. `c` stays `0`.\n\nThe fix is a pointer receiver: `func (c *Count) Increment() { *c++ }`. Then `c.Increment()` is shorthand for `(&c).Increment()`, because `c` is addressable.\n\n**Value vs pointer receivers:**\n- a value receiver works on a copy: safe and good for small immutable types, but it can't mutate, and each call copies the value;\n- a pointer receiver can mutate, avoids copying large structs, and is required when the type contains a `sync.Mutex` or other things that must not be copied;\n- **method sets**: `T` has only value-receiver methods, while `*T` has both. So if `Increment` had a pointer receiver, `Count` (the value) wouldn't satisfy an interface requiring `Increment()`, only `*Count` would;\n- you can't call pointer methods on non-addressable values (map elements, return values);\n- don't mix receiver kinds on one type without a reason.",
+  "level": 1,
+  "asked": [
+   "Kaspersky",
+   "Ximilabs"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "go-basics-compiled-vs-interpreted",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What's the difference between compiled and interpreted languages? Where does Go fit?",
+  "a": "A **compiled** language is translated ahead of time into machine code for a target CPU/OS; the program then runs directly. An **interpreted** language is executed by an interpreter reading source or bytecode at runtime (CPython). Many sit in between: Java/C# compile to bytecode, then a JIT compiles hot code at runtime.\n\nGo is compiled ahead of time to a native, usually statically linked binary. The Go runtime (scheduler, GC, allocator) is linked into the binary, but there's no VM or JIT.\n\nTrade-offs:\n- compiled: fast startup, predictable performance, type errors caught at build time, but a build step and per-platform binaries (Go makes cross-compiling easy with `GOOS`/`GOARCH`);\n- interpreted: fast edit-run loop and dynamic features, but slower and more errors appear only at runtime.\n\nGotcha: \"compiled\" doesn't mean \"no runtime\". Go binaries still have GC and a scheduler, which is why they're bigger than equivalent C binaries.",
+  "level": 1,
+  "asked": [
+   "Amtech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-defer-argument-evaluation",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "What does this program print? (defer argument evaluation and timing)",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc zxc() int {\n\tvar i int = 5\n\n\tdefer func() { i += 3 }()\n\tdefer fmt.Println(\"result =>\", func() int { return i * 2 }())\n\n\ti += 2\n\n\treturn i\n}\n\nfunc main() {\n\tfmt.Println(zxc())\n}\n",
+  "a": "```text\nresult => 10\n7\n```\nStep by step:\n1. `i = 5`.\n2. First `defer` registers a closure; nothing is evaluated yet.\n3. Second `defer fmt.Println(\"result =>\", func() int { return i * 2 }())`: the **arguments are evaluated now**, so the inner func runs immediately and gives `10`. Only the `Println` call is deferred.\n4. `i += 2` makes `i = 7`.\n5. `return i`: the result is unnamed, so the value **7** is copied into the result slot.\n6. Defers run LIFO: `Println(\"result =>\", 10)` prints, then the closure does `i += 3` (`i = 10`), but that changes the local `i`, not the already-set result.\n7. `main` prints `7`.\n\nWith a named result, `func zxc() (i int)`, the closure's `i += 3` would change the return value to **10**.",
+  "level": 2,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "go-basics-defer-named-result-and-args",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "What does this program print? (defer modifying a named result, plus deferred calls with value vs pointer arguments)",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc PrintInt(msg string, i *int) {\n\tfmt.Printf(\"%s: %d\\n\", msg, *i)\n}\n\nfunc tt() (a int) {\n\ta = 1\n\tdefer func() {\n\t\ta++\n\t}()\n\tdefer func() {\n\t\ta = 5\n\t}()\n\treturn 3\n}\n\nfunc main() {\n\ta := 1\n\tb := 2\n\tpb := &b\n\tdefer fmt.Println(\"a =\", a)\n\tdefer fmt.Println(\"b =\", *pb)\n\tdefer PrintInt(\"pb =\", pb)\n\ta = 18\n\t*pb = 20\n\tfmt.Println(tt())\n}\n",
+  "a": "```text\n6\npb =: 20\nb = 2\na = 1\n```\n**`tt()`**: `return 3` first assigns the named result `a = 3`. Then the defers run in LIFO order: the last registered sets `a = 5`, then the first does `a++`, giving **6**. The caller gets the named result's final value.\n\n**`main`'s defers** evaluate their arguments when the `defer` statement runs:\n- `defer fmt.Println(\"a =\", a)` captures `1` (value);\n- `defer fmt.Println(\"b =\", *pb)` dereferences **now**, capturing `2`;\n- `defer PrintInt(\"pb =\", pb)` captures the **pointer**, which is dereferenced later inside `PrintInt`, after `*pb = 20`, so it prints `20`.\n\nThen `a = 18` and `*pb = 20` are applied, `tt()` prints `6`, and on return the defers run LIFO: `pb =: 20` (the format `\"%s: %d\"` adds the colon), `b = 2`, `a = 1`.\n\nTakeaway: defer copies arguments at registration, but a pointer copy still refers to the same memory; closures see final values.",
+  "level": 3,
+  "asked": [
+   "DIT Moscow"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "go-basics-defer-named-results",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "How do named return values interact with `defer`?",
+  "a": "`return x` in a function with a named result `res` works in three steps: (1) assign `res = x`, (2) run deferred functions, (3) return `res` to the caller. A deferred closure can read and **modify** `res` in step 2, which changes what the caller gets. With unnamed results, the value is already copied out, so a defer can't change it.\n\n```go\nfunc f() (n int) {\n    defer func() { n *= 2 }()\n    return 21 // caller gets 42\n}\n```\n\nIdiomatic uses:\n```go\nfunc (s *Store) Save(ctx context.Context) (err error) {\n    defer func() {\n        if err != nil {\n            err = fmt.Errorf(\"save: %w\", err)\n        }\n    }()\n    defer func() {\n        if r := recover(); r != nil {\n            err = fmt.Errorf(\"panic: %v\", r)\n        }\n    }()\n    // ...\n}\n```\nAlso used for `err = errors.Join(err, f.Close())` so a failed `Close` isn't lost.\n\nGotcha: this is a common \"what does it print\" trap. Readers miss that `return 3` assigns first and the defers then overwrite it. Use it for error handling, not clever control flow.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "go-basics-defer-overhead",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "Does `defer` add overhead to a function call?",
+  "a": "Nearly none today. Since Go 1.14, the compiler uses **open-coded defers**: when a function has at most 8 defers and none is inside a loop, the deferred calls are inlined at each return point. A bitmask records which defers are active, so the cost is a few nanoseconds. Panics are still handled correctly via funcdata.\n\nIt gets more expensive when:\n- the `defer` is in a **loop** or there are too many defers: the runtime falls back to defer records (stack-allocated since 1.13, heap in some cases), costing tens of ns per defer;\n- a panic happens: the unwinding path is slower, but that's the exceptional path.\n\nHistory: before Go 1.13 each defer was a heap allocation (~50 ns), which is where the \"defer is slow\" folklore comes from.\n\nPractical advice: always use `defer mu.Unlock()` / `defer f.Close()` for correctness. Only in a proven hot path (pprof) with a tiny critical section would you unlock manually. And never defer inside a long loop.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-double-pointer",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "What does this program print? (changing a struct pointer through a double pointer)",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Person struct {\n\tName string\n}\n\nfunc changeName(person **Person) {\n\t*person = &Person{\n\t\tName: \"Alice\",\n\t}\n}\n\nfunc main() {\n\tperson := &Person{\n\t\tName: \"Bob\",\n\t}\n\tfmt.Println(person.Name)\n\tchangeName(&person)\n\tfmt.Println(person.Name)\n}\n",
+  "a": "```text\nBob\nAlice\n```\n`changeName` receives `&person`, the address of `main`'s pointer variable. `*person = &Person{...}` writes a new pointer into **that variable**, so `main`'s `person` now points to the new struct with `Alice`. The original `Bob` struct is unchanged, just no longer referenced.\n\nCompare:\n- `func f(p *Person) { p = &Person{\"Alice\"} }`: only the local copy of the pointer changes, and the caller still sees Bob;\n- `func f(p *Person) { p.Name = \"Alice\" }`: mutates the shared struct, so the caller sees Alice, same object;\n- `func f(p **Person) { *p = &Person{\"Alice\"} }`: repoints the caller's variable.\n\n`**T` is rare in idiomatic Go; returning the new pointer (`person = newPerson()`) is usually clearer.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "go-basics-float-division-by-zero",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What happens if you divide a float by 0 in Go?",
+  "a": "It depends on whether the operands are constants and on the type:\n\n- **float variable / 0** gives no panic; IEEE-754 results: `+Inf`, `-Inf`, or `NaN` for `0/0`.\n- **integer variable / 0**: runtime panic `runtime error: integer divide by zero` (recoverable).\n- **constant expression** (`1.0 / 0`, `x / 0` with a constant 0): compile error `invalid operation: division by zero`.\n\n```go\nvar f, z float64 = 1, 0\nfmt.Println(f/z, -f/z, z/z) // +Inf -Inf NaN\n```\n\nGotchas:\n- `NaN != NaN`, so use `math.IsNaN`; `NaN` values also break sorting and can't be found as map keys;\n- `Inf` and `NaN` silently spread through calculations and then fail at `json.Marshal` (`unsupported value: NaN`);\n- converting `Inf`/`NaN` to int gives an implementation-defined value.\n\nCheck the divisor explicitly in business code.",
+  "level": 2,
+  "asked": [
+   "Forward"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-frameworks",
+  "cat": "go-basics",
+  "kind": "behavioral",
+  "q": "Which frameworks and libraries do you use in Go?",
+  "a": "The idiomatic answer is **\"mostly the standard library plus focused libraries\"** — Go culture avoids heavy frameworks.\n\nTypical set:\n- HTTP: `net/http` (Go 1.22+ `ServeMux` supports methods and path params), or chi/echo/gin.\n- gRPC: `google.golang.org/grpc` with protobuf, grpc-gateway for REST.\n- DB: `pgx`, `sqlx`, `squirrel`/sqlc, `goose`/`migrate` for migrations.\n- Messaging: `franz-go`, `segmentio/kafka-go`, `confluent-kafka-go`.\n- Observability: `log/slog`, Prometheus client, OpenTelemetry.\n- Testing: `testing`, `testify`, `gomock`/`mockery`, testcontainers.\n- Config/DI: env configs, `wire`/`fx` or manual wiring.\n\nExplain *why* you picked each. Pitfall: presenting gin as \"the Go framework\" without knowing what it adds over `net/http`.",
+  "level": 1,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "go-basics-gc-and-strict-sla",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "Is Go suitable for systems where SLA/latency dips are unacceptable, given it has a garbage collector?",
+  "a": "Yes for almost all backend SLAs; no for hard real-time.\n\nGo's GC is concurrent and mostly runs alongside the program; stop-the-world pauses are typically well under a millisecond. Go 1.26 turned on the Green Tea GC by default, which scans memory by spans and cuts GC CPU cost further. The real latency cost is usually **GC assist and CPU share** under heavy allocation, not pauses.\n\nHow to keep tail latency stable:\n- reduce allocations (preallocate, reuse buffers, `sync.Pool`, avoid needless pointers);\n- tune `GOGC` and set `GOMEMLIMIT` to use available memory instead of collecting too often;\n- make sure `GOMAXPROCS` matches the CPU quota (automatic since Go 1.25 in containers), otherwise CFS throttling causes much larger stalls than the GC;\n- profile with pprof and `GODEBUG=gctrace=1`, and watch p99, not averages.\n\nPitfall: answering \"no, because of the GC\" (a common answer). Many latency-critical systems (trading gateways, databases, proxies) run on Go; only hard real-time with microsecond guarantees needs C/C++/Rust.",
+  "level": 2,
+  "asked": [
+   "ZeBrains"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-imperative-vs-declarative",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "Is Go imperative or declarative? What's the difference?",
+  "a": "Go is **imperative** (procedural, with some OOP and functional features).\n\n- **Imperative** code says *how*: a sequence of statements that change state (loops, assignments, mutation). C, Go, Java.\n- **Declarative** code says *what* result you want and leaves the how to the engine: SQL, HTML/CSS, Terraform, Kubernetes manifests, regular expressions.\n\nGo has first-class functions and closures, so you can write in a functional style (and since Go 1.23 compose iterators with `iter.Seq`), but idiomatic Go stays with explicit loops and clear control flow. Declarative parts in a Go codebase usually come from embedded DSLs: SQL queries, struct tags, templates.",
+  "level": 1,
+  "asked": [
+   "Sovkombank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-int-without-size",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "Why is it not great to just use `int` without specifying its bit size?",
+  "a": "`int` (and `uint`) is platform-dependent: **32 bits on 32-bit targets, 64 bits on 64-bit**. Code that is correct on amd64 can silently overflow on `386`/`arm`, for example IDs above 2^31, byte counters, Unix-millisecond timestamps.\n\nUse explicit sizes when:\n- the value crosses a boundary: binary protocols, file formats, protobuf, DB columns (`BIGINT` maps to `int64`), hashing;\n- the value range is a domain fact (money in minor units, `int64`; timestamps, `int64`);\n- memory layout matters (large arrays of small values: `int32`/`uint16`).\n\n`int` is still the right choice for indexes, lengths and loop counters. `len()` returns `int`, and the standard library uses it everywhere, so converting everything to `int64` just adds casts.\n\nGotcha: overflow in Go wraps silently (no panic), and conversions like `int32(x)` truncate without warning. Validate ranges at the boundaries.",
+  "level": 1,
+  "asked": [
+   "Forward"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-json-marshal-omitempty",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "What does this program print? (`json.Marshal` with an unexported field and `omitempty`, including an empty non-nil slice)",
+  "code": "package main\n\nimport (\n\t\"encoding/json\"\n\t\"fmt\"\n)\n\ntype Person struct {\n\tname     string\n\tSurname  string   `json:\"surname\"`\n\tAddress  string   `json:\"address\"`\n\tPhone    string   `json:\"phone,omitempty\"`\n\tParents  []string `json:\"parents,omitempty\"`\n\tChildren []string `json:\"children,omitempty\"`\n\tExtra    string   `json:\"extra,omitempty\"`\n}\n\nfunc main() {\n\tp := Person{\n\t\tname:     \"John\",\n\t\tSurname:  \"Doe\",\n\t\tAddress:  \"Moscow\",\n\t\tPhone:    \"123456\",\n\t\tChildren: make([]string, 0),\n\t}\n\n\tres, err := json.Marshal(p)\n\tif err != nil {\n\t\tfmt.Println(err)\n\t\treturn\n\t}\n\tfmt.Println(string(res))\n}\n",
+  "a": "```text\n{\"surname\":\"Doe\",\"address\":\"Moscow\",\"phone\":\"123456\"}\n```\n- `name` is **unexported**, so `encoding/json` can't see it (reflection can't read unexported fields for encoding), and it's silently skipped;\n- `Surname`, `Address`: no `omitempty`, so always present;\n- `Phone` is non-empty, so it's included;\n- `Parents` is a nil slice with `omitempty`, so it's omitted;\n- `Children` is `make([]string, 0)`, empty but **not nil**, and still omitted: `omitempty` treats any slice/map/string of **length 0** as empty, not just nil. Without `omitempty`, nil marshals as `null` and empty as `[]`;\n- `Extra` is `\"\"`, so it's omitted.\n\nRelated: Go 1.24 added the `omitzero` tag. It omits zero values as defined by the type (or by its `IsZero()` method), which works for structs like `time.Time`, where `omitempty` never fires. The new `encoding/json/v2` (experimental) changes several of these defaults.",
+  "level": 2,
+  "asked": [
+   "DIT Moscow"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "go-basics-missing-return-compile-error",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "Does this compile? (a function with a result type and an empty body)",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tmyMap := map[string]map[string]string{\n\t\t\"company\": {\n\t\t\t\"name\": \"Digital Energy\",\n\t\t},\n\t}\n\tfmt.Println(getName(myMap))\n}\n\nfunc getName(i interface{}) string {\n}\n",
+  "a": "```text\n./main.go:15:1: missing return\n```\nIt **doesn't compile**. `getName` declares a result type `string`, and its body has no terminating statement (`return`, `panic`, infinite `for`, and so on). Go requires every function with results to end in a terminating statement. There's no implicit \"return zero value\".\n\nThe rest is fine and is a distraction: passing a `map[string]map[string]string` to `interface{}` is allowed (any value satisfies the empty interface), and the nested map literal can omit the inner type.\n\nA working version:\n```go\nfunc getName(i interface{}) string {\n\tm, ok := i.(map[string]map[string]string)\n\tif !ok {\n\t\treturn \"\"\n\t}\n\treturn m[\"company\"][\"name\"]\n}\n```\nReading missing keys from nested maps is safe: `m[\"x\"]` returns a nil inner map, and reading from a nil map returns `\"\"`.",
+  "level": 1,
+  "asked": [
+   "Basis"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "go-basics-modify-unexported-field",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "Can you modify a struct's unexported (private) field from another package?",
+  "a": "Not through normal code. Identifiers starting with a lowercase letter are only accessible inside their package, and the compiler enforces it.\n\nWays around it (all hacks):\n- **reflect**: you can *read* unexported fields (`v.FieldByName(\"x\")`), but `CanSet()` is false and `Set` panics;\n- **reflect + unsafe**: take the field's address and build a settable value:\n```go\nf := reflect.ValueOf(&obj).Elem().FieldByName(\"secret\")\np := reflect.NewAt(f.Type(), unsafe.Pointer(f.UnsafeAddr())).Elem()\np.SetString(\"new\")\n```\n- **unsafe offsets**: cast to a mirror struct with the same layout, or use `unsafe.Add` with `Offsetof`;\n- `//go:linkname` to reach unexported package-level symbols (increasingly restricted since Go 1.23).\n\nWhy not to do it: it breaks the package's invariants and is tied to the internal layout, so it can break silently in any version. The right answers are an exported setter or option, a constructor argument, or an `internal/` package shared between your own packages. The legitimate place for this trick is tests of third-party code you can't change, and even there, prefer a fork.",
+  "level": 3,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-money-arithmetic",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What problems do float and int have with money? What are the alternatives for storing amounts and exchange rates?",
+  "a": "**float64** is binary floating point: most decimal fractions can't be represented exactly (`0.1 + 0.2 != 0.3`). Rounding errors add up across sums and conversions, comparisons become unreliable, and rounding rules (banker's rounding, rounding to the currency's minor unit) are hard to guarantee. Never use floats for money.\n\n**Integers** in minor units (cents, kopecks) as `int64` are exact and fast, but:\n- you must know each currency's scale (JPY has 0 decimals, KWD has 3; crypto can have 18, which overflows `int64`);\n- division and percentages need explicit rounding rules and the order of operations matters;\n- overflow wraps silently.\n\n**Exchange rates** need more precision than amounts (e.g. 6–10 decimals). Options:\n- **scaled integer** with fixed precision (rate × 10^8 in an `int64`, or `big.Int`);\n- **decimal library**: `github.com/shopspring/decimal`, `cockroachdb/apd`; exact decimal math with explicit rounding;\n- `math/big.Rat` for exact rationals (slow);\n- **string** for transport and storage in JSON to avoid float parsing; the DB side uses `NUMERIC(p,s)`.\n\nBest practice: amounts stored as (integer minor units, currency code), rates as decimals, rounding applied only at defined points, and every conversion covered by tests.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-packages",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What are packages in Go?",
+  "a": "A package is Go's unit of code organization, compilation and encapsulation: all `.go` files in one directory declaring the same `package name`.\n\nKey points:\n- **Visibility**: identifiers starting with an uppercase letter are exported; lowercase ones are package-private. There are no other access modifiers.\n- **Import path** vs name: imported by path (`github.com/acme/app/internal/store`), referenced by package name (`store.New`).\n- `package main` with `func main()` builds an executable; other packages are libraries.\n- **`internal/`** directories can only be imported from within the parent tree, which is how you hide implementation from other modules.\n- Initialization: package-level vars are set up in dependency order, then `init()` functions run once, before `main`.\n- **Import cycles are forbidden**, which pushes you toward layered design and interfaces declared by the consumer.\n- A **module** (`go.mod`) is a versioned collection of packages.\n\nDesign advice: name packages by what they provide (`auth`, `billing`), not `utils`/`common`/`models`; keep them cohesive; test files can use `package foo_test` for black-box tests.",
+  "level": 1,
+  "asked": [
+   "Sovkombank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-pure-function",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What is a pure function?",
+  "a": "A pure function (1) always returns the same output for the same inputs and (2) has no side effects: no I/O, no mutation of arguments or global state, no dependence on time, randomness or the environment.\n\n```go\nfunc add(a, b int) int { return a + b }            // pure\nfunc now() string   { return time.Now().String() } // impure: depends on time\n```\n\nWhy it matters: pure functions are trivial to test (no mocks), safe to call concurrently, cacheable (memoization) and easy to reason about.\n\nIn Go, a practical pattern is \"functional core, imperative shell\": keep business logic pure (take values, return values/errors) and push I/O, clocks and randomness to the edges, injected as parameters or interfaces.\n\nGotcha: a function that appends to or writes into a slice argument is not pure, even if it returns a value, because the caller's backing array changes.",
+  "level": 1,
+  "asked": [
+   "ZeBrains"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-range-loop-variable",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What does the loop variable hold on each iteration of a `range` loop?",
+  "a": "`for i, v := range x`: `v` is a **copy** of the current element (for slices, arrays, maps), so modifying `v` doesn't change the collection. Use `x[i]` to mutate.\n\nWhat you get per type:\n- slice/array: index, copy of element (ranging over an array value copies the whole array first);\n- string: **byte offset** and **rune** (UTF-8 decoded);\n- map: key, value copy, in random order;\n- channel: received values until the channel is closed;\n- integer (Go 1.22+): `for i := range 10`;\n- functions/iterators (Go 1.23+): `for v := range seq`.\n\n**Per-iteration variables:** since Go 1.22, each iteration creates **new** `i` and `v`. Closures and goroutines capturing them, or `&v`, see that iteration's value. Before 1.22 there was a single variable reused across iterations, so goroutines often all saw the last value and `&v` pointed to the same address every time. Old code used `v := v` to work around this.\n\nAlso: the range expression is evaluated once, so appending to a slice during `range` doesn't extend the loop.",
+  "level": 1,
+  "asked": [
+   "RSHB"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-range-string-counter",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "You `for range` over the string \"привет\", incrementing a counter each iteration. What's the counter at the end?",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\ts := \"привет\"\n\tn := 0\n\tfor range s {\n\t\tn++\n\t}\n\tfmt.Println(n, len(s))\n}\n",
+  "a": "```text\n6 12\n```\nThe counter is **6**, while `len(s)` is **12**.\n\n`for range` over a string decodes **UTF-8** and yields one iteration per **rune** (code point). The index is the byte offset of each rune: 0, 2, 4, 6, 8, 10. Every Cyrillic letter takes 2 bytes, so the string has 12 bytes but 6 runes.\n\nIn contrast, `for i := 0; i < len(s); i++ { s[i] }` iterates **bytes** (12 iterations, each a `byte`).\n\nSame result without a loop: `utf8.RuneCountInString(s)`.\n\nGotcha: invalid UTF-8 bytes each produce one iteration yielding `U+FFFD` (replacement char) with width 1.",
+  "level": 1,
+  "asked": [
+   "ZeBrains"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "go-basics-reflection",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "Why is reflection needed, and what can be used instead?",
+  "a": "`reflect` lets a program inspect and manipulate types and values at runtime: iterate over struct fields and tags, call methods by name, create values of types unknown at compile time.\n\nWhere it's used: `encoding/json`/`xml`, ORMs and SQL scanners, validation via struct tags, DI containers, `fmt` printing, deep comparison (`reflect.DeepEqual`).\n\nDownsides:\n- slow (allocations, interface boxing, no inlining), often 10–100x slower than direct code;\n- loses compile-time type safety, so mistakes become runtime panics;\n- hard to read, and it hurts escape analysis.\n\nAlternatives:\n- **generics** (Go 1.18+) for type-parametric algorithms and containers;\n- **interfaces** and small method sets: let types describe themselves (`json.Marshaler`, `sql.Scanner`);\n- **type switches** for a closed set of types;\n- **code generation** (`go generate`, `sqlc`, `easyjson`, `mockgen`, `stringer`): the speed of hand-written code, checked at compile time;\n- for JSON specifically, generated codecs or the (experimental) `encoding/json/v2`, which is faster.\n\nRule: use reflection at the edges (serialization, frameworks), not in business logic.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "go-basics-reverse-words-keep-palindromes",
+  "cat": "go-basics",
+  "kind": "code",
+  "q": "Reverse each word in a space-separated string, but leave palindromes unchanged.\nExamples: \"Hello worlD ollo\" → \"olleH Dlrow ollo\"; \"привет мир ара\" → \"тевирп рим ара\".",
+  "a": "Split on single spaces (keeping empty tokens so the spacing is preserved), work on each word as `[]rune`, and do a case-insensitive palindrome check (`\"Ара\"` counts as a palindrome in the reference tests).\n\n```go\nfunc ReverseWords(s string) string {\n\twords := strings.Split(s, \" \")\n\tfor i, w := range words {\n\t\tr := []rune(w)\n\t\tif isPalindrome(r) {\n\t\t\tcontinue\n\t\t}\n\t\tfor a, b := 0, len(r)-1; a < b; a, b = a+1, b-1 {\n\t\t\tr[a], r[b] = r[b], r[a]\n\t\t}\n\t\twords[i] = string(r)\n\t}\n\treturn strings.Join(words, \" \")\n}\n\nfunc isPalindrome(r []rune) bool {\n\tfor a, b := 0, len(r)-1; a < b; a, b = a+1, b-1 {\n\t\tif unicode.ToLower(r[a]) != unicode.ToLower(r[b]) {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n```\nPasses all cases: `\"Hello worlD ollo\"`, `\"привет мир Ара\"`, `\"\"`, `\" \"`, `\"a\"`, `\"été soleil\"` → `\"été lielos\"`.\n\nComplexity: O(n) time and memory.\n\nDiscussion points:\n- `strings.Split` vs `strings.Fields`: `Fields` collapses repeated spaces, which changes the output;\n- use runes, not bytes, for Cyrillic and accents;\n- the palindrome check is not just an optimization: with a case-insensitive check `Ара` must stay as is, while reversing it would give `арА`;\n- use a single `strings.Builder` pass if allocations matter.",
+  "level": 2,
+  "asked": [
+   "Lamoda"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-runtime",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "What does the Go runtime do?",
+  "a": "The runtime is a library linked into every Go binary (there's no VM). It provides:\n\n- **Goroutine scheduler** (GMP): multiplexes goroutines onto OS threads with per-P run queues, work stealing, and async preemption (since 1.14). `GOMAXPROCS` has been container-aware since 1.25.\n- **Memory allocator**: size classes, per-P caches (`mcache`), span management; escape analysis decides stack vs heap.\n- **Garbage collector**: concurrent tri-color mark-and-sweep with write barriers and pacing (`GOGC`, `GOMEMLIMIT`). Green Tea has been the default since 1.26.\n- **Goroutine stacks**: start small (2–8 KB), grow and shrink by copying.\n- **Network poller**: epoll/kqueue/IOCP integration, so blocking-style network code doesn't block OS threads.\n- **Timers**, `time.Sleep`, channels, `select`, and the implementations of maps and slice growth.\n- **Syscall handling**: detaches a P from a thread blocked in a syscall so other goroutines keep running.\n- Panics/recover, stack traces, `reflect` type metadata, race detector hooks, profiling (pprof, trace).\n\nObservability: `runtime.NumGoroutine`, `runtime/metrics`, `GODEBUG=gctrace=1,schedtrace=1000`.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-sizeof-types",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "On a 64-bit system, what is the size (`unsafe.Sizeof`) of each of these variables?\nA padded struct, a pointer, `unsafe.Pointer`, an empty-struct slice, `[5]int64`, strings, a rune, a map and a channel.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"strconv\"\n\t\"unsafe\"\n)\n\ntype MyInt uint32\n\nfunc main() {\n\tuser := struct {\n\t\tbalance       float64\n\t\tisTestProfile bool\n\t\tage           uint64\n\t\tisDesktop     bool\n\t}{}\n\n\ti := new(MyInt)\n\tptr := unsafe.Pointer(&user)\n\tsl := []struct{}{}\n\tarr := [5]int64{}\n\tstr := \"h\"\n\tr := 'h'\n\tvar longStr string\n\tfor i := 0; i < 100; i++ {\n\t\tlongStr += strconv.Itoa(i)\n\t}\n\tm := make(map[string][]string)\n\tch := make(chan int64)\n\n\tfmt.Println(\"user\", unsafe.Sizeof(user))\n\tfmt.Println(\"i\", unsafe.Sizeof(i))\n\tfmt.Println(\"ptr\", unsafe.Sizeof(ptr))\n\tfmt.Println(\"sl\", unsafe.Sizeof(sl))\n\tfmt.Println(\"arr\", unsafe.Sizeof(arr))\n\tfmt.Println(\"str\", unsafe.Sizeof(str))\n\tfmt.Println(\"rune\", unsafe.Sizeof(r))\n\tfmt.Println(\"longStr\", unsafe.Sizeof(longStr))\n\tfmt.Println(\"m\", unsafe.Sizeof(m))\n\tfmt.Println(\"ch\", unsafe.Sizeof(ch))\n}\n",
+  "a": "```text\nuser 32\ni 8\nptr 8\nsl 24\narr 40\nstr 16\nrune 4\nlongStr 16\nm 8\nch 8\n```\n`unsafe.Sizeof` reports the size of the variable itself (the header), never what it points to.\n\n- `user`: `float64`(8) + `bool`(1) + **7 padding** + `uint64`(8) + `bool`(1) + **7 tail padding** = **32**. Reordering to put the two bools together gives 24.\n- `i` (`*MyInt`), `ptr` (`unsafe.Pointer`): pointers are 8 bytes, whatever they point to.\n- `sl`: a slice header is ptr + len + cap = **24**, even with zero-size elements (the data pointer points to `runtime.zerobase`).\n- `arr`: an array is stored inline, 5 × 8 = **40**.\n- `str` and `longStr`: a string header is ptr + len = **16**, whether it holds 1 byte or 190. The `+=` loop only created 100 garbage strings along the way.\n- `'h'`: an untyped rune constant defaults to `rune` = `int32` = **4**.\n- `m` and `ch`: a map is a pointer to the runtime map structure, and a channel a pointer to `hchan`, so **8** each.\n\nGotcha: to measure real memory (backing arrays, map buckets, string bytes), use `runtime.MemStats` / heap profiles, not `Sizeof`.",
+  "level": 2,
+  "asked": [
+   "Wildberries"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "go-basics-string-immutability",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "Are Go strings mutable? How can you \"modify\" a string?",
+  "a": "Strings are **immutable**. `s[0] = 'H'` doesn't compile. Immutability makes strings safe to share between goroutines, lets substrings and map keys share memory without copying, and allows string literals to live in read-only memory.\n\nWays to get a modified string (all create a **new** one):\n- convert to `[]byte` (byte-level/ASCII edits) or `[]rune` (Unicode characters), edit, convert back:\n```go\nr := []rune(s)\nr[0] = 'П'\ns = string(r)\n```\n- `strings.Builder`, `strings.Replace/ReplaceAll`, `strings.Map`, slicing plus concatenation;\n- work in `[]byte` the whole time (`bytes` package) and convert once at the end.\n\nThe \"hack\": `unsafe.String` / `unsafe.StringData` give zero-copy conversions. **Writing** through them is undefined behavior: literals are in read-only memory (segfault), and other code assumes the string never changes (map keys, interned values). Only use `unsafe` for zero-copy **reading** of bytes you know won't change.",
+  "level": 1,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "go-basics-struct-field-order-size",
+  "cat": "go-basics",
+  "kind": "output",
+  "q": "Two structs have the same fields in a different order. Are they the same type, and are they the same size?\nWhat does this program print?",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"unsafe\"\n)\n\ntype A struct {\n\tage  int\n\tname string\n}\n\ntype B struct {\n\tname string\n\tage  int\n}\n\ntype C struct {\n\ta bool\n\tb int64\n\tc bool\n}\n\ntype D struct {\n\tb int64\n\ta bool\n\tc bool\n}\n\nfunc main() {\n\tfmt.Println(unsafe.Sizeof(A{}), unsafe.Sizeof(B{}))\n\tfmt.Println(unsafe.Sizeof(C{}), unsafe.Sizeof(D{}))\n}\n",
+  "a": "```text\n24 24\n24 16\n```\n**Same type?** No. Named types are distinct anyway, and even unnamed struct types are identical only if their fields have the same names, types, tags **and order**. So `A` and `B` can't be converted into each other.\n\n**Same size?** Depends on the fields. Every field is aligned to its own alignment, and the struct's size is rounded up to its largest alignment:\n- `A{int; string}` and `B{string; int}`: `int` (8) and `string` (16) are both 8-byte aligned, so there's no padding either way. **Both are 24 bytes.** Order doesn't matter for this pair.\n- `C{bool; int64; bool}`: 1 + 7 padding + 8 + 1 + 7 tail padding = **24**.\n- `D{int64; bool; bool}`: 8 + 1 + 1 + 6 padding = **16**.\n\nRule: order fields from the largest alignment to the smallest to minimize padding. The `fieldalignment` analyzer (golang.org/x/tools) reports this. It matters for types with millions of instances or big arrays of structs; elsewhere readability wins.\n\nGotcha: a zero-size field (`struct{}`) placed **last** adds padding, so that a pointer to it doesn't point past the object.",
+  "level": 2,
+  "asked": [
+   "ZeBrains"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "go-basics-unsafe",
+  "cat": "go-basics",
+  "kind": "theory",
+  "q": "How does the `unsafe` package work, and when is it used?",
+  "a": "`unsafe` lets you step outside Go's type system. It's a compiler-known package:\n- `unsafe.Pointer` is a generic pointer that can be converted to and from any `*T` and `uintptr`;\n- `Sizeof`, `Alignof`, `Offsetof` are compile-time layout information;\n- `unsafe.Add` does pointer arithmetic; `unsafe.Slice`, `unsafe.String`, `unsafe.SliceData`, `unsafe.StringData` build slices and strings from raw pointers without copying.\n\nLegit uses: zero-copy `[]byte`/`string` conversions in hot paths, cgo and syscalls, reading struct layouts, high-performance serialization. The runtime and `reflect` use it internally.\n\nRules (see the `unsafe.Pointer` docs): only the listed conversion patterns are valid. For example, `uintptr` → `Pointer` must happen within a single expression, because a `uintptr` is just a number: the GC doesn't treat it as a reference, so the object can be collected or moved (stacks move).\n\nRisks: memory corruption, crashes that `recover` can't catch, breakage across Go versions (not covered by the Go 1 compatibility promise), and data races the race detector may miss. `go vet` checks some misuse (`-unsafeptr`).\n\nRule of thumb: only after profiling proves it's needed, wrapped in a small, well-tested helper.",
+  "level": 3,
+  "asked": [
+   "DCloud"
+  ],
+  "n": 1
+ }
+]

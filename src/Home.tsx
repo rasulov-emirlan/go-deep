@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { topics } from './topics/registry'
+import { groups, topics } from './topics/registry'
 import { useProgress } from './lib/progress'
 import { useEffect } from 'react'
 
@@ -38,32 +38,39 @@ export default function Home() {
         <div className="wrap">
           <span className="kicker red">Curriculum</span>
           <h2>Topics</h2>
-          <div className="tgrid">
-            {topics.map((t) => {
-              const live = !!t.page
-              const done = countPrefix(`quiz:${t.slug}.`) + countPrefix(`iv:${t.slug}:`)
-              const inner = (
-                <>
-                  <span className="kicker">
-                    {t.n} · {t.kicker}
-                  </span>
-                  {t.gopher && <img className="tcard-gopher" src={`/gophers/${t.gopher}.webp`} alt="" />}
-                  <h3>{t.title}</h3>
-                  <p>{t.blurb}</p>
-                  <span className="go">{live ? (done ? `${done} solved →` : 'Start →') : 'Coming soon'}</span>
-                </>
-              )
-              return live ? (
-                <Link key={t.slug} to={'/' + t.slug} className="tcard">
-                  {inner}
-                </Link>
-              ) : (
-                <div key={t.slug} className="tcard soon">
-                  {inner}
-                </div>
-              )
-            })}
-          </div>
+          {groups.map((g) => (
+            <div key={g} className="tgroup">
+              <span className="kicker">{g}</span>
+              <div className="tgrid">
+                {topics
+                  .filter((t) => t.group === g)
+                  .map((t) => {
+                    const live = !!t.page
+                    const done = countPrefix(`quiz:${t.slug}.`) + countPrefix(`iv:${t.slug}:`)
+                    const inner = (
+                      <>
+                        <span className="kicker">
+                          {t.n} · {t.kicker}
+                        </span>
+                        {t.gopher && <img className="tcard-gopher" src={`/gophers/${t.gopher}.webp`} alt="" />}
+                        <h3>{t.title}</h3>
+                        <p>{t.blurb}</p>
+                        <span className="go">{live ? (done ? `${done} solved →` : 'Start →') : 'Coming soon'}</span>
+                      </>
+                    )
+                    return live ? (
+                      <Link key={t.slug} to={'/' + t.slug} className="tcard">
+                        {inner}
+                      </Link>
+                    ) : (
+                      <div key={t.slug} className="tcard soon">
+                        {inner}
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
       <section className="section">

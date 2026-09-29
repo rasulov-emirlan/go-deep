@@ -1,0 +1,1361 @@
+[
+ {
+  "id": "databases-isolation-levels",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What transaction isolation levels exist, and which anomalies does each prevent? What does PostgreSQL use by default?\nFollow-ups: what is a phantom read and how do you avoid it? What goes wrong under READ UNCOMMITTED?",
+  "a": "Isolation defines how much concurrent transactions can see of each other. The SQL standard defines four levels, by the anomalies they allow:\n\n- **Read Uncommitted**: dirty reads (seeing uncommitted data that may be rolled back), non-repeatable reads, phantoms, lost updates.\n- **Read Committed**: no dirty reads. A re-read may return changed values (**non-repeatable read**) or new rows (**phantom**).\n- **Repeatable Read**: rows you read don't change. The standard still allows phantoms.\n- **Serializable**: the result equals *some* serial order. No anomalies.\n\nPostgres specifics:\n\n- The default is **Read Committed**, with a new snapshot per statement.\n- Read Uncommitted behaves like Read Committed: **no dirty reads are ever possible**.\n- **Repeatable Read** is snapshot isolation, with one snapshot per transaction. It also prevents phantoms and lost updates: a concurrent update of the same row fails with `could not serialize access`. It still allows **write skew**.\n- **Serializable** uses SSI: it detects dangerous read/write dependencies and aborts one transaction with SQLSTATE `40001`.\n\nTo avoid phantoms, use Repeatable Read or Serializable in Postgres, or lock the predicate range (`SELECT ... FOR UPDATE` doesn't lock rows that don't exist yet).\n\nGotcha: at RR/Serializable, the app **must retry** on `40001`.",
+  "level": 1,
+  "asked": [
+   "Astra",
+   "Avito",
+   "Crtex",
+   "Digital Spirit",
+   "InfoWatch",
+   "LinIT",
+   "Ozon",
+   "Plata",
+   "QROQO",
+   "RealIT",
+   "Sarafan",
+   "SpaceIT",
+   "VK",
+   "WMX",
+   "X5 Tech",
+   "Ximilabs"
+  ],
+  "n": 19
+ },
+ {
+  "id": "databases-index-types",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What index types exist in PostgreSQL, and when do you use each? Are all indexes trees?",
+  "a": "Not all indexes are trees. Postgres index types:\n\n- **B-tree** (the default): equality, ranges, `ORDER BY`, prefix `LIKE 'abc%'`, uniqueness. It covers about 95% of cases.\n- **Hash**: equality only. It is a hash table, not a tree, and it is WAL-logged since PG10. It is rarely better than a B-tree.\n- **GIN** (generalized inverted index): \"which rows contain this element\". Used for `jsonb` (`@>`, `?`), arrays, full-text `tsvector`, and trigram search (`pg_trgm`). Reads are fast, updates are slow (mitigated by `fastupdate`).\n- **GiST** (generalized search tree): a balanced tree for overlapping or nearest-neighbor data, such as geometry and PostGIS, ranges, and exclusion constraints (no overlapping bookings). It supports KNN `ORDER BY <->`.\n- **SP-GiST**: space-partitioned trees (quad-tree, k-d tree, radix) for non-balanced data like IPs and phone prefixes.\n- **BRIN** (block range index): stores min and max per block range. It is tiny, and it's ideal for huge append-only tables naturally ordered by time.\n\nIndex *variants* (any type): **composite**, **unique**, **partial** (`WHERE`), **expression** (`lower(email)`), and **covering** (`INCLUDE`).\n\nPick by operator: the index must support the operator class used in the `WHERE`.",
+  "level": 1,
+  "asked": [
+   "Avito",
+   "DCloud",
+   "Kuper",
+   "LinIT",
+   "QROQO",
+   "Sarafan",
+   "Tutu",
+   "WMX",
+   "Ximilabs"
+  ],
+  "n": 14
+ },
+ {
+  "id": "databases-acid-transactions",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is a transaction, and what does ACID stand for?\nFollow-up: how is each ACID property implemented in PostgreSQL?",
+  "a": "A **transaction** is a group of operations executed as one logical unit: either all take effect (`COMMIT`) or none do (`ROLLBACK`).\n\n**ACID**, and how Postgres implements each:\n\n- **Atomicity**: all or nothing. Each row version is stamped with its transaction id (`xmin`/`xmax`), and the commit status lives in the commit log (`pg_xact`). An aborted transaction's versions are simply invisible, so no undo is needed. Vacuum cleans them up later.\n- **Consistency**: a transaction moves the DB from one valid state to another. This is enforced by constraints (PK, FK, `UNIQUE`, `CHECK`, `EXCLUDE`), triggers and deferred constraints. Business invariants remain your job.\n- **Isolation**: concurrent transactions don't see each other's intermediate state. Postgres uses **MVCC snapshots** plus row locks and SSI (for `SERIALIZABLE`). The default level is Read Committed.\n- **Durability**: once committed, data survives a crash. The **WAL** is flushed (fsync) at commit before success is reported. Data pages are written later by checkpoints, and replay after a crash reconstructs them.\n\nGotcha: `synchronous_commit = off` trades durability of the last few hundred ms for speed. `fsync = off` risks corruption.",
+  "level": 1,
+  "asked": [
+   "A7",
+   "Amtech",
+   "Digital Spirit",
+   "FrogStudio",
+   "InfoWatch",
+   "LinIT",
+   "RealIT",
+   "VK",
+   "WMX",
+   "X5 Tech"
+  ],
+  "n": 10
+ },
+ {
+  "id": "databases-slow-query-troubleshooting",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "An endpoint that hits the database is slow. How do you find the cause and speed it up?\nFollow-ups: what if an index didn't help? What if it's slow on writes rather than reads?",
+  "a": "Measure first, then fix the biggest cost.\n\n1. **Locate the time**: use tracing/APM spans and metrics (p95/p99) to see whether the time is in the DB, the app, or the network. In the app, look for N+1 loops, pool starvation (`db.Stats()`: `WaitCount`, `WaitDuration`), missing timeouts, and huge result sets.\n2. **Find the query**: `pg_stat_statements` (by total time), the slow-query log / `auto_explain`, and `pg_stat_activity` for locks and waits.\n3. **`EXPLAIN (ANALYZE, BUFFERS)`**: look for seq scans on big tables, rows removed by filter, disk sorts, and estimated vs actual row mismatches.\n\nFixes, roughly in order:\n\n- Add or adjust the right **index** (composite order, partial, covering).\n- **Rewrite the query**: select only the needed columns, use keyset pagination instead of `OFFSET`, `EXISTS` instead of `IN (subquery)`/`DISTINCT`, and avoid functions on indexed columns.\n- Batch queries and remove N+1.\n- `ANALYZE` / extended stats, vacuum bloat, and tune `work_mem`.\n- **Denormalize or precompute**: materialized views, summary tables.\n- **Cache** hot reads (Redis) and move reads to **replicas**.\n- Partition big tables. Last resort: scale up, then shard.\n\nIf writes are slow, check for too many indexes, lock contention (`pg_locks`), per-row commits (batch them), long transactions blocking vacuum, WAL/fsync or checkpoint pressure, and triggers or FK checks.",
+  "level": 2,
+  "asked": [
+   "InDrive",
+   "Kuper",
+   "Magnit",
+   "MascotGames",
+   "Plata",
+   "RSHB",
+   "Tehzor"
+  ],
+  "n": 9
+ },
+ {
+  "id": "databases-btree-internals",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How does a B-tree (B+tree) index work internally, and why are lookups logarithmic?",
+  "a": "Postgres uses a **B+tree** (Lehman–Yao variant). Its nodes are 8 KB pages:\n\n- **Root and internal pages** hold sorted separator keys plus pointers to child pages.\n- **Leaf pages** hold sorted `(key, ctid)` entries, where the `ctid` points to the heap row. Leaves are **doubly linked**, so range scans and `ORDER BY` just walk sideways.\n\nA lookup descends from the root, doing a binary search inside each page. The tree is **balanced**: all leaves sit at the same depth. Each page has a huge fan-out (hundreds of keys), so the height is `log_fanout(N)`. Even a billion rows needs only about 3–4 levels, so a point lookup is 3–4 page reads, and the upper levels are almost always cached. Search, insert and delete are O(log n). A range scan is O(log n + k).\n\nOn insert, a full page **splits** and a separator moves up to the parent. The tree only grows at the root. Lehman–Yao right-links let readers proceed during splits without heavy locks.\n\nExtras: PG13+ **deduplication** of equal keys, and PG18 **skip scan** for composite indexes.\n\nGotcha: random keys (UUIDv4) insert all over the tree. That causes splits, cache misses and bloat. Sequential keys append at the right edge.",
+  "level": 2,
+  "asked": [
+   "Crtex",
+   "Kuper",
+   "Ozon"
+  ],
+  "n": 8
+ },
+ {
+  "id": "databases-explain-analyze",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is EXPLAIN for, and how does it differ from EXPLAIN ANALYZE? How do you check that a query uses your index?\nFollow-ups: what do you look at in the output? What does a missing index look like? What unit is \"cost\"?",
+  "a": "**`EXPLAIN`** shows the planner's chosen plan with **estimates**, without running the query. **`EXPLAIN ANALYZE`** actually **executes** it and adds real timings, row counts and loops. Wrap DML in `BEGIN ... ROLLBACK`, because it really writes. Useful options: `EXPLAIN (ANALYZE, BUFFERS, VERBOSE, SETTINGS, FORMAT JSON)`.\n\nWhat to read:\n\n- **Node types**: `Seq Scan` (no index used), `Index Scan`, `Index Only Scan` (with `Heap Fetches`), `Bitmap Heap/Index Scan`, join methods (Nested Loop, Hash, Merge), `Sort` (check `Sort Method: external merge Disk`).\n- **Estimated vs actual rows**: a big mismatch means bad stats and a bad plan.\n- `Rows Removed by Filter`: many rows read and thrown away, so an index is missing.\n- `Buffers: shared hit/read`: cache vs disk.\n- `actual time` × `loops`, and where the time accumulates.\n\nTo check index use, look for `Index Scan using <name>`. Also watch `pg_stat_user_indexes.idx_scan` grow, and `auto_explain` in prod.\n\n**Cost** is in arbitrary planner units, relative to `seq_page_cost = 1.0` (one sequential page read). `cost=startup..total`. It is not milliseconds.",
+  "level": 2,
+  "asked": [
+   "Data Driven Labs",
+   "Digital Spirit",
+   "Kuper",
+   "Plata",
+   "RealIT",
+   "Ximilabs"
+  ],
+  "n": 7
+ },
+ {
+  "id": "databases-index-downsides",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What are the downsides of indexes, and why not index every column?\nFollow-ups: how do indexes affect INSERT/UPDATE/DELETE? If disk were unlimited, would indexing every combination still be a problem?",
+  "a": "Indexes speed up reads but cost you on writes and memory:\n\n- **Write amplification**: each `INSERT` updates every index. An `UPDATE` inserts a new row version, and it updates all indexes too unless it's a **HOT** update (no indexed column changed, and there's room on the page). A `DELETE` leaves index entries for vacuum to clean. More WAL means slower replication and backups.\n- **Memory**: indexes compete for `shared_buffers` and page cache. When the hot set stops fitting, everything slows down.\n- **Lock/contention hotspots**: monotonically increasing keys all hit the right-most B-tree page.\n- **Planner cost and wrong plans**: more choices, more statistics to keep fresh, and occasional bad picks.\n- **Vacuum/maintenance time**, and bloat.\n- An **unused index** is pure overhead. Find them with `pg_stat_user_indexes.idx_scan = 0`.\n\nWith unlimited disk, the problem remains: write latency, WAL, RAM pressure and HOT-update loss all grow with the number of indexes. Also, most single-column indexes won't be used for multi-column predicates anyway.\n\nIndex for **actual query patterns**, measure with `EXPLAIN`, and drop what's unused.",
+  "level": 1,
+  "asked": [
+   "Sarafan",
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 6
+ },
+ {
+  "id": "databases-index-what-why",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is an index, why is it needed, and where is it stored?",
+  "a": "An index is a **separate data structure** that maps column values to row locations. In Postgres the location is a `ctid`: page number plus offset in the heap. With an index, a lookup doesn't have to scan the whole table: a B-tree turns O(n) into O(log n). An index can also return rows already **sorted** (serving `ORDER BY` / `LIMIT`), enforce **uniqueness**, and sometimes answer the query alone (an **index-only scan**).\n\nStorage in Postgres: each index is its own relation, stored as its own file(s) under `$PGDATA/base/<db_oid>/`, split into 8 KB pages. Its pages are cached in `shared_buffers` like table pages, and changes go through the WAL. Hot indexes should fit in RAM.\n\nThe cost: every `INSERT`, `UPDATE` of an indexed column, and `DELETE` (through vacuum) must maintain every index. That means extra write I/O, WAL volume and disk space.\n\nGotcha: an index is only used if the planner thinks it's cheaper. For low-selectivity predicates, a seq scan often wins.",
+  "level": 1,
+  "asked": [
+   "A7",
+   "Magnit",
+   "RealIT",
+   "Sarafan",
+   "VK"
+  ],
+  "n": 6
+ },
+ {
+  "id": "databases-join-types",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What JOIN types exist, and how does LEFT JOIN differ from INNER JOIN? Which is the default?",
+  "a": "- **INNER JOIN** (plain `JOIN` is INNER by default) returns only row pairs where the `ON` condition matches in both tables.\n- **LEFT (OUTER) JOIN** returns **all rows from the left table**, and the matching right rows. When there's no match, the right-side columns are `NULL`. **RIGHT JOIN** is the mirror image.\n- **FULL OUTER JOIN** returns all rows from both sides, with `NULL`s where there's no match.\n- **CROSS JOIN** is the Cartesian product.\n- **SELF JOIN** joins a table to itself (employee → manager). **LATERAL** lets the right side reference the left row (top-N per group). **Semi/anti joins** are expressed with `EXISTS` / `NOT EXISTS`.\n\nExample: listing users with their emails from a separate `emails` table. `INNER` drops users without an email. `LEFT` keeps them, with `email = NULL`. `LEFT JOIN ... WHERE right.id IS NULL` finds rows with **no** match (anti-join).\n\nGotchas:\n\n- A filter on the right table in `WHERE` (`WHERE e.active`) silently turns a LEFT JOIN into an INNER. Put it in the `ON` clause.\n- Joins on non-unique keys multiply rows, so aggregates double-count. Aggregate first, or use `COUNT(DISTINCT)`.\n\nPhysically, Postgres executes joins as Nested Loop, Hash Join or Merge Join.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Ozon",
+   "Plata",
+   "Tehzor",
+   "X5 Group"
+  ],
+  "n": 6
+ },
+ {
+  "id": "databases-locks-types",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What kinds of locks exist in PostgreSQL, and how do you work with them?",
+  "a": "**Table-level locks** (8 modes, taken implicitly by statements):\n\n- `ACCESS SHARE` for `SELECT`.\n- `ROW SHARE` for `SELECT FOR UPDATE/SHARE`.\n- `ROW EXCLUSIVE` for `INSERT`/`UPDATE`/`DELETE`.\n- `SHARE UPDATE EXCLUSIVE` for `VACUUM`, `CREATE INDEX CONCURRENTLY`, some `ALTER`s.\n- `SHARE` for `CREATE INDEX`.\n- `SHARE ROW EXCLUSIVE`, `EXCLUSIVE`.\n- `ACCESS EXCLUSIVE` for most `ALTER TABLE`, `DROP`, `TRUNCATE`, `VACUUM FULL`. It blocks everything, even reads.\n\n**Row-level locks**, stored in the tuple header (`xmax`), not in memory:\n\n- `FOR UPDATE` (taken by `UPDATE`/`DELETE`), `FOR NO KEY UPDATE` (by a non-key `UPDATE`), `FOR SHARE`, and `FOR KEY SHARE` (FK checks).\n- Modifiers: `NOWAIT` (fail immediately) and `SKIP LOCKED` (queue workers).\n\n**Advisory locks**: `pg_advisory_lock` / `pg_advisory_xact_lock(key)` are app-defined mutexes, for example \"only one cron instance runs\".\n\nAlso: **predicate (SIRead) locks** for Serializable, plus internal lightweight locks and latches.\n\nWorking with them:\n\n- Keep transactions short and lock in a consistent order.\n- Set `lock_timeout` and `statement_timeout`.\n- Watch `pg_locks` joined with `pg_stat_activity`, or `pg_blocking_pids()`.\n\nGotcha: an `ALTER TABLE` waiting for `ACCESS EXCLUSIVE` queues behind a long `SELECT`, and **everything after it** queues too. Always set `lock_timeout` for DDL.",
+  "level": 2,
+  "asked": [
+   "Astra",
+   "Forward",
+   "FrogStudio",
+   "Ozon",
+   "SpaceIT",
+   "Velme"
+  ],
+  "n": 6
+ },
+ {
+  "id": "databases-sql-vs-nosql",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do relational and non-relational databases differ, and why were NoSQL databases invented?\nFollow-ups: why is it called \"relational\"? What kinds of databases exist, with examples?",
+  "a": "A relational DB stores data as **relations** (tables of tuples with a fixed schema) and lets you combine them with relational algebra via SQL: joins, constraints, foreign keys, ACID transactions. \"Relational\" comes from the math term *relation* (a set of tuples), not from \"relationships between tables\".\n\nNoSQL appeared because a single-node RDBMS was hard to scale horizontally and some workloads don't need joins or strict schemas. They trade generality for a specific strength:\n\n- **Key-value**: Redis, DynamoDB — O(1) lookups, caches, sessions.\n- **Document**: MongoDB — nested JSON documents, flexible schema.\n- **Wide-column**: Cassandra, ScyllaDB — huge write throughput, partition-key access.\n- **Columnar/OLAP**: ClickHouse — analytics scans and aggregations.\n- **Graph**: Neo4j — traversals. **Time-series**: TimescaleDB, VictoriaMetrics. **Search**: Elasticsearch.\n\nGotcha: the line is blurry. Postgres has `jsonb`, partitioning and Citus; many NoSQL stores now offer transactions and SQL-like languages. Pick by access pattern and consistency needs, not by label.",
+  "level": 1,
+  "asked": [
+   "InfoWatch",
+   "Plata",
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 6
+ },
+ {
+  "id": "databases-schema-library",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Design a library schema where a book can be held by only one reader at a time, then write queries on it.\nEntities: authors, books, readers, loans. Queries: books currently on loan; books with more than 3 authors; top-3 most-read authors right now. Follow-ups: ISBN vs copy id, enforcing a single holder with a unique index.",
+  "a": "Book ↔ author is many-to-many. A loan is a fact with a time range. The \"one holder at a time\" rule is enforced by a **partial unique index**, not by app code:\n\n```sql\nCREATE TABLE author (id bigserial PRIMARY KEY, name text NOT NULL);\nCREATE TABLE reader (id bigserial PRIMARY KEY, full_name text NOT NULL);\nCREATE TABLE book   (id bigserial PRIMARY KEY, title text NOT NULL, isbn text UNIQUE);\nCREATE TABLE book_author (\n    book_id   bigint NOT NULL REFERENCES book(id) ON DELETE CASCADE,\n    author_id bigint NOT NULL REFERENCES author(id),\n    PRIMARY KEY (book_id, author_id)\n);\nCREATE TABLE loan (\n    id          bigserial PRIMARY KEY,\n    book_id     bigint NOT NULL REFERENCES book(id),\n    reader_id   bigint NOT NULL REFERENCES reader(id),\n    taken_at    timestamptz NOT NULL DEFAULT now(),\n    returned_at timestamptz\n);\nCREATE UNIQUE INDEX loan_one_active_per_book ON loan(book_id) WHERE returned_at IS NULL;\n\n-- books currently on loan\nSELECT b.title FROM book b JOIN loan l ON l.book_id = b.id WHERE l.returned_at IS NULL;\n\n-- books with more than 3 authors\nSELECT b.title FROM book b JOIN book_author ba ON ba.book_id = b.id\nGROUP BY b.id, b.title HAVING COUNT(*) > 3;\n\n-- top-3 authors by books currently on loan\nSELECT a.name, COUNT(*) AS on_loan\nFROM loan l\nJOIN book_author ba ON ba.book_id = l.book_id\nJOIN author a ON a.id = ba.author_id\nWHERE l.returned_at IS NULL\nGROUP BY a.id, a.name\nORDER BY on_loan DESC\nLIMIT 3;\n```\n\nA second active loan fails with `duplicate key value violates unique constraint \"loan_one_active_per_book\"` (verified on PG18), so concurrent checkouts are safe without explicit locks. Returning a book sets `returned_at`, and the history is kept.\n\nWith **multiple copies**: **ISBN identifies an edition, not a physical copy**. Add `book_copy(id, book_id, inventory_no)`, and put the loan and the unique index on `copy_id`. An alternative is an exclusion constraint on `tstzrange(taken_at, returned_at)` with GiST.",
+  "level": 2,
+  "asked": [
+   "FrogStudio",
+   "Ozon",
+   "Tochka Bank",
+   "X5 Group"
+  ],
+  "n": 5,
+  "verified": true
+ },
+ {
+  "id": "databases-composite-index-leftmost-prefix",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is the leftmost-prefix rule? Given an index on (sku, country, customer_id), which queries can use it?\nFollow-up: does column order matter? How would you index cities and countries?",
+  "code": "CREATE INDEX myIdx ON carts(sku, country, customer_id);\n\nSELECT * FROM carts WHERE sku = 192 AND country = 'ru';\nSELECT * FROM carts WHERE country = 'ru' AND customer_id = 10;\nSELECT * FROM carts WHERE customer_id = 10;",
+  "a": "A composite B-tree is sorted by the first column, then the second within it, and so on. It can be searched efficiently only on a **leftmost prefix** of its columns: `(a)`, `(a,b)`, `(a,b,c)`. Scanning stops being \"seekable\" after the first **range** condition. Columns after a range can only be checked as filters inside the index.\n\nFor the index `(sku, country, customer_id)`:\n\n- `sku = 192 AND country = 'ru'`: **yes**, a full prefix seek.\n- `country = 'ru' AND customer_id = 10`: no leading `sku`. **Before PG18**, this is at best a full-index scan (usually a seq scan). **PG18 skip scan** can use it, looping over each distinct `sku` when `sku` has few distinct values.\n- `customer_id = 10`: same as above. Pre-18 it can't seek. PG18 may skip-scan if the leading columns have low cardinality.\n\nFor `(a,b,c)` with filters on `(a,b)`, `(a,c)` and `(b,c)`: `(a,b)` seeks fully. `(a,c)` seeks on `a` and filters `c`. `(b,c)` needs skip scan or doesn't work.\n\nOrder matters. Put **equality columns first, then range/sort columns**, and prefer the order that also serves other queries. For cities and countries: `(country, city)` serves both \"by country\" and \"by country+city\".\n\nVerified on PG18.",
+  "level": 2,
+  "asked": [
+   "Crtex",
+   "Lamoda",
+   "Ozon",
+   "Tutu"
+  ],
+  "n": 4,
+  "verified": true
+ },
+ {
+  "id": "databases-index-when-to-add",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "When is it worth adding an index, and how do you choose which columns to index?",
+  "a": "Add an index when a **frequent or important query is slow** because it scans many rows to return few, and `EXPLAIN (ANALYZE, BUFFERS)` confirms a seq scan or a sort is the bottleneck.\n\nGood candidates:\n\n- Columns in selective `WHERE` predicates and in `JOIN` keys. **Foreign keys** are not indexed automatically in Postgres; index them, or deletes on the parent and joins will scan.\n- `ORDER BY ... LIMIT` columns, so the index can deliver rows pre-sorted.\n- Uniqueness requirements, via a unique index.\n\nHow to choose:\n\n- **Selectivity/cardinality**: an index helps when the predicate returns a small fraction of rows. A plain `bool` or `gender` column is useless alone. Use it in a composite or partial index instead.\n- **Composite order**: equality columns first, then range or sort columns. Leftmost-prefix rules apply.\n- Partial indexes for hot subsets (`WHERE status = 'active'`). Covering indexes (`INCLUDE`) for index-only scans.\n- Read/write ratio: a write-heavy table deserves few indexes.\n\nDon't index tiny tables, or columns that are never filtered on. Verify with `pg_stat_statements` and `pg_stat_user_indexes`.",
+  "level": 1,
+  "asked": [
+   "Magnit",
+   "Velme",
+   "ViTech"
+  ],
+  "n": 4
+ },
+ {
+  "id": "databases-lost-update",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is a lost update? Two transactions read a balance, check it in the app, then update it. What goes wrong, and how do you prevent it?\nFollow-ups: which isolation level prevents it? What if the frontend sends two requests concurrently?",
+  "code": "BEGIN;\nSELECT balance FROM accounts WHERE user_id = 123;\n-- app: if balance > 100 ...\nUPDATE accounts SET balance = balance - 100 WHERE user_id = 123;\nCOMMIT;\n\n-- interleaving:\n-- 1. TX1 BEGIN            2. TX1 SELECT\n-- 3. TX2 BEGIN            4. TX2 SELECT        5. TX2 COMMIT (after its UPDATE)\n-- 6. TX1 UPDATE           7. TX1 COMMIT",
+  "a": "A **lost update** (or its cousin, double spend) happens with a read-modify-write when both transactions read the same old value.\n\nWith the interleaving TX1 select → TX2 select, update, commit → TX1 update, commit, both transactions saw `balance = 150` and both passed the `> 100` check. Under Read Committed, TX1's `UPDATE ... balance - 100` re-reads the latest row and applies anyway, so the balance goes to −50. If the app wrote an absolute value (`SET balance = 50`), TX2's update would simply be **lost**. Two concurrent \"transfer money\" or \"add to basket then save\" requests hit the same bug.\n\nPrevention:\n\n- **Atomic conditional update**: `UPDATE accounts SET balance = balance - 100 WHERE id = $1 AND balance >= 100 RETURNING balance`. Zero rows returned means insufficient funds.\n- **Pessimistic lock**: `SELECT ... FOR UPDATE`, so the second transaction waits for the first.\n- **Optimistic lock**: a `version` column, `UPDATE ... WHERE id = $1 AND version = $2`, and retry on 0 rows.\n- **Isolation**: Postgres **Repeatable Read** or Serializable detects it. TX1 fails with `could not serialize access due to concurrent update`, and you retry.\n- A `CHECK (balance >= 0)` constraint as a safety net, plus **idempotency keys** so a double-click doesn't create two payments.",
+  "level": 2,
+  "asked": [
+   "Kuper",
+   "Plata",
+   "QROQO",
+   "Sarafan"
+  ],
+  "n": 4
+ },
+ {
+  "id": "databases-primary-key-serial-vs-uuid",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What would you use as a primary key, serial/bigint or UUID? What are the trade-offs?",
+  "a": "Both are fine. Choose by requirements. My default is **`bigint` identity** for internal tables, and **UUIDv7** when IDs must be generated outside the DB or exposed publicly.\n\n`bigint` identity (serial):\n\n- Pros: small (8 B). Sequential inserts go to the right edge of the B-tree, giving compact, cache-friendly indexes and fast joins. Human-readable.\n- Cons: a **single generator**, so it's awkward with sharding, multi-master or offline creation, and you need a DB round-trip to know the ID. **Enumerable/guessable** (IDOR risk, leaks business volume). Merging datasets collides.\n\nUUID:\n\n- Pros: **globally unique without coordination**. You can generate it in the app before insert (idempotency keys, events, outbox), across shards or services. Not guessable (v4).\n- Cons: 16 B, which makes indexes and FKs bigger. **UUIDv4 is random**, so inserts scatter across the B-tree: page splits, poor cache locality, more WAL (full-page writes). It's also worse in clustered-index DBs like MySQL/InnoDB.\n\nThe compromise is **UUIDv7**: time-ordered, so it keeps sequential-insert locality while staying globally unique. Or use `bigint` internally plus a separate public UUID/slug.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Ozon",
+   "ViTech"
+  ],
+  "n": 4
+ },
+ {
+  "id": "databases-scaling",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you scale a database, e.g. for an order-processing system that has started to degrade?\nFollow-up: what primary key type suits sharding, and why?",
+  "a": "Scale in increasing order of cost and complexity:\n\n1. **Optimize**: fix slow queries and indexes (`pg_stat_statements`, `EXPLAIN`), remove N+1, batch writes, pool connections (PgBouncer), tune vacuum and memory.\n2. **Vertical scaling**: more CPU, RAM and faster NVMe. It's cheap and effective for a long time.\n3. **Caching** hot reads (Redis) and **read replicas** for read-heavy traffic.\n4. **Partitioning** big tables, e.g. orders by month: fast retention and smaller indexes. Archive closed orders to cold storage or OLAP.\n5. **Functional split**: separate databases per service or domain (orders, catalog, payments), and CQRS read models. Move analytics to ClickHouse.\n6. **Sharding** by a key present in every query (`user_id` or `order_id` for orders), with each shard replicated.\n\nFor an order system specifically: hot writes are recent orders, so partition by time. The list and aggregator views are a read model, fed via CDC or events. Shard by `customer_id` if user-centric queries dominate.\n\n**PK for sharding**: use something **globally unique without a central sequence**: UUIDv7 (time-ordered, index-friendly) or Snowflake-style 64-bit IDs (time + shard + sequence). Per-shard serials collide, and v4 UUIDs fragment indexes.",
+  "level": 2,
+  "asked": [
+   "Avito",
+   "InDrive",
+   "Tutu",
+   "ViTech"
+  ],
+  "n": 4
+ },
+ {
+  "id": "databases-sharding-problems",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What problems does sharding introduce? How do you JOIN across shards, and do foreign keys still work?",
+  "a": "The main problems:\n\n- **Cross-shard queries**: anything without the shard key becomes scatter-gather, fanned out to all shards and merged in the app. Global `ORDER BY`/`LIMIT` and pagination are hard, and aggregates must be recombined.\n- **JOINs across shards** aren't supported by the DB. Options:\n  - Co-locate related data on the same shard key.\n  - Replicate small reference tables to every shard.\n  - Join in the application (two queries plus an in-memory join).\n  - Denormalize.\n  - Push analytics to a separate OLAP store fed by CDC.\n- **Foreign keys don't work across shards.** An FK is enforced only within one database. Cross-shard references become plain IDs, and integrity is enforced by the app, async reconciliation or sagas.\n- **Distributed transactions**: 2PC is slow and fragile, so use sagas, the outbox and idempotency. Unique constraints are only per shard, so global uniqueness needs a lookup table or UUIDs.\n- **ID generation**: no shared sequence. Use UUIDv7 or Snowflake-style IDs.\n- **Hot shards** and uneven growth. **Resharding/rebalancing** is painful without virtual buckets.\n- **Operations**: N× backups, migrations, monitoring and failover. Schema changes must roll out to every shard.\n\nThis is why sharding comes last, after vertical scaling, replicas, caching and partitioning.",
+  "level": 2,
+  "asked": [
+   "A7",
+   "Andersen",
+   "Crtex",
+   "X5 Group"
+  ],
+  "n": 4
+ },
+ {
+  "id": "databases-triggers",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What are database triggers for, and what are their downsides? When is it bad to use them?",
+  "a": "A **trigger** runs a function automatically on `INSERT`/`UPDATE`/`DELETE`/`TRUNCATE`, per row or per statement, `BEFORE`/`AFTER`/`INSTEAD OF`. Event triggers fire on DDL.\n\nGood uses:\n\n- **Audit/history** tables: who changed what, when.\n- Maintaining `updated_at`, and derived or denormalized data (counters, search vectors).\n- Enforcing invariants that constraints can't express.\n- Partition routing in legacy setups. Dual-writes during an online migration.\n\nDownsides:\n\n- **Hidden logic**: developers reading the Go code don't see it. That makes behavior surprising and debugging and code review harder.\n- **Performance**: row-level triggers run per row, inside the transaction. They add latency and lock time to every write, and cascading triggers multiply the effect.\n- **Hard to test, version and deploy**: they live in the DB, not the service.\n- Chains and recursion, and ordering subtleties. Bypassed by `COPY`/replicas in some modes. They can cause deadlocks.\n- Coupling business logic to the DB makes sharding or migrating to another store harder.\n\nAvoid triggers for **business logic** and cross-service side effects. Use app code, the outbox pattern, or CDC (Debezium) instead. Keep triggers small, documented and data-integrity-focused.",
+  "level": 1,
+  "asked": [
+   "Avito",
+   "Employcity",
+   "Kvando"
+  ],
+  "n": 4
+ },
+ {
+  "id": "databases-concurrent-writes-same-rows",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What happens when two requests modify the same rows at the same time, and how do you avoid collisions at the DB level?",
+  "a": "With MVCC, **readers never block writers and writers never block readers**. Two *writers* on the **same row** do conflict. The first `UPDATE`/`DELETE`/`SELECT FOR UPDATE` takes a row-level lock. The second **waits** until the first commits or rolls back. Then:\n\n- **Read Committed**: the waiter re-reads the new row version, re-checks its `WHERE`, and proceeds (or skips the row if it no longer matches).\n- **Repeatable Read / Serializable**: the waiter fails with `could not serialize access due to concurrent update`, and the app must retry.\n\nIf two transactions lock the same rows **in different orders**, they deadlock. Postgres detects it after `deadlock_timeout` and aborts one.\n\nTools to avoid collisions:\n\n- **Atomic statements**: `UPDATE ... SET x = x + 1`, `INSERT ... ON CONFLICT DO UPDATE/NOTHING`.\n- **Constraints**: `UNIQUE`, `CHECK`, exclusion constraints. The DB rejects the conflicting write.\n- **Pessimistic locks**: `SELECT ... FOR UPDATE` (or `NOWAIT` / `SKIP LOCKED`), taken in a consistent order.\n- **Optimistic locking** with a version column, or **advisory locks** (`pg_advisory_xact_lock`) for app-level mutexes.\n- Short transactions, and a `lock_timeout` so you don't hang forever.",
+  "level": 2,
+  "asked": [
+   "Astra"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-deadlocks",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is a deadlock in a database, and how do you find and fix one (for example, in code a junior wrote)?",
+  "a": "A deadlock is a cycle of waits. TX1 holds row A and wants B, while TX2 holds B and wants A. Postgres checks for cycles after `deadlock_timeout` (1s by default). It aborts one transaction with `ERROR: deadlock detected` (SQLSTATE `40P01`), and the other continues.\n\nCatching it:\n\n- The Postgres log prints both statements and the lock details. Enable `log_lock_waits = on` to also see long waits that aren't deadlocks.\n- Look at `pg_stat_database.deadlocks` and at `pg_locks` / `pg_blocking_pids()` live.\n- In Go, check `pgconn.PgError.Code == \"40P01\"` and add metrics/alerts on it.\n- Reproduce with a concurrent test (two goroutines doing opposite transfers).\n\nTypical causes: transfers A→B and B→A locking in opposite order, batch updates in different row orders, FK plus parent updates, and app-level mutexes combined with DB locks.\n\nFixes:\n\n- **Lock in a consistent order**, for example `SELECT ... WHERE id IN (...) ORDER BY id FOR UPDATE`, or sort batch keys.\n- Keep transactions short, with no network calls inside.\n- Use atomic single statements where possible.\n- **Retry** the aborted transaction; deadlocks are expected occasionally.\n\nAlso watch for Go-side \"deadlocks\": an exhausted `sql.DB` pool, where a goroutine holding a tx waits for a second connection.",
+  "level": 2,
+  "asked": [
+   "Forward",
+   "VK"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-hash-index",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is special about a hash index? Can `CREATE INDEX h_idx ON users USING hash(age)` serve `WHERE age > 18`?",
+  "code": "CREATE TABLE users(username text, password text, age integer);\nCREATE INDEX h_idx ON users USING hash(age);\n\nSELECT * FROM users WHERE age > 18;",
+  "a": "No. A hash index supports **only equality** (`=`). It stores hash codes of the key in buckets (a hash table), so there is no ordering and ranges like `age > 18` can't use it. The planner falls back to a seq scan (or another index).\n\nVerified on PG18: with `enable_seqscan=off`, `age > 18` still plans a `Seq Scan` marked \"Disabled\", while `age = 18` uses a `Bitmap Index Scan on h_idx`.\n\nProperties of Postgres hash indexes:\n\n- Structure: a hash table on disk. It has a metapage, bucket pages and overflow pages, and buckets split as it grows.\n- Only `=` works: no ranges, no `ORDER BY`, no `LIKE`, no uniqueness constraint, no multi-column keys.\n- It stores only the 4-byte hash, not the value. That can make it smaller than a B-tree for long keys like URLs. It is WAL-logged and crash-safe since PG10 (unsafe before).\n- Every hit needs a heap recheck, because hashes can collide.\n\nIn practice a B-tree is almost always the better choice. Use a hash index only for equality lookups on large keys, when measurement shows it wins.",
+  "level": 2,
+  "asked": [
+   "Lamoda",
+   "Magnit",
+   "Sarafan"
+  ],
+  "n": 3,
+  "verified": true
+ },
+ {
+  "id": "databases-index-range-equality-order-by",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Which index fits `WHERE a > ? AND b = ? AND c != ? ORDER BY a`, and why (b, a) rather than (a, b)?\nFollow-up: what if b has only 1 or 2 distinct values?",
+  "code": "SELECT * FROM t1 WHERE a > ? AND b = ? AND c != ? ORDER BY a;\n\nCREATE INDEX idx_t1_b_a ON t1 (b, a);",
+  "a": "Use **`(b, a)`**: the equality column first, then the range/sort column.\n\n- With `(b, a)`, the planner seeks to `b = ?`, then walks `a > ?` in order. Rows come out **already sorted by `a`**, so there's no Sort node, and `LIMIT` stops early. `c != ?` is applied as a Filter. Inequality is almost never selective, so it's not worth indexing. You could add it via `INCLUDE (c)` to filter without heap visits.\n- With `(a, b)`, the leading column is a range. The scan covers every `a > ?` and checks `b` for each entry, so it reads far more of the index.\n\nHow to decide: look at the query shape (equality/range/sort), the column cardinalities from `pg_stats`, and then `EXPLAIN (ANALYZE, BUFFERS)` with realistic data.\n\nIf `b` has one value, it's useless as a key. `(a)` alone is equivalent, and smaller. With two values, `(b, a)` still works: it halves the scanned range and keeps the order. It's also what enables sort-free `ORDER BY a` for a fixed `b`.\n\nVerified on PG18 (300k rows, `b` in {0,1}): a wide range gives `Index Scan using idx_t1_b_a` with `Index Cond: ((b = 1) AND (a > 1000))`, `Filter: (c <> 3)` and no sort. A narrow range picks a bitmap scan plus a Sort. The plan depends on selectivity.",
+  "level": 3,
+  "asked": [
+   "Kuper",
+   "SeniorSoft"
+  ],
+  "n": 3,
+  "verified": true
+ },
+ {
+  "id": "databases-mvcc",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is MVCC, and how does a row UPDATE actually work inside PostgreSQL?\nFollow-up: what takes and provides snapshots?",
+  "a": "**MVCC** (multi-version concurrency control) keeps **several versions of each row**, so readers see a consistent snapshot without blocking writers.\n\nIn Postgres every heap tuple carries `xmin` (the transaction that created it) and `xmax` (the transaction that deleted or locked it). An **UPDATE doesn't modify in place**:\n\n1. It locks the old tuple and sets its `xmax` to the current XID.\n2. It writes a **new tuple version** with `xmin` = current XID. The version goes on the same page if there's room, which enables a **HOT** update with no index changes when no indexed column changed. Otherwise it goes elsewhere, and **every index gets a new entry**.\n3. It writes WAL records for both changes.\n\n`DELETE` only sets `xmax`. The old versions become **dead tuples** once no snapshot needs them, and VACUUM reclaims them.\n\nA **snapshot** is `(xmin, xmax, list of in-progress XIDs)`. Each backend builds it itself from the shared **ProcArray** (`GetSnapshotData`): per statement in Read Committed, once per transaction in Repeatable Read. Visibility of a tuple is decided by comparing its `xmin`/`xmax` to the snapshot, plus commit status from `pg_xact`. There is no dedicated snapshot process. `pg_export_snapshot()` lets `pg_dump` workers share one.\n\nGotchas: update-heavy tables bloat. Long transactions hold back the xmin horizon and block cleanup. XID wraparound requires freezing.",
+  "level": 3,
+  "asked": [
+   "Data Driven Labs",
+   "Sarafan",
+   "X5 Tech"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-normal-forms",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is normalization? Walk through the normal forms with examples.\nFollow-up: in what case is stopping at 2NF a good fit?",
+  "a": "**Normalization** structures tables to remove redundancy and update anomalies (insert, update, delete), so that each fact is stored once.\n\n- **1NF**: atomic values and no repeating groups. No `phones = \"123,456\"` and no `phone1, phone2` columns. Use a `user_phones` table instead. Every row needs a key.\n- **2NF**: 1NF, and every non-key column depends on the **whole** key. In `order_items(order_id, product_id, qty, product_name)`, `product_name` depends only on `product_id`, so it moves to `products`. This only matters with composite keys.\n- **3NF**: 2NF, and **no transitive dependencies** (a non-key column depending on another non-key column). In `employees(id, dept_id, dept_name)`, `dept_name` depends on `dept_id`, so it moves to `departments`.\n- **BCNF**: every determinant is a candidate key. It's a stricter 3NF.\n- **4NF** removes independent multi-valued facts. **5NF** removes join dependencies. **6NF** is used in temporal/anchor modeling.\n\nIn practice, aim for **3NF/BCNF** for OLTP.\n\nStopping at 2NF (or lower) is fine when some redundancy is intentional: **read-heavy reporting tables and denormalized views**, or history/snapshot data where \"transitively dependent\" values must be frozen. An example is an order storing the customer's address and price *at purchase time*. It's also fine when the join cost outweighs the anomaly risk.",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "LinIT"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-orm-in-go",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is an ORM, and why is it often considered a bad fit in Go?",
+  "a": "An **ORM** (object-relational mapper) maps tables to objects and generates SQL for you: GORM, ent, Bun in Go; Hibernate, Django ORM elsewhere.\n\nWhy many Go teams avoid heavy ORMs:\n\n- **Hidden SQL and performance traps**: N+1 from lazy or implicit loading, `SELECT *`, and inefficient joins you only see in production. Debugging needs query logging.\n- **Reflection and `interface{}`-heavy APIs** (GORM): runtime errors instead of compile-time ones, plus allocations.\n- **Leaky abstraction**: Postgres features (CTEs, window functions, `ON CONFLICT`, `SKIP LOCKED`, `jsonb`) end up as raw SQL anyway.\n- It **clashes with Go culture**: explicit over magic, simple structs, errors as values.\n- Auto-migrations are risky in prod.\n\nPopular alternatives:\n\n- **sqlc**: write SQL, get type-safe Go code generated at compile time.\n- **pgx** / `database/sql` + **sqlx** / **scany** for scanning.\n- Query builders (**squirrel**, goqu) for dynamic filters.\n- **ent** when you want a schema-as-code, code-generated (non-reflective) ORM.\n\nFair counterpoint: ORMs speed up CRUD-heavy admin apps. The problem is using them without knowing the SQL they emit.",
+  "level": 1,
+  "asked": [
+   "SeniorSoft",
+   "X5 Group"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-reduce-read-load",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How can you reduce the read load on a database? Name at least three ways.",
+  "a": "1. **Caching**: an app-level in-memory LRU for tiny hot data, or Redis/Memcached with cache-aside and TTL. HTTP/CDN caching for public data.\n2. **Read replicas**: route reads that tolerate slight lag to streaming replicas. Keep read-your-own-writes paths on the primary.\n3. **Better queries and indexes**: add the right indexes, drop `SELECT *`, remove N+1 (batch with `IN`/`ANY($1)`), use keyset pagination instead of large `OFFSET`s.\n4. **Precomputation**: materialized views, denormalized counters or summary tables, and a separate OLAP store for analytics.\n5. **Connection pooling** (PgBouncer) so connections aren't the bottleneck.\n6. Request **coalescing/single-flight** for hot keys, plus rate limiting.\n7. Partitioning (partition pruning), and ultimately sharding.\n\nWrites are sped up differently: batching, fewer indexes, async processing via queues, `COPY`, and less frequent commits.\n\nGotcha: every cache and replica adds **staleness**. Decide per endpoint what staleness is acceptable, and how invalidation works.",
+  "level": 1,
+  "asked": [
+   "SpaceIT"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-replication-types",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is database replication, and what kinds are there? How does synchronous differ from asynchronous replication?",
+  "a": "**Replication** continuously copies data changes from one node to others, for HA, failover, read scaling, backups and geo-distribution.\n\nKinds:\n\n- **By topology**: single-leader (primary → replicas), multi-leader (multi-master), and leaderless (Dynamo/Cassandra with quorums).\n- **By mechanism in Postgres**:\n  - **Physical streaming**: replicas replay WAL byte-for-byte. The whole cluster is copied, and replicas are read-only hot standbys.\n  - **Logical**: publication/subscription of row changes per table. It works across versions and allows selective tables and upgrades.\n- **By timing**:\n  - **Asynchronous** (the default): the primary commits and replies without waiting for replicas. It's fast and unaffected by replica latency, but there's **replication lag** (stale reads) and possible **loss of recently committed transactions** on failover.\n  - **Synchronous**: commit waits until one or more replicas confirm (`synchronous_standby_names`, `synchronous_commit = on | remote_write | remote_apply`). It gives zero data loss (RPO 0) with at least one sync replica, but adds a network round-trip per commit, and the primary **stalls if the sync replica is down**. Use `ANY 1 (r1, r2)` quorums.\n  - Semi-sync / quorum schemes sit in between.\n\nGotcha: async replicas mean read-after-write anomalies. Route \"just-written\" reads to the primary, or wait for the LSN.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Plata"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-sharding-basics",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is sharding, and why do you shard a database? Does PostgreSQL support it?",
+  "a": "**Sharding** is horizontal partitioning **across multiple servers**. Each shard holds a subset of rows (for example, users 0–1M on shard A), and together they form the dataset.\n\nWhy: when a single primary hits its limits on **write throughput, data size, RAM for the working set, or connections**, replicas don't help (they only scale reads). Sharding scales writes and storage roughly linearly, and it limits the blast radius of a failure.\n\nPostgres has **no built-in automatic sharding**. Options:\n\n- **Application-level sharding**: the service computes the shard from the key and holds a connection pool per shard. This is common at big Russian tech companies (Ozon, Avito).\n- **Citus** extension: distributed tables, a coordinator, and parallel queries across worker nodes.\n- **postgres_fdw** + declarative partitioning: partitions that are foreign tables on other servers. Basic, with limited pushdown.\n- Proxies/middleware: PgCat, SPQR (Yandex), Vitess-like layers.\n- Or pick a DB designed for it: CockroachDB, YugabyteDB, Cassandra, MongoDB.\n\nShard only after exhausting indexes, caching, replicas, partitioning and vertical scaling. Sharding is expensive to operate and hard to undo.",
+  "level": 1,
+  "asked": [
+   "X5 Group",
+   "X5 Tech"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-sharding-key",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you choose a sharding key, and how do you know which shard a request goes to?",
+  "a": "A good shard key:\n\n- Is **present in (almost) every query**, so a request goes to one shard and no scatter-gather is needed. Examples: `user_id`, `tenant_id`, `order_id`.\n- **Co-locates data that's used together**, so transactions and joins stay single-shard. All of one user's orders live on the user's shard.\n- Has **high cardinality and even distribution**: no hot shards.\n- Is **immutable**, because changing it means moving the row.\n- Is not monotonic under range sharding. A timestamp sends all writes to the last shard.\n\nRouting strategies:\n\n- **Hash**: `shard = hash(key) % N`. The distribution is even, but changing N remaps nearly everything. Use **consistent hashing** or a fixed number of **virtual buckets** (e.g., 4096 buckets mapped to physical shards) so resharding moves buckets, not rows one by one.\n- **Range**: key ranges per shard. Range scans are efficient, but it's prone to hotspots and needs splitting.\n- **Directory/lookup**: a mapping table or service (`tenant → shard`). This is the most flexible (you can move big tenants), but it's an extra hop and must be cached and highly available.\n\nRouting lives in the app (a library), a proxy (PgCat, SPQR, Vitess), or the DB itself (Citus). The key can also be embedded in the ID (for example, shard bits in a Snowflake ID).",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "Avito",
+   "Magnit"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-sharding-vs-replication",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Are sharding and replication the same thing, and do they solve the same problems? Why should sharding be combined with replication?",
+  "a": "No.\n\n- **Replication** keeps **copies of the same data** on several nodes. It gives **high availability** (failover), **read scaling** (replicas serve reads), and backups/DR. It does **not** scale writes or storage, because every node stores and applies everything.\n- **Sharding** **splits data into disjoint parts** across nodes. It scales **writes and storage**. By itself it *reduces* availability: with N shards, the chance that some shard is down grows with N, and losing one shard loses that slice of data.\n\nSo in production you always **combine them**: each shard is a small replicated cluster (primary plus 1–2 replicas, with Patroni or a similar tool for automatic failover). Sharding gives capacity. Replication gives durability and availability of each part, plus read offloading within the shard.\n\nSummary: replication = copies = HA and reads. Sharding = partitions = writes and size. They are orthogonal and complementary.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "RSHB",
+   "X5 Group"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-sql-sum-per-customer",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Write a query returning each customer's total order amount, then only customers whose total exceeds 5000 (GROUP BY + HAVING).",
+  "code": "-- orders\n-- id     | customer_id | value\n-- 304101 | 22          | 10\n-- 304102 | 21          | 15\n-- 304103 | 22          | 25",
+  "a": "```sql\n-- total per customer\nSELECT customer_id, SUM(value) AS total\nFROM orders\nGROUP BY customer_id\nORDER BY customer_id;\n\n-- users whose total exceeds 5000, with names\nSELECT u.id, u.name, SUM(o.amount) AS total\nFROM users u\nJOIN orders o ON o.user_id = u.id\nGROUP BY u.id, u.name\nHAVING SUM(o.amount) > 5000;\n```\n\nOn the sample data, the first query gives `21 → 15`, `22 → 35`.\n\n- `GROUP BY` collapses rows per customer, and `SUM` aggregates within each group.\n- `HAVING` filters **groups after aggregation**. `WHERE` can't use `SUM`. In Postgres, `HAVING total > 5000` fails because aliases aren't visible there, so repeat the expression.\n- Group by the primary key (`u.id`). Grouping by `name` alone merges namesakes. Postgres allows selecting `u.name` when grouping by the PK `u.id`, but listing both is portable.\n- To include users with no orders (total 0), use `LEFT JOIN` plus `COALESCE(SUM(o.amount), 0)`.\n\nCommon follow-ups: order by total `DESC LIMIT 10`, add `COUNT(*)` and `AVG`, filter by date in `WHERE`. For performance, index `orders(user_id)`, or `(user_id) INCLUDE (amount)` for an index-only scan. (Run on PG18.)",
+  "level": 1,
+  "asked": [
+   "Evrone",
+   "WMX",
+   "Ximilabs"
+  ],
+  "n": 3,
+  "verified": true
+ },
+ {
+  "id": "databases-vacuum",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What do VACUUM and autovacuum do in PostgreSQL, and where do dead tuples come from?\nFollow-up: what is defragmentation, and why is it needed?",
+  "a": "Because of MVCC, every `UPDATE` and `DELETE` leaves **dead tuples**: old row versions no longer visible to any snapshot. Aborted inserts leave them too. Without cleanup, tables and indexes **bloat**, scans slow down, and the 32-bit XID counter eventually wraps around.\n\n**VACUUM**:\n\n- Marks dead tuple space reusable (in the free space map) and removes the matching index entries.\n- Updates the **visibility map**, which is what enables index-only scans.\n- **Freezes** old XIDs to prevent wraparound.\n- Doesn't shrink the file (except truncating empty pages at the end), and doesn't block reads or writes.\n\n`VACUUM ANALYZE` also refreshes planner statistics. **Autovacuum** is the background launcher and workers that run vacuum and analyze automatically, based on thresholds (`autovacuum_vacuum_scale_factor` 0.2 plus a fixed threshold). Tune it per table for big or hot tables.\n\n**Defragmentation**: `VACUUM FULL` or `CLUSTER` rewrites the table compactly and returns space to the OS, but takes an `ACCESS EXCLUSIVE` lock (downtime). Online alternatives are `pg_repack` / `pg_squeeze` and `REINDEX CONCURRENTLY` for indexes.\n\nGotcha: a long-running or idle-in-transaction session, a stale replication slot, or `hot_standby_feedback` holds back the xmin horizon, and vacuum can't remove anything newer.",
+  "level": 2,
+  "asked": [
+   "DCloud",
+   "Data Driven Labs",
+   "X5 Group"
+  ],
+  "n": 3
+ },
+ {
+  "id": "databases-atomic-withdraw",
+  "cat": "databases",
+  "kind": "code",
+  "q": "Code review: withdrawBalance in Go. What's wrong, and is an atomic UPDATE better than SELECT FOR UPDATE?\nCompare (a) `UPDATE ... WHERE balance >= amount RETURNING balance` with (b) `SELECT ... FOR UPDATE`, check in the app, then `UPDATE`, under READ COMMITTED.",
+  "code": "func withdrawBalance(db *sql.DB, userID int32, amount float32) (float32, error) {\n\ttx.BeginTransaction(\"ISOLATION LEVEL READ COMMITED\")\n\terr = tx.QueryRow(`SELECT balance FROM users WHERE user_id = $1 FOR UPDATE`, userID).Scan(&oldBalance)\n\n\tif oldBalance < amount {\n\t\treturn oldBalance, fmt.Errorf(\"insufficient funds\")\n\t}\n\n\t_, err = tx.Exec(`UPDATE users SET balance = balance - $1 WHERE user_id = $2`, amount, userID)\n\tvar newBalance float32\n\terr = tx.QueryRow(`SELECT balance FROM users WHERE user_id = $1`, userID).Scan(&newBalance)\n\n\treturn newBalance, nil\n}",
+  "a": "Both approaches are **race-free under Read Committed**, but the single atomic `UPDATE` is simpler and faster. The reviewed code has real bugs, though:\n\n- It **never commits**, and on the early return it never rolls back. The row lock and connection are held until the pool reclaims them.\n- **Every `err` is ignored**: `QueryRow`, `Exec`, and the second `Scan`.\n- It uses `float32`/`REAL` for money. Use integer minor units (kopecks) or `numeric`.\n- It uses `balance > amount` where `>=` is meant, a typo'd isolation level (`COMMITED`), no `context`, and an extra `SELECT` round-trip.\n\nApproach (b), `FOR UPDATE` then check then update, is correct because the row lock serializes concurrent withdrawals. It costs 3 round-trips and holds the lock across app logic. Approach (a) folds the check into the `UPDATE`. The row lock is taken implicitly, and after a concurrent commit Read Committed re-evaluates the `WHERE` against the new row version, so it can't overdraw.\n\n```go\nvar ErrInsufficientFunds = errors.New(\"insufficient funds\")\n\nfunc Withdraw(ctx context.Context, db *sql.DB, userID, amount int64) (int64, error) {\n\tvar newBalance int64\n\terr := db.QueryRowContext(ctx,\n\t\t`UPDATE users SET balance = balance - $2\n\t\t WHERE user_id = $1 AND balance >= $2\n\t\t RETURNING balance`, userID, amount).Scan(&newBalance)\n\tif errors.Is(err, sql.ErrNoRows) {\n\t\treturn 0, ErrInsufficientFunds\n\t}\n\treturn newBalance, err\n}\n```\n\nThe code was checked with `go vet`, and the SQL was run on PG18: 50 − 30 → `20`, then the second call returns 0 rows.",
+  "level": 2,
+  "asked": [
+   "Lamoda"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "databases-bulk-update-large-table",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "You must update 10M of 1B rows in a busy production table (e.g. `published = false` for 2025). How do you do it without hurting the DB?\nFollow-up: why are huge single batches bad in Postgres (think WAL)?",
+  "a": "Don't run one giant `UPDATE`. Do it in **small, committed batches**, walking by key:\n\n```sql\nUPDATE posts SET published = false\nWHERE id IN (\n    SELECT id FROM posts\n    WHERE created_at >= '2025-01-01' AND created_at < '2026-01-01'\n      AND published AND id > $last_id\n    ORDER BY id LIMIT 5000\n)\nRETURNING id;\n```\n\nRun this from a script or job: keep `$last_id` as a checkpoint, sleep or throttle between batches, and watch replication lag, CPU and locks. Make it **idempotent and resumable**, with a kill switch. An index on the filter (or a temporary partial one) helps.\n\nWhy a single huge batch is bad:\n\n- It **locks 10M rows** for the whole duration. Concurrent updates wait, and `statement_timeout`s fire.\n- It rewrites 10M tuples (MVCC), producing massive **WAL**. That means disk spikes, checkpoints, and **replica lag**, possibly exhausting `max_wal_size` or a slot.\n- It creates **10M dead tuples** at once. Bloat and a heavy vacuum follow, and a long transaction blocks vacuum for the whole DB meanwhile.\n- A rollback is all or nothing. Hours of work are lost on one error.\n\nAlternatives: on a new column, make old-row behavior the default and fix lazily. For really huge changes, build a new table and swap it in, or detach, rewrite and reattach a partition.",
+  "level": 3,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-clickhouse-batch-inserts",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you use ClickHouse from a Go service, and why must inserts be batched?\nFollow-ups: what is its architectural role, how is it partitioned, and what happens with single-row inserts?",
+  "a": "ClickHouse is the **analytics sink**: events, logs and metrics flow in (often via Kafka) and dashboards or reports query them.\n\n**Why batch:** every `INSERT` creates a new immutable **part** on disk for the MergeTree table. Background merges then combine parts. Thousands of single-row inserts per second create thousands of tiny parts. Merges can't keep up, so you get `Too many parts` errors, high CPU and I/O, and throttled inserts. Rule of thumb: insert batches of 10k–1M rows, about 1 insert per second per table.\n\nOptions:\n\n- Buffer in the app: collect rows and flush on size or time. With `clickhouse-go` v2, use `conn.PrepareBatch` → `batch.Append` → `batch.Send`.\n- `async_insert=1`: the server buffers small inserts for you.\n- The Kafka engine, or a Buffer table.\n\n**Partitioning:** `PARTITION BY toYYYYMM(ts)` is for data management (drop or TTL old months), not for speed. Speed comes from `ORDER BY` (the sparse primary index), so put the columns you filter on most first.\n\nGotcha: keep partitions coarse. Too many partitions also means too many parts.",
+  "level": 2,
+  "n": 2,
+  "asked": []
+ },
+ {
+  "id": "databases-code-review-status-history",
+  "cat": "databases",
+  "kind": "code",
+  "q": "Code review: a Go DB layer that saves order status history with partitioning. What's wrong?\nFollow-ups: how would you split repo and service, which structs and interfaces would you add, and how do you cancel a long-running query?",
+  "code": "package domain\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n)\n\ntype OrderStatusHistoryStore struct{}\n\nfunc NewStore() OrderStatusHistoryStore {\n\treturn OrderStatusHistoryStore{}\n}\n\nfunc (s OrderStatusHistoryStore) saveOrderStatusHistory(orderId, status, partition string) {\n\tdb, err := sql.Open(\"postgres\", \"user=foo dbname=bar sslmode=disable\")\n\tif err != nil {\n\t\tfmt.Errorf(\"%v\", err)\n\t}\n\n\tquery := fmt.Sprintf(\n\t\t\"insert into orderstatushistory (order_id, status, partition, inserted_at) values (%v, %v, %v, %v)\",\n\t\torderId, partition, status, time.Now())\n\n\tgo db.Exec(query)\n}",
+  "a": "The problems:\n\n- **`sql.Open` on every call**: it creates a new pool each time and never closes it, which leaks connections. Inject one shared `*sql.DB` (or `pgxpool.Pool`) created at startup.\n- **SQL built with `fmt.Sprintf`**: that's **SQL injection**, and the strings aren't even quoted, so the SQL is invalid. Use placeholders (`$1, $2, $3`).\n- **Arguments in the wrong order**: `orderId, partition, status` are passed for the columns `order_id, status, partition`.\n- **The error is discarded**: `fmt.Errorf` creates an error and throws it away, so execution continues with a nil `db`. Return errors instead.\n- **`go db.Exec(query)`**: fire-and-forget. The error is lost, there's no backpressure, the write may never happen before shutdown, and the caller thinks it succeeded.\n- **No `context.Context`**, so there's no cancellation or timeout.\n- The method is unexported and returns nothing. `time` isn't imported, so it doesn't compile. `inserted_at` should come from the DB (`DEFAULT now()`), or be a proper `time.Time` param.\n- **Partitioning isn't the app's job**: use a declaratively partitioned table (`PARTITION BY RANGE (changed_at)`), and Postgres routes rows itself. Don't pass a \"partition\" string.\n\nStructure:\n\n- A `Repo` with an injected DB. A service layer defines the **interface it needs** (consumer-side, for mocks and tests), plus a domain struct `StatusChange`.\n- Configuration is loaded from config or the environment.\n\nTo cancel a long query you no longer need, pass a **`context.WithTimeout`/`WithCancel`** to `QueryContext`/`ExecContext`. The driver sends a cancel request to Postgres. You can also set `statement_timeout` server-side.\n\n```go\ntype StatusChange struct {\n\tOrderID   int64\n\tStatus    string\n\tChangedAt time.Time\n}\n\ntype Repo struct{ db *sql.DB }\n\nfunc NewRepo(db *sql.DB) *Repo { return &Repo{db: db} }\n\nfunc (r *Repo) SaveStatus(ctx context.Context, c StatusChange) error {\n\tconst q = `INSERT INTO order_status_history (order_id, status, changed_at)\n\t           VALUES ($1, $2, $3)`\n\tif _, err := r.db.ExecContext(ctx, q, c.OrderID, c.Status, c.ChangedAt); err != nil {\n\t\treturn fmt.Errorf(\"save status for order %d: %w\", c.OrderID, err)\n\t}\n\treturn nil\n}\n```\n\n(Checked with `go vet`.)",
+  "level": 2,
+  "asked": [
+   "Plata"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "databases-columnar-clickhouse-vs-postgres",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is the key property of a columnar database, and why does it compress so well?\nFollow-up: compare Postgres and ClickHouse. Which would you choose, and when?",
+  "a": "A columnar DB stores **each column separately on disk**. An analytic query reads only the columns it touches and processes them in vectorized batches.\n\nCompression works so well because a column holds values of **one type that are often similar or sorted**. Codecs like LZ4/ZSTD, plus Delta, DoubleDelta, Gorilla, dictionary (`LowCardinality`) and RLE, often give 10x or more, which means less I/O.\n\n**Postgres vs ClickHouse:**\n\n- Postgres (row store, OLTP): point reads/writes, updates, ACID transactions, constraints, joins. Weak at scanning billions of rows.\n- ClickHouse (columnar, OLAP): aggregations over huge tables in sub-seconds, great compression, linear scaling with shards. Weak at single-row updates/deletes (mutations are async and heavy), point lookups, high-QPS small inserts and multi-statement transactions. Joins are limited compared to Postgres.\n\nChoose by workload. Source-of-truth business data goes in Postgres. Events, logs, metrics and analytics go in ClickHouse, often fed from Postgres or Kafka.",
+  "level": 2,
+  "asked": [
+   "Plata"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-index-gender-age",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "A users table has gender and age columns. How would you index a query like \"all men aged 18 and older\"?",
+  "a": "Use a composite B-tree with the **equality column first and the range column second**:\n\n```sql\nCREATE INDEX users_gender_age_idx ON users (gender, age);\nSELECT * FROM users WHERE gender = 'm' AND age >= 18;\n```\n\nThe index seeks to `gender='m', age=18` and scans forward. With `(age, gender)` the reverse happens: the range on `age` comes first, so `gender` can only be filtered while walking all ages 18 and up.\n\nNuances a senior should raise:\n\n- **Selectivity**: \"men ≥ 18\" may be around 40% of the table. At that ratio the planner will likely choose a **seq scan** anyway, because random heap reads cost more than a sequential read. An index pays off when the result is small, or when there's a `LIMIT` / `ORDER BY age`.\n- A low-cardinality `gender` column alone is a poor index. As a leading column it's fine because it's used for equality.\n- If queries always target one gender, a **partial index** is smaller: `CREATE INDEX ON users (age) WHERE gender = 'm'`.\n- If you only need a few columns, add `INCLUDE (...)` for an index-only scan.",
+  "level": 2,
+  "asked": [
+   "A7",
+   "VK"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-index-not-used",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Why might an existing index not be used by the query?\nFollow-up: how do stale statistics show up in EXPLAIN, and how do you fix them?",
+  "a": "Common reasons:\n\n- **Low selectivity**: the predicate matches a large share of rows, so a seq scan is genuinely cheaper.\n- **Tiny table**: it fits in a few pages.\n- **Predicate doesn't match the index**: a function on the column (`lower(email)`, `created_at::date`), an implicit type cast or a different collation, a leading-wildcard `LIKE`, or `OR` across columns.\n- **Composite order**: the query lacks the leftmost column (PG18 skip scan helps only when the leading columns have few distinct values).\n- **Operator not supported**: range queries on a hash index, or `jsonb` queries with the wrong opclass.\n- **Stale or bad statistics**: estimates are far off.\n- A generic plan for prepared statements, or planner settings (`random_page_cost` tuned for HDD on SSD).\n- An index that is invalid after a failed `CREATE INDEX CONCURRENTLY`.\n\nStale stats show up in `EXPLAIN ANALYZE` as a big gap between **estimated `rows=`** and **actual `rows=`** (10x or more). Fixes:\n\n- Run `ANALYZE table` and check autovacuum/autoanalyze thresholds.\n- Raise `ALTER TABLE ... ALTER COLUMN ... SET STATISTICS 1000` for skewed columns.\n- Add `CREATE STATISTICS` (extended stats) for correlated columns.\n- Rebuild bloated indexes with `REINDEX CONCURRENTLY`.",
+  "level": 2,
+  "asked": [
+   "Crtex"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-normalization-vs-denormalization",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "When do you normalize and when do you denormalize?\nFollow-up: where do you win on storage, and where on speed?",
+  "a": "**Normalize** (to 3NF) for OLTP sources of truth. Each fact lives in one place, which means **less storage**, no update anomalies, simpler integrity via FKs and constraints, and cheaper writes (update one row).\n\n**Denormalize** deliberately to make **reads faster**. Duplicate or precompute data so hot queries avoid joins and aggregations: `orders.customer_name`, a `posts.comments_count` counter, materialized views, read models in CQRS, wide tables in ClickHouse, JSON documents. You win on **read speed and simplicity**, and you pay in **storage and write complexity**: every duplicate must be kept in sync by triggers, app code or async events, and it can drift.\n\nRule of thumb:\n\n- Start normalized, and measure.\n- Denormalize specific hot paths that `EXPLAIN` shows are join- or aggregation-bound and that can't be solved with indexes or caching.\n- Keep one authoritative source, and treat denormalized copies as derived and rebuildable.\n\nAnalytics (OLAP) is denormalized by design: star schemas and flat fact tables.",
+  "level": 1,
+  "asked": [
+   "ViTech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-oltp-vs-olap",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is the difference between OLTP and OLAP systems?",
+  "a": "**OLTP** (online transaction processing) serves the application: many short transactions that touch a few rows by key (create an order, update a balance). It needs low latency, high concurrency, ACID and normalized data. Examples: Postgres, MySQL.\n\n**OLAP** (online analytical processing) serves analytics: few heavy queries that scan and aggregate millions or billions of rows over a few columns (revenue by region by day). It needs scan throughput, compression and parallelism, and it tolerates batch loading and denormalized star/snowflake schemas. Examples: ClickHouse, BigQuery, Snowflake.\n\nStorage follows the workload:\n\n- OLTP is **row-oriented**, so a whole row sits together and a point lookup is cheap.\n- OLAP is **column-oriented**, so a query reads only the needed columns, which compress very well.\n\nTypical architecture: OLTP DB → CDC/ETL (Debezium, Kafka) → OLAP DB.\n\nGotcha: don't run heavy analytics on the primary OLTP DB. Long queries hold snapshots, block vacuum and compete for I/O. Use a replica at minimum, or a proper OLAP store.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-partitioning",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "When should you partition a table, and why choose partitioning over sharding?\nFollow-up: what if a table no longer fits on one disk?",
+  "a": "**Partitioning** splits one logical table into child tables **on the same server**: `PARTITION BY RANGE (created_at)`, `LIST (region)` or `HASH (user_id)`.\n\nApply it when a table is very large (roughly 100 GB and up, or billions of rows) and:\n\n- Queries almost always filter on the partition key. **Partition pruning** then scans only the relevant partitions, and indexes per partition are smaller.\n- You have **retention or archival** needs. `DROP`/`DETACH PARTITION` instead of a massive `DELETE` means no bloat or WAL storm.\n- Vacuum and index maintenance on one huge table are too slow.\n- Different storage is wanted per partition: old partitions in a cheaper **tablespace** on another disk, and that is also the answer when **one disk is full**.\n\nWhy partitioning before sharding: it is transparent to the app, and it keeps **ACID transactions, joins, FKs and a single backup** intact. Operations stay simple. Sharding adds routing, cross-shard queries, distributed transactions and rebalancing, so it's warranted only when **one machine's CPU, RAM or write throughput** is exhausted, which partitioning doesn't fix.\n\nGotchas: queries without the key hit all partitions. Unique constraints must include the partition key. Too many partitions (thousands) slow planning. Automate partition creation (pg_partman).",
+  "level": 2,
+  "asked": [
+   "DCloud",
+   "Magnit"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-postgres-advantages",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What do you know about PostgreSQL, and what advantages does it have over other databases?",
+  "a": "PostgreSQL is an open-source, object-relational, ACID database. It's the default choice for most OLTP backends.\n\nStrengths:\n\n- **Correctness**: strict SQL-standard compliance, **transactional DDL** (migrations roll back cleanly), rich constraints (`CHECK`, exclusion constraints, deferrable FKs), and true `SERIALIZABLE` (SSI).\n- **MVCC**: readers don't block writers.\n- **Rich types and indexes**: `jsonb` with GIN, arrays, ranges, `uuid`, full-text search, and B-tree/Hash/GiST/SP-GiST/GIN/BRIN plus partial, expression and covering indexes.\n- **Powerful SQL**: CTEs (including recursive), window functions, `LATERAL`, `MERGE`, `RETURNING`, `ON CONFLICT` upserts, `SKIP LOCKED` queues.\n- **Extensibility**: PostGIS, pg_trgm, TimescaleDB, Citus, pgvector, pg_partman, custom types, and functions in many languages.\n- **Replication**: physical streaming plus logical replication/CDC. There's a huge ecosystem (Patroni, PgBouncer, pgBackRest) and a permissive license.\n\nWeaknesses to mention:\n\n- Process-per-connection (needs a pooler).\n- MVCC bloat and vacuum tuning.\n- No built-in sharding.\n- Update-heavy workloads write amplification.\n- Major-version upgrades take effort.",
+  "level": 1,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-redis-ttl-eviction",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How does key expiration and eviction work in Redis, and how do you choose a TTL?",
+  "a": "**Expiration (TTL):** `SET k v EX 60`, `EXPIRE`, `PEXPIRE`. Redis removes expired keys in two ways:\n\n- **Lazily**: on access, an expired key is deleted and treated as missing.\n- **Actively**: a background cycle samples keys that have a TTL and deletes expired ones. It repeats while many sampled keys are expired.\n\n**Eviction** happens when `maxmemory` is reached, according to `maxmemory-policy`:\n\n- `noeviction` (the default): writes fail.\n- `allkeys-lru` / `allkeys-lfu`: the usual choice for a pure cache.\n- `volatile-lru` / `volatile-lfu` / `volatile-ttl` / `volatile-random`: only keys with a TTL.\n- `allkeys-random`.\n\nLRU/LFU are approximated by sampling (`maxmemory-samples`).\n\n**Choosing a TTL:** base it on how stale the data may be for the business (prices: seconds; a user profile: minutes) and on the invalidation strategy. If you invalidate on write, the TTL is only a safety net. Add **jitter** to TTLs to avoid mass expiry, which causes a cache stampede. For hot keys, use single-flight or early refresh.\n\nGotcha: a key with no TTL under a `volatile-*` policy is never evicted.",
+  "level": 2,
+  "asked": [
+   "Velme"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-redis-vs-postgres",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Why use Redis instead of Postgres for temporary data shared between services, and why is Redis faster?\nFollow-up: why use Redis at all if you can shard the database?",
+  "a": "For short-lived shared data (sessions, rate-limit counters, locks, caches, idempotency keys) I'd use **Redis**. It keeps data in RAM, supports native TTL, and gives sub-millisecond latency.\n\nWhy Redis is faster:\n\n- **In-memory**: no disk page reads on the hot path. Persistence (RDB/AOF) is asynchronous.\n- **Simple data structures**, with O(1) or O(log n) operations and no query planner, MVCC or WAL fsync per commit.\n- A **single-threaded event loop** per shard, with no lock contention. I/O threads handle networking.\n- A lightweight protocol (RESP) plus pipelining.\n\nPostgres, by contrast, pays for durability: WAL fsync, MVCC bloat from churny temporary rows, vacuum, and connection overhead.\n\nWhy Redis even when you can shard: sharding spreads load, but each query still costs a disk-backed, transactional round-trip. A cache in front absorbs hot reads cheaply and protects the DB from spikes. Sharding also adds big operational complexity.\n\nGotcha: Redis is not a source of truth by default. Data can be lost on failover, and async replication means it isn't strongly consistent.",
+  "level": 1,
+  "asked": [
+   "VK"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-schema-projects-employees",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Design a projects/employees schema with many-to-many assignments, then count active employees per project.\nProjects are open/closed; employees have a salary and can be fired; some are on several projects, some on none.",
+  "code": "create table employees (\n    uuid    varchar(32) primary key,\n    name    varchar(200) not null,\n    salary  integer,\n    is_empl boolean not null default(false)\n);\n\ncreate table project (\n    uuid    varchar(32) primary key,\n    title   varchar(100) not null,\n    is_open boolean not null\n);\n\ncreate table user_projects (\n    user_uuid    varchar(32) not null,\n    project_uuid varchar(32) not null,\n    primary key(user_uuid, project_uuid)\n);\n\nselect p.title, count(e.uuid)\nfrom user_projects up\nright join project p on p.uuid = up.project_uuid\njoin employees e on up.user_uuid = e.uuid\nwhere e.is_empl = true\ngroup by p.title;",
+  "a": "```sql\nCREATE TABLE employee (\n    id       bigserial PRIMARY KEY,\n    name     text NOT NULL,\n    salary   integer NOT NULL CHECK (salary >= 0),\n    fired_at timestamptz\n);\nCREATE TABLE project (\n    id      bigserial PRIMARY KEY,\n    title   text NOT NULL,\n    is_open boolean NOT NULL DEFAULT true\n);\nCREATE TABLE project_member (\n    project_id  bigint NOT NULL REFERENCES project(id),\n    employee_id bigint NOT NULL REFERENCES employee(id),\n    PRIMARY KEY (project_id, employee_id)\n);\n\nSELECT p.title, COUNT(e.id) AS workers\nFROM project p\nLEFT JOIN project_member pm ON pm.project_id = p.id\nLEFT JOIN employee e ON e.id = pm.employee_id AND e.fired_at IS NULL\nGROUP BY p.id, p.title;\n```\n\nThis covers all the cases:\n\n- Employees on several projects: several rows in the join table.\n- Unassigned employees: no rows.\n- Fired employees: `fired_at` is set, and the history is kept.\n\nTrap in the version written live (`RIGHT JOIN project ... JOIN employees ... WHERE e.is_empl`): the inner join and the `WHERE` on the employee side **drop projects that have no active workers**. Verified on PG18: the correct query returns `p1 2, p2 0, p3 0`, while the interview query returns only `p1 2`. Put the \"active\" condition in the `ON` of a LEFT JOIN, count `e.id` (not `*`), and group by `p.id`, since titles may repeat.\n\nAlso: prefer `bigint` or `uuid` over `varchar(32)` ids, and index `project_member(employee_id)`.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "InDrive"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "databases-sql-injection",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is SQL injection, and how do you protect against it in Go?",
+  "a": "SQL injection happens when **untrusted input is concatenated into SQL text**, so the input changes the query's structure. For example, `fmt.Sprintf(\"SELECT * FROM users WHERE name = '%s'\", name)` with `name = \"' OR 1=1 --\"` dumps every user. `'; DROP TABLE users; --` works where multi-statements are allowed.\n\nProtection:\n\n- **Parameterized queries / placeholders**, always: `db.QueryContext(ctx, \"SELECT ... WHERE name = $1\", name)`. The value is sent separately from the SQL (extended protocol), so it can never be parsed as SQL.\n- **Identifiers** (column or table names for sorting and filters) can't be parameters. **Whitelist** them (`map[string]string{\"date\": \"created_at\"}`) or quote them with `pgx.Identifier{...}.Sanitize()`.\n- Use sqlc or a query builder instead of string building. Watch for `IN (...)`: use `= ANY($1)` with a slice.\n- Run the app DB user with **least privilege** (no DDL, no superuser).\n- Linters: `gosec` (G201/G202 flag string-formatted SQL).\n\nGotcha: escaping by hand, or \"sanitizing\" with regexes, is not a defense. ORMs are safe only until you use their raw-SQL escape hatches with concatenation.",
+  "level": 1,
+  "asked": [
+   "VK"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-task-queue-skip-locked",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "A table holds a task queue polled by multiple workers. How do you ensure two workers never take the same task?\nFollow-up: how would you do it without row locks?",
+  "a": "The standard answer is **`FOR UPDATE SKIP LOCKED`**. Each worker atomically claims a batch of rows that nobody else holds:\n\n```sql\nUPDATE tasks SET status = 'running', locked_until = now() + interval '5 min', attempts = attempts + 1\nWHERE id IN (\n    SELECT id FROM tasks\n    WHERE status = 'pending' AND run_at <= now()\n    ORDER BY id\n    LIMIT 10\n    FOR UPDATE SKIP LOCKED\n)\nRETURNING id, payload;\n```\n\nLocked rows are skipped instead of waited on, so workers don't block each other. Commit right away, and do the work *outside* the transaction. The `locked_until` lease lets tasks from crashed workers be re-claimed. Add a partial index `WHERE status = 'pending'`.\n\nWithout locks, use **optimistic claiming** (compare-and-set):\n\n```sql\nUPDATE tasks SET status = 'running', owner = $1, version = version + 1\nWHERE id = $2 AND status = 'pending' AND version = $3;\n```\n\nIf 0 rows are affected, someone else won, so pick another task. It's contention-prone with many workers on the same head rows. Randomize or shard the pick (`id % N = worker`) to reduce collisions.\n\nEither way, handlers must be **idempotent**, because at-least-once delivery is unavoidable. At higher scale, use a real broker.",
+  "level": 2,
+  "asked": [
+   "Data Driven Labs",
+   "Ozon"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-truncate-vs-delete",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is the difference between DELETE and TRUNCATE? How do you remove all rows from a huge table without dropping it?\nFollow-up: how many rows does TRUNCATE write to the transaction log?",
+  "a": "**`TRUNCATE table`** is the way to empty a big table. It drops the table's data files and creates new empty ones, so it's O(1) regardless of size. The WAL gets a few records about the file swap, **not one record per row**.\n\nDifferences from `DELETE`:\n\n- `DELETE` removes row by row: it marks each tuple dead (`xmax`), writes WAL per row, fires row triggers, and checks FKs per row. The space is reclaimed only after VACUUM, so the table and indexes stay bloated until then.\n- `TRUNCATE` takes an **`ACCESS EXCLUSIVE`** lock, which blocks even reads for its short duration. It can't have a `WHERE`, doesn't fire `ON DELETE` triggers, and fails if other tables reference it via FK unless you use `CASCADE`. `RESTART IDENTITY` resets sequences.\n- Both are **transactional in Postgres**: `TRUNCATE` can be rolled back (unlike in MySQL/Oracle). It is not MVCC-safe, though: a concurrent Repeatable Read transaction may see the table as empty.\n\nIf you can't take the exclusive lock, delete in batches (`DELETE ... WHERE id IN (SELECT ... LIMIT 10000)`) and let autovacuum keep up. For recurring cleanup, use partitions and `DROP`/`DETACH PARTITION`.",
+  "level": 1,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-uuid-v7-vs-v4",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is the difference between UUID v4 and UUID v7, and why prefer v7 for primary keys?",
+  "a": "- **UUIDv4**: 122 random bits. It has no order.\n- **UUIDv7** (RFC 9562, 2024): the first 48 bits are a **Unix timestamp in milliseconds**, and the rest is random, plus a counter for monotonicity within a millisecond. That makes it **time-ordered**, and still globally unique and generatable anywhere.\n\nWhy v7 is better as a PK:\n\n- New keys land at the **right edge of the B-tree**, like `bigint` identity. You get fewer page splits, a hot, cached working set, a smaller index and less WAL. Random v4 keys touch random pages across a huge index. That hurts badly once the index exceeds RAM, and even more in MySQL, whose clustered index is the table itself.\n- Natural chronological sorting (`ORDER BY id` is roughly creation order), and it's usable for keyset pagination and for partitioning by time.\n\nGeneration: `github.com/google/uuid` has `uuid.NewV7()`. PG18 adds a built-in `uuidv7()`.\n\nWhen v4 is still preferable: v7 **leaks the creation time** and is somewhat guessable, so use v4 for public tokens and anything where the timestamp is sensitive. Don't treat v7 order as strict across machines (clock skew).",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-wal",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is the Write-Ahead Log (WAL) and what is it for?\nFollow-ups: can you tune its detail level or force a flush? Can WAL be disabled, and when?",
+  "a": "The **WAL** is an append-only log of every change. The rule is: *log first, then data*. At `COMMIT`, the WAL records are flushed (fsync) to disk. Modified data pages stay in memory and are written later by the checkpointer and background writer. After a crash, Postgres replays WAL from the last checkpoint.\n\nIt gives you:\n\n- **Durability and atomicity** with cheap sequential writes instead of random page writes.\n- **Replication**: streaming or logical replicas consume WAL.\n- **PITR** (base backup plus archived WAL) and CDC (logical decoding for Debezium).\n\nKnobs:\n\n- `wal_level` = `minimal` / `replica` (the default) / `logical`, controlling how much detail is logged.\n- `synchronous_commit` (`on`/`off`/`remote_apply`...). `off` returns before the fsync and risks losing the last ~600 ms, but never causes corruption.\n- `wal_compression`, `full_page_writes`, `max_wal_size`, `checkpoint_timeout`.\n- `CHECKPOINT` forces dirty pages to disk. `pg_switch_wal()` closes the current segment.\n\n\"Disabling\" WAL: **`UNLOGGED` tables** skip WAL. They are fast, but they are **truncated after a crash** and not replicated, which suits staging data and caches. `wal_level=minimal` skips WAL for bulk loads into tables created in the same transaction. `fsync=off` is only for throwaway test DBs.",
+  "level": 2,
+  "asked": [
+   "WMX",
+   "X5 Group"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-write-heavy-scaling",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "A Postgres table gets a huge write load and it is too big to simply drop indexes. What do you do, and what are the options besides sharding?",
+  "a": "First find what makes writes expensive: `pg_stat_statements`, wait events, WAL volume, checkpoint stats, lock waits.\n\nOptions before sharding:\n\n- **Drop unused or duplicate indexes** (`idx_scan = 0`). Keep the useful ones, but make them partial or narrower. This enables **HOT updates**: don't index frequently updated columns, and set `fillfactor` below 100.\n- **Batch writes**: multi-row `INSERT`, `COPY`, and fewer commits. Or `synchronous_commit = off` for data that can tolerate losing the last few ms.\n- **Shorten transactions** and avoid hot-row contention. Split counters, or accumulate in Redis/Kafka and flush periodically.\n- **Buffer writes asynchronously**: queue into Kafka and have consumers write in batches.\n- **Partition** by time or key: smaller indexes, cheap retention via `DROP PARTITION`, parallel vacuum.\n- Tune WAL/checkpoints (`max_wal_size`, `checkpoint_timeout`), autovacuum aggressiveness, faster disks, and vertical scaling.\n- **Move data to a better store**: append-only events or logs to ClickHouse or Cassandra, ephemeral state to Redis.\n- **CQRS**: the write model stays lean, and read models are built asynchronously.\n\nThen shard horizontally (Citus, or app-level) when a single primary truly can't keep up.\n\nReplicas don't help writes: every replica replays every write.",
+  "level": 2,
+  "asked": [
+   "Crtex",
+   "Plata"
+  ],
+  "n": 2
+ },
+ {
+  "id": "databases-aggregates-filter",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Name common aggregate functions. What does the SQL `FILTER` clause do?",
+  "a": "Common aggregates:\n\n- `count(*)` (all rows) vs `count(col)` (non-NULL values), and `count(DISTINCT col)`.\n- `sum`, `avg`, `min`, `max`.\n- `string_agg(col, ', ')`, `array_agg`, `json_agg` / `jsonb_object_agg`.\n- `bool_and` / `bool_or`, `percentile_cont(0.95) WITHIN GROUP (ORDER BY x)`, `mode()`, and statistical ones (`stddev`, `corr`).\n\nAggregates ignore `NULL`s, except `count(*)`. `sum` over zero rows is `NULL`, not 0, so wrap it in `coalesce(sum(x), 0)`.\n\n**`FILTER (WHERE ...)`** restricts the rows seen by *one* aggregate. It lets you compute several conditional aggregates in a single pass:\n\n```sql\nSELECT\n    date_trunc('day', created_at) AS day,\n    count(*)                                  AS all_orders,\n    count(*) FILTER (WHERE status = 'paid')   AS paid,\n    sum(amount) FILTER (WHERE status = 'paid') AS paid_amount\nFROM orders\nGROUP BY 1;\n```\n\nIt's the standard, cleaner equivalent of `sum(CASE WHEN status = 'paid' THEN amount END)`. Postgres supports it, and it also works with window aggregates.",
+  "level": 1,
+  "asked": [
+   "RealIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-code-review-transfer",
+  "cat": "databases",
+  "kind": "code",
+  "q": "Code review: a Go payment-transfer service. Find the problems with transactions, locking, the outbox, errors and validation.",
+  "code": "package payer\n\ntype account struct {\n\tid      uuid.UUID\n\tname    string\n\tbalance int\n}\n\nvar (\n\tErrFromAccNotFound = err\n)\n\n// implementation is hidden (sqlx-like)\ntype AccountRepository interface {\n\tBeginTx() (AccountRepository, error)\n\tFind(id uuid.UUID) (*account, error)\n\tSave(acc *account) error\n\tSavePayment(t *payment) error\n\tFindPayments(accId uuid.UUID) ([]payment, error)\n\tCommit() error\n\tRollback() error\n}\n\ntype TxAccountRepository interface {\n}\n\n// implementation sends to some broker, but could also be an http post\ntype EventSender interface {\n\tSend(event interface{}) error\n}\n\ntype payment struct {\n\tfromId uuid.UUID\n\ttoId   uuid.UUID\n\tamount int // in kopecks\n\tat     time.Time\n}\n\ntype Account_Service struct {\n\trepository  AccountRepository\n\teventSender EventSender\n}\n\n// called from the rest controller\nfunc (s Account_Service) CreatePayment(ctx context.Context, fromId uuid.UUID, toId uuid.UUID, amount int) error {\n\ttx, err := s.repository.BeginTx(ctx)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer tx.Rollback()\n\n\tfromAcc, err := tx.Find(ctx, fromId)\n\tif err != nil {\n\t\ttx.Rollback()\n\t\treturn errNotFound\n\t}\n\n\ttoAcc, err := tx.Find(ctx, toId)\n\tif err != nil {\n\t\ttx.Rollback()\n\t\treturn err\n\t}\n\n\tif fromAcc.Balance < amount {\n\t\ttx.Rollback()\n\t\treturn errors.New(\"insufficient\")\n\t}\n\n\tfromAcc.Balance -= amount\n\ttoAcc.Balance += amount\n\n\tif err := tx.Save(ctx, fromAcc); err != nil {\n\t\ttx.Rollback()\n\t\treturn err\n\t}\n\n\tif err := tx.Save(ctx, toAcc); err != nil {\n\t\ttx.Rollback()\n\t\treturn err\n\t}\n\n\terr = tx.SavePayment(ctx, &payment{\n\t\tfromId: fromId,\n\t\ttoId:   toId,\n\t\tamount: amount,\n\t})\n\tif err != nil {\n\t\ttx.Rollback()\n\t\treturn err\n\t}\n\n\tif err := tx.SendOutbox(ctx, &payment{\n\t\tfromId: fromId,\n\t\ttoId:   toId,\n\t\tamount: amount,\n\t\tat:     time.Now().UTC(),\n\t}); err != nil {\n\t\ttx.Rollback()\n\t\treturn err\n\t}\n\n\treturn tx.Commit()\n}\n\n// called from the rest controller\nfunc (s *Account_Service) get_payments(ctx context.Context, fromId uuid.UUID, limit, offset int) ([]payment, error) {\n\tpayments, err := s.repository.FindPayments(ctx, fromId, limit, offset)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\treturn payments, nil\n}",
+  "a": "The problems:\n\n- **Race / lost update**: it reads balances with plain `Find`, checks and modifies them in Go, and then `Save`s absolute values. Two concurrent transfers from the same account both pass the check, which means a double spend. Fix: lock the rows (`SELECT ... FOR UPDATE`) or use atomic `balance = balance - $x WHERE balance >= $x`.\n- **Deadlocks**: A→B and B→A lock in opposite orders. Lock both rows in **one query ordered by id**.\n- **No validation**: `amount <= 0`, `from == to`, and currency or overflow are unchecked. Money is an `int`, so document the minor units.\n- **Error handling**: explicit `tx.Rollback()` calls duplicate the `defer`. The not-found path drops the original error (`errNotFound`, not wrapped, and undefined). Errors are compared by message (`errors.New` inline). Use sentinel errors plus `%w`.\n- **API mismatch**: the interface methods take no `ctx` while the calls pass one. `BeginTx` returns the same repository interface, and there's an empty `TxAccountRepository`. The struct field is `balance`, but the code uses `Balance`. `payment.at` is unset on save.\n- **Outbox**: writing the event in the same transaction is the right idea (vs `EventSender.Send`, which would be a dual write). The payload needs an ID for consumer dedup, and a relay must publish it.\n- **Style/API**: the value receiver is inconsistent with the pointer receiver, `Account_Service`/`get_payments` aren't Go naming, and `FindPayments` uses `OFFSET` pagination (prefer keyset `ORDER BY created_at DESC, id DESC`) with an index on `(from_id, created_at)`.\n\nFixed core (checked with `go vet`; SQL run on PG18):\n\n```go\nfunc (s *Service) CreatePayment(ctx context.Context, fromID, toID string, amount int64) error {\n\tif amount <= 0 || fromID == toID {\n\t\treturn ErrInvalidTransfer\n\t}\n\ttx, err := s.db.BeginTx(ctx, nil)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"begin: %w\", err)\n\t}\n\tdefer tx.Rollback()\n\n\trows, err := tx.QueryContext(ctx,\n\t\t`SELECT id, balance FROM accounts WHERE id IN ($1, $2) ORDER BY id FOR UPDATE`,\n\t\tfromID, toID)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"lock accounts: %w\", err)\n\t}\n\tbalances := make(map[string]int64, 2)\n\tfor rows.Next() {\n\t\tvar id string\n\t\tvar b int64\n\t\tif err := rows.Scan(&id, &b); err != nil {\n\t\t\trows.Close()\n\t\t\treturn err\n\t\t}\n\t\tbalances[id] = b\n\t}\n\tif err := rows.Err(); err != nil {\n\t\treturn err\n\t}\n\trows.Close()\n\n\tfrom, ok := balances[fromID]\n\tif !ok {\n\t\treturn fmt.Errorf(\"from %s: %w\", fromID, ErrAccountNotFound)\n\t}\n\tif _, ok := balances[toID]; !ok {\n\t\treturn fmt.Errorf(\"to %s: %w\", toID, ErrAccountNotFound)\n\t}\n\tif from < amount {\n\t\treturn ErrInsufficientFunds\n\t}\n\tif _, err := tx.ExecContext(ctx,\n\t\t`UPDATE accounts SET balance = balance - $2 WHERE id = $1`, fromID, amount); err != nil {\n\t\treturn err\n\t}\n\tif _, err := tx.ExecContext(ctx,\n\t\t`UPDATE accounts SET balance = balance + $2 WHERE id = $1`, toID, amount); err != nil {\n\t\treturn err\n\t}\n\tvar paymentID string\n\tif err := tx.QueryRowContext(ctx,\n\t\t`INSERT INTO payments (from_id, to_id, amount, created_at)\n\t\t VALUES ($1, $2, $3, now()) RETURNING id`, fromID, toID, amount).Scan(&paymentID); err != nil {\n\t\treturn err\n\t}\n\tif _, err := tx.ExecContext(ctx,\n\t\t`INSERT INTO outbox (topic, key, payload) VALUES ('payments', $1,\n\t\t json_build_object('id', $1::text, 'from', $2::text, 'to', $3::text, 'amount', $4::bigint))`,\n\t\tpaymentID, fromID, toID, amount); err != nil {\n\t\treturn err\n\t}\n\treturn tx.Commit()\n}\n```",
+  "level": 3,
+  "asked": [
+   "Tochka Bank"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-connection-pooler",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What intermediate layers can sit in front of a database for connection pooling and load balancing?",
+  "a": "Postgres forks a **process per connection**, so thousands of connections from many service instances waste memory and CPU. You put a proxy or pooler in between:\n\n- **PgBouncer**: a lightweight connection pooler. In **transaction pooling** mode, a server connection is lent out only for the duration of a transaction, so 5,000 client connections can map to about 50 server connections. Caveats: session state (`SET`, advisory locks, `LISTEN`, temp tables) breaks. Server-side prepared statements needed special care before PgBouncer 1.21 added protocol-level support.\n- **Pgpool-II**: pooling plus read/write splitting, load balancing across replicas, and failover.\n- **Odyssey** (Yandex) and **PgCat**: multi-threaded poolers. PgCat adds sharding and routing.\n- **HAProxy** plus **Patroni**: routes to the current primary or to replicas via health checks.\n- Cloud options: RDS Proxy, Cloud SQL Auth Proxy.\n\nIn Go, `*sql.DB` is already an in-process pool. Tune `SetMaxOpenConns`, `SetMaxIdleConns` and `SetConnMaxLifetime` so that instances × max_open stays within the pooler's or DB's limits.",
+  "level": 2,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-consistency-without-transactions",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How can you ensure data consistency if the database doesn't support transactions and several machines write to it?",
+  "a": "Push correctness into **atomic single operations and protocols**:\n\n- **Atomic conditional writes / compare-and-set**: `UPDATE ... WHERE version = $v` (optimistic locking), Redis `WATCH`/`MULTI` or Lua, Mongo `findOneAndUpdate` with a filter, DynamoDB conditional expressions. If the condition fails, re-read and retry.\n- **Design aggregates** so that everything that must change together sits in **one document or row**, which is atomic in almost every store.\n- **Unique constraints / idempotency keys**: dedupe retried requests (`INSERT ... IF NOT EXISTS`, `SETNX`).\n- **Single writer per key**: route all writes for a key to one owner (a Kafka partition by key, an actor, a shard leader). That serializes the writes without locks.\n- **Distributed locks with fencing tokens** (etcd, ZooKeeper, or a lease in Redis). Without fencing, a paused process can still write after its lock expires.\n- **Append-only / event sourcing**: store immutable events and derive state. Concurrent appends don't overwrite each other.\n- **Sagas plus compensation** for multi-entity changes, an **outbox** for side effects, and **reconciliation jobs** that detect and repair invariant violations.\n\nBe explicit about the consistency level you actually guarantee (eventual vs linearizable per key).",
+  "level": 3,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-create-index-concurrently",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you add an index to a large, heavily loaded table without downtime?",
+  "a": "Use **`CREATE INDEX CONCURRENTLY`**:\n\n```sql\nCREATE INDEX CONCURRENTLY orders_user_id_idx ON orders (user_id);\n```\n\nA plain `CREATE INDEX` takes a `SHARE` lock, which **blocks all writes** for the entire build. `CONCURRENTLY` takes only `SHARE UPDATE EXCLUSIVE`, so reads and writes continue. The cost is that it scans the table twice and waits for existing transactions, so it's slower.\n\nGotchas:\n\n- It can't run inside a transaction block. Many migration tools wrap migrations in a transaction, so disable that for this migration (in goose: `-- +goose NO TRANSACTION`).\n- If it fails (deadlock, unique violation), it leaves an **INVALID** index. Check `pg_index.indisvalid`, then `DROP INDEX CONCURRENTLY` and retry.\n- A long-running transaction elsewhere makes it wait indefinitely. Set `lock_timeout` and watch `pg_stat_progress_create_index`.\n- `REINDEX CONCURRENTLY` (PG12+) rebuilds bloated indexes the same way.\n- Partitioned tables: create the index on each partition concurrently, then attach them to a parent index created `ON ONLY`.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "databases-cte",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is a CTE (Common Table Expression), and when do you use one?",
+  "a": "A **CTE** is a named subquery defined with `WITH`, usable in the main query:\n\n```sql\nWITH recent AS (\n    SELECT user_id, sum(amount) AS total\n    FROM orders WHERE created_at > now() - interval '30 days'\n    GROUP BY user_id\n)\nSELECT u.name, r.total FROM users u JOIN recent r ON r.user_id = u.id;\n```\n\nUses:\n\n- **Readability**: break a complex query into named steps.\n- **Recursive queries** (`WITH RECURSIVE`): trees and hierarchies (org charts, category trees), graph walks, generating series.\n- **Data-modifying CTEs**: `WITH moved AS (DELETE ... RETURNING *) INSERT INTO archive SELECT * FROM moved`. This does atomic multi-step changes in one statement.\n- Reusing one subquery several times.\n\nPerformance gotcha: before **PG12**, CTEs were always materialized, acting as an \"optimization fence\" with no predicate pushdown. Since PG12, a non-recursive, side-effect-free CTE referenced once is **inlined**. Control it with `AS MATERIALIZED` / `AS NOT MATERIALIZED`.",
+  "level": 1,
+  "asked": [
+   "Kvando"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-distributed-transactions-nosql",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Two services need a distributed transaction over a NoSQL store. What problems arise, and how do you handle them?\nThe store has no multi-entity transactions.",
+  "a": "Problems:\n\n- **No atomicity across services or entities**: one write succeeds, the other fails, and you get a partial state (money debited, order not created).\n- **Dual-write problem**: writing to the DB *and* publishing an event can't be atomic, so events get lost or phantom events appear.\n- **No isolation**: other readers see intermediate states. Concurrent updates cause lost updates.\n- **Network ambiguity**: after a timeout you don't know whether the other side applied the change, so retries cause duplicates.\n- **2PC/XA** is usually unavailable in NoSQL, and it's blocking and fragile anyway.\n\nHow to handle it:\n\n- **Saga**: a sequence of local transactions, each with a **compensating action** (refund, cancel). Orchestrated (a coordinator state machine) or choreographed (events).\n- **Transactional outbox**: write the entity plus an outbox record atomically (single-document or same-partition atomicity in most NoSQL stores). A relay publishes it, or use CDC / change streams.\n- **Idempotency keys** and dedup on consumers, since delivery is at-least-once.\n- **Optimistic concurrency** (version or CAS, conditional writes like DynamoDB `ConditionExpression`).\n- Semantic locks or pending states (`status = PENDING`), plus reconciliation jobs to detect and fix drift.\n\nAccept **eventual consistency** and design the UX for it.",
+  "level": 3,
+  "asked": [
+   "ZeBrains"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-drop-column-zero-downtime",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you drop a column from a table in production with zero downtime?",
+  "a": "In Postgres, `ALTER TABLE ... DROP COLUMN` itself is **metadata-only and instant**. It marks the column dropped without rewriting the table, and space is reclaimed on later updates or rewrites. The danger is **application compatibility** and the **lock**, not data copying.\n\nSafe rollout (expand/contract):\n\n1. **Stop using the column in code**: remove it from reads and writes, `SELECT *` → explicit columns, and ORM models. Deploy, and make sure every running version no longer touches it. If it's `NOT NULL` without a default, first `DROP NOT NULL` so old writers don't break.\n2. **Drop it with a short lock timeout**: it needs `ACCESS EXCLUSIVE` briefly, and could queue behind a long query and block everyone.\n   ```sql\n   SET lock_timeout = '2s';\n   ALTER TABLE orders DROP COLUMN legacy_flag;\n   ```\n   Retry on timeout.\n3. Also drop dependent views, indexes and triggers deliberately (avoid a blind `CASCADE`).\n\nThe heavy \"new table + trigger + backfill + swap\" approach is needed only for **table-rewriting** changes (some type changes, or MySQL without instant DDL), or when you want to reclaim the space immediately. Tools: pg_repack, gh-ost / pt-online-schema-change (MySQL).",
+  "level": 2,
+  "asked": [
+   "ZeBrains"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-foreign-key-cascade",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What does CASCADE mean in SQL?",
+  "a": "`CASCADE` propagates an action to dependent objects.\n\n**On foreign keys** (referential actions):\n\n```sql\norder_id bigint REFERENCES orders(id) ON DELETE CASCADE ON UPDATE CASCADE\n```\n\n- `ON DELETE CASCADE`: deleting the parent deletes its children automatically.\n- The alternatives are `RESTRICT` / `NO ACTION` (the default: error if children exist; `NO ACTION` can be deferred), `SET NULL`, and `SET DEFAULT`.\n\n**On DDL**: `DROP TABLE t CASCADE` also drops dependent views and FK constraints. `TRUNCATE t CASCADE` truncates the referencing tables too.\n\nGotchas:\n\n- Cascades can delete far more than you expect, potentially through several levels. One `DELETE` of a user can wipe years of data. Many teams prefer soft deletes or explicit deletes for important data.\n- Cascaded deletes are row-by-row and hit the child table by FK. **Index the FK column**, or every parent delete scans the child table.\n- `DROP ... CASCADE` in a migration can silently drop views that other services depend on.",
+  "level": 1,
+  "asked": [
+   "RealIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-index-only-scan",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "What index gives an Index-Only Scan for `SELECT * FROM t WHERE a = 1 AND b = 1 ORDER BY c` on t(a, b, c)?",
+  "code": "CREATE TABLE t(\n    a int NOT NULL,\n    b int NOT NULL,\n    c int NOT NULL\n);\n\nEXPLAIN ANALYZE\nSELECT * FROM t WHERE a = 1 AND b = 1 ORDER BY c;",
+  "a": "Create **`CREATE INDEX ON t (a, b, c)`**.\n\n- `a` and `b` are equality predicates, so they lead the index.\n- `c` comes next, so within `a=1, b=1` the entries are already **sorted by `c`**, and no Sort node is needed.\n- The table has only `a, b, c`, so `SELECT *` is fully **covered** by the index, and Postgres can skip the heap entirely.\n\n```text\nIndex Only Scan using t_a_b_c_idx on t\n  Index Cond: ((a = 1) AND (b = 1))\n```\n\n(Run on PG18 after `VACUUM ANALYZE`.)\n\nGotchas:\n\n- An index-only scan still checks the **visibility map**. If pages aren't marked all-visible, Postgres does heap fetches anyway (see `Heap Fetches:` in `EXPLAIN ANALYZE`). Keep the table vacuumed.\n- If the table had more columns, `SELECT *` could never be index-only. Select only the needed columns, or use `INCLUDE (...)` for non-key payload columns.",
+  "level": 2,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-int-to-bigint",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you change a column from `int` to `bigint` on a large, live table?",
+  "a": "`ALTER TABLE t ALTER COLUMN id TYPE bigint` **rewrites the whole table and every index** under an `ACCESS EXCLUSIVE` lock. On a big table that's minutes to hours of downtime. Do it online instead:\n\n1. Add a new nullable column: `ALTER TABLE t ADD COLUMN id_new bigint;` (instant).\n2. **Dual-write**: a trigger (or app code) sets `NEW.id_new := NEW.id` on insert and update.\n3. **Backfill** in small batches by key range (`UPDATE ... WHERE id BETWEEN $a AND $b AND id_new IS NULL`), throttled, watching replication lag and vacuum.\n4. Build indexes and constraints concurrently: `CREATE UNIQUE INDEX CONCURRENTLY ... (id_new)`. Add `CHECK (id_new IS NOT NULL) NOT VALID`, then `VALIDATE CONSTRAINT`. Since PG12, `SET NOT NULL` uses the validated check to skip the scan.\n5. **Swap** in one short transaction with `lock_timeout`: rename the columns, swap the PK (`ADD CONSTRAINT ... PRIMARY KEY USING INDEX`), move the sequence/identity and its ownership, and drop the trigger.\n6. Handle **referencing FKs**: child columns need the same treatment, and the FKs are re-added `NOT VALID` and then validated.\n\nDon't wait for overflow: monitor sequences approaching 2^31. Tools like pgroll or pg-osc automate this.",
+  "level": 3,
+  "asked": [
+   "Data Driven Labs"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-isolation-limit-count",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What minimum isolation level keeps a paged SELECT ... LIMIT and a SELECT COUNT(*) consistent in one transaction?\nBoth queries run in the same transaction: one fetches a page, the other the total.",
+  "a": "In Postgres the minimum is **Repeatable Read**.\n\nUnder **Read Committed** each *statement* takes a fresh snapshot. A concurrent transaction that inserts or deletes rows and commits between the two queries makes the page and the total disagree. For example, the count includes a row the page never showed, or the page shows 20 rows while the count says 19. That's a non-repeatable read / phantom across statements.\n\nUnder **Repeatable Read**, Postgres takes one snapshot at the first statement and uses it for the whole transaction. Both queries see exactly the same data, including no phantoms (Postgres RR is stronger than the SQL standard requires). Read-only RR transactions never fail with serialization errors, so this is cheap:\n\n```sql\nBEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;\nSELECT ... ORDER BY id LIMIT 20 OFFSET 40;\nSELECT count(*) FROM ...;\nCOMMIT;\n```\n\nAlternatives: compute both in one statement (`count(*) OVER ()` as a window function), or accept approximate totals. Serializable is unnecessary here.\n\nIn MySQL/InnoDB, RR also gives a consistent snapshot for plain reads.",
+  "level": 3,
+  "asked": [
+   "InfoWatch"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-jsonb",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Which PostgreSQL column type should you use for unstructured or semi-structured data?",
+  "a": "Use **`jsonb`**. It stores JSON in a decomposed **binary** form: keys are deduplicated and sorted, and duplicate keys and whitespace are dropped. Reads and operators are fast, and it's **indexable**:\n\n```sql\nCREATE INDEX ON events USING gin (payload jsonb_path_ops);\nSELECT * FROM events WHERE payload @> '{\"type\": \"click\"}';\nCREATE INDEX ON events ((payload->>'user_id'));\n```\n\nOperators: `->`, `->>`, `@>`, `?`, `#>`, and `jsonb_path_query` (SQL/JSON path). PG17 added `JSON_TABLE`.\n\n`json` (text) keeps the exact input: whitespace, key order and duplicates. It's rarely needed; use it only to store and return a payload verbatim. `hstore` is legacy flat key/value. `bytea` is for opaque binary blobs.\n\nGuidelines:\n\n- Keep **fields you filter, join or constrain on as real columns**. Use `jsonb` for the truly variable attributes (product specs, webhook payloads, settings).\n- Validate the shape in the app, or with `CHECK (jsonb_typeof(...))` / pg_jsonschema.\n- Large `jsonb` values get TOASTed, and **any update rewrites the whole value**. Avoid hot, frequently updated big documents.\n- Planner statistics inside `jsonb` are weak, so selectivity estimates can be off.",
+  "level": 1,
+  "asked": [
+   "Tehzor"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-keyset-pagination",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is keyset (cursor) pagination, and why is it better than OFFSET?\nFollow-up: how do you jump to a specific page with keyset pagination when keys are UUIDs?",
+  "a": "**Keyset pagination** remembers the last row's sort key and asks for rows after it:\n\n```sql\nSELECT id, created_at, title FROM posts\nWHERE (created_at, id) < ($1, $2)\nORDER BY created_at DESC, id DESC\nLIMIT 20;\n```\n\nIt needs an index on `(created_at, id)`, and the tie-breaker makes the order total. The cost is **O(log n + page size) at any depth**. `OFFSET 100000` reads and discards 100k rows every time. Results also stay stable when rows are inserted or deleted concurrently: no duplicates or skipped items.\n\nThe API returns an opaque **cursor** (base64 of the last key), plus next/prev.\n\n**Jumping to page N** is its trade-off:\n\n- Usually you redesign the UX: infinite scroll, next/prev, or jump by a *value* (\"go to March 2024\") rather than a page number.\n- If page numbers are required: precompute page-boundary keys periodically (`row_number() OVER (...)` every 20th key cached in Redis), or use `OFFSET` only for shallow pages and cap the depth.\n\nWith **random UUIDv4** keys, the ID alone gives no meaningful order. Sort by `(created_at, id)`, using the UUID only as a tie-breaker. With **UUIDv7** the ID is time-ordered, so `WHERE id < $cursor ORDER BY id DESC` works directly.",
+  "level": 2,
+  "asked": [
+   "ViTech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-like-substring-search",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you speed up `LIKE '%string%'` searches on a large PostgreSQL table?",
+  "a": "A B-tree can't help with a leading wildcard. It only serves prefix searches (`LIKE 'abc%'`, with `text_pattern_ops` or the C collation). For substring search, use **trigram indexes**:\n\n```sql\nCREATE EXTENSION IF NOT EXISTS pg_trgm;\nCREATE INDEX products_name_trgm ON products USING gin (name gin_trgm_ops);\nSELECT * FROM products WHERE name ILIKE '%phone%';\n```\n\n`pg_trgm` splits text into 3-character grams. The GIN index finds candidate rows that contain all the pattern's trigrams, and then rechecks them. It also supports `ILIKE`, regex, and similarity search (`%`, `<->` with GiST for \"did you mean\").\n\nAlternatives:\n\n- **Full-text search** (`tsvector` + GIN) when you search for *words* with stemming and ranking, not arbitrary substrings.\n- An external engine (Elasticsearch/OpenSearch, Meilisearch) for relevance, typo tolerance and facets at scale.\n\nGotchas: patterns shorter than 3 characters can't use trigrams effectively. GIN makes writes slower. Very common trigrams make the recheck expensive.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "databases-masters-replicas-count",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How many masters and how many replicas can a database cluster have, and how would you estimate how many replicas you need?",
+  "a": "In classic Postgres or MySQL **single-leader** replication there is **exactly one writable primary**, plus any number of replicas. Practical limits come from primary resources: each streaming replica is a WAL sender, bounded by `max_wal_senders`, network bandwidth and WAL volume. **Cascading replication** (replicas feeding replicas) removes that fan-out bottleneck. Multi-master (BDR, Galera, multi-leader setups) allows several writers, at the cost of conflict resolution.\n\nSizing replicas:\n\n- **Availability**: at least 1 synchronous or quorum standby for failover, plus 1 more so you survive losing a node during maintenance. Put them in different AZs.\n- **Read capacity**: `replicas ≈ ceil(peak_read_QPS × headroom / QPS_per_replica)`. Measure a replica's sustainable QPS (CPU-bound query mix at target p99), use 30–50% headroom, and add N+1 so one replica can fail.\n- **Special-purpose**: a separate replica for analytics or backups, so heavy queries don't hurt the OLTP read path.\n\nLimits: replicas don't add write capacity. Every replica replays all writes, so write-heavy load needs sharding, not replicas. Watch replication lag as you scale reads.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "databases-multi-master",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Would you choose sharding or multi-master replication? What problems come up in multi-master systems?",
+  "a": "For scaling writes, I'd generally choose **sharding** (each shard single-leader and replicated). Multi-master fits specific needs: **multi-region local writes** or **zero-downtime writes during a region outage**.\n\nMulti-master doesn't really scale writes: **every node still applies every write**. It adds:\n\n- **Write conflicts**: two nodes update the same row concurrently. You need conflict resolution: last-write-wins (with **lost updates** and clock-skew issues), per-column merge, CRDTs, or app-defined handlers.\n- **No global constraints**: uniqueness and sequences can be violated across nodes (the same email registered twice). You need UUIDs or per-node ID ranges.\n- **Weaker consistency**: async replication between masters means reading your own writes on another node fails, and there are ordering anomalies. Synchronous multi-master (Galera) adds latency and certification failures under contention.\n- **Replication loops**, schema-change coordination and harder debugging.\n\nA common pattern is to **partition ownership**: each record has a home region or master, which is effectively sharding again. Alternatively, use a consensus-based distributed SQL DB (CockroachDB, YugabyteDB, Spanner). There, every range has a single Raft leader, so you get serializable transactions without hand-rolled conflict resolution.",
+  "level": 3,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-n-plus-one",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is the N+1 query problem, and how do you solve it?",
+  "a": "N+1 happens when code runs **one query for a list, then one more query per item**. For example, load 100 orders, then run `SELECT * FROM users WHERE id = $1` 100 times. That's 101 round-trips. Latency adds up (network RTT × N), and the DB and connection pool get hammered. It's common with ORMs' lazy loading and with naive repository loops.\n\nFixes:\n\n- **JOIN** in one query when the relation is 1:1 or many-to-one.\n- **Batch load**: collect the IDs, then do one query: `SELECT * FROM users WHERE id = ANY($1)` (pgx passes a Go slice as an array). Map the results back in memory. The same idea is the **DataLoader** pattern in GraphQL.\n- ORM eager loading (`Preload` in GORM).\n- Aggregate in SQL (`json_agg`, `array_agg`) to fetch parent plus children in one query.\n- Denormalize or cache if it's a hot path.\n\nDetect it with query-count metrics per request, tracing (many identical spans), and `pg_stat_statements` (a huge `calls` count for a cheap query).",
+  "level": 1,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-parallel-inserts-blocking",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Two long-running INSERTs into the same table run in parallel. Will they block each other?",
+  "a": "**Generally no.** An `INSERT` takes a `ROW EXCLUSIVE` table lock, which is compatible with other `ROW EXCLUSIVE` locks, and new rows are invisible to others until commit. Each transaction writes its own tuples, and sequences hand out values without waiting.\n\nThe exception is a **unique constraint or primary key conflict**. If TX2 inserts a key that TX1 has inserted but not yet committed, TX2 **waits** for TX1 to finish:\n\n- If TX1 commits, TX2 fails with `duplicate key value violates unique constraint` (or takes the `ON CONFLICT` path).\n- If TX1 rolls back, TX2 proceeds.\n\nOther sources of waiting:\n\n- **FK checks** take `FOR KEY SHARE` locks on parent rows. That's compatible between inserters, but it blocks a concurrent `DELETE` or key update of the parent.\n- Exclusion constraints behave like unique ones.\n- Contention on the same B-tree page with sequential keys is a latch hotspot, not a lock wait.\n- A concurrent DDL (`ALTER TABLE`) queues behind them and then blocks everyone.\n- Deadlocks are possible if two batches insert overlapping unique keys in different orders. Sort batch keys.",
+  "level": 2,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-partial-index",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is a partial (conditional) index, and when would you use one?",
+  "a": "A partial index covers **only the rows matching a `WHERE` predicate**:\n\n```sql\nCREATE INDEX orders_pending_idx ON orders (created_at) WHERE status = 'pending';\nCREATE UNIQUE INDEX users_email_active_uq ON users (lower(email)) WHERE deleted_at IS NULL;\n```\n\nUses:\n\n- **Hot subset of a big table**: queue-like \"pending\" rows, non-deleted rows. The index is tiny, stays in memory, and costs nothing on writes to rows outside the predicate.\n- **Conditional uniqueness**: unique email among active users only, or \"only one active loan per book\" (`UNIQUE (book_id) WHERE returned_at IS NULL`).\n- Skipping useless values, such as `WHERE col IS NOT NULL` on a mostly-NULL column.\n\nGotcha: the planner uses the index only if it can **prove** that the query's `WHERE` implies the index predicate. `status = 'pending'` in the query works. A parameter (`status = $1`) under a generic prepared plan may not. Keep predicates simple and literal.",
+  "level": 2,
+  "asked": [
+   "RealIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-postgres-vs-mongodb",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "MongoDB vs Postgres: when would you choose which?\nThe interviewer wants more than \"flexible schema, good for an MVP\".",
+  "a": "Default to **Postgres** unless you have a concrete reason not to. Choose **MongoDB** when data is naturally a self-contained document read and written as a whole, and you need built-in horizontal sharding.\n\nReal differences:\n\n- **Data model**: Mongo shines when an aggregate (order with items, product with variants) is always loaded together, so one document = one read with no joins. Many-to-many relations and ad-hoc joins (`$lookup`) are weak spots.\n- **Consistency**: Postgres has full ACID with rich constraints (FK, unique, check, exclusion). Mongo has single-document atomicity; multi-document transactions exist but are costlier, and constraints live in your code.\n- **Scaling**: Mongo ships sharding and replica sets with automatic failover. Postgres scales up well; scaling out needs Citus, app-level sharding or partitioning.\n- **Schema**: \"schemaless\" still means an implicit schema in code, so migrations become a read-time problem.\n- **Querying/analytics**: SQL, window functions and CTEs are far richer. Postgres `jsonb` + GIN covers most \"flexible attributes\" needs.\n\nGotcha: write concern and read preference defaults decide durability and staleness in Mongo. Know `w: majority`.",
+  "level": 2,
+  "asked": [
+   "Tutu"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-primary-key-index",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is a primary key, and does it need an index?",
+  "a": "A **primary key** uniquely identifies each row. It is `UNIQUE` plus `NOT NULL`, there's only one per table, and it can be composite. Foreign keys reference it, and logical replication uses it by default to identify rows for `UPDATE`/`DELETE`.\n\nYes, it needs an index, and you don't create it yourself. Postgres (and MySQL, SQL Server) **automatically creates a unique B-tree index** to enforce the PK. Checking uniqueness on every insert without an index would require a full scan.\n\nNuances:\n\n- In Postgres the table is a heap, and the PK index is an ordinary secondary index. In **MySQL/InnoDB** the PK *is* the clustered index: rows are physically stored in PK order, and secondary indexes point to PK values. That's why random UUID PKs hurt more there.\n- The **referencing** side of a foreign key is **not** indexed automatically in Postgres. Index FK columns yourself.\n- A composite PK `(a, b)` serves lookups by `a` too (leftmost prefix).",
+  "level": 1,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-process-million-rows",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "You need to process 1,000,000 records from the database in a Go service. How would you do it?",
+  "a": "Don't load everything into memory, and don't use `OFFSET` pagination. Stream the rows in chunks and process them with bounded concurrency.\n\n- **Keyset batches**: `SELECT ... WHERE id > $last ORDER BY id LIMIT 1000`. Each batch is a cheap index range scan, independent of depth. It's resumable (store `last`), and there are no long transactions.\n- Or **stream** a single query with `rows.Next()` (pgx fetches incrementally) or a server-side cursor (`DECLARE ... CURSOR`). Mind the long-held snapshot on a busy table.\n- **Worker pool**: one reader goroutine feeds a buffered channel, and N workers process items (`errgroup` with `SetLimit`). Write results back in batches (multi-row `INSERT`, `COPY`, `UPDATE ... FROM (VALUES ...)`).\n- Make processing **idempotent**: mark done with a status column or a checkpoint, so a crash just resumes.\n- Respect `ctx` cancellation, rate-limit the DB, and track progress metrics.\n- For recurring or huge jobs, publish IDs to a queue (Kafka) and scale consumers horizontally, or claim chunks with `SKIP LOCKED` across instances.\n\nGotcha: `LIMIT/OFFSET` over 1M rows is O(n²) overall, and rows shift under concurrent inserts or deletes.",
+  "level": 2,
+  "asked": [
+   "QROQO"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-query-execution-order",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How does the database execute a SELECT query? Walk through the order in which the clauses are processed.",
+  "a": "**Logical order** (what the result means), not the written order:\n\n1. `FROM` / `JOIN` build the row source (joins with `ON`).\n2. `WHERE` filters individual rows.\n3. `GROUP BY` forms groups.\n4. `HAVING` filters groups.\n5. Window functions are computed.\n6. `SELECT` evaluates expressions and aliases, then `DISTINCT`.\n7. `UNION`/`INTERSECT`/`EXCEPT` combine results.\n8. `ORDER BY` sorts; it can use SELECT aliases.\n9. `LIMIT` / `OFFSET` trim the result.\n\nThis explains the classic rules: `WHERE` can't use aggregates or SELECT aliases, `HAVING` can use aggregates, and `ORDER BY` can use aliases.\n\n**Physically**, the planner builds an operator tree (see `EXPLAIN`) that is free to reorder as long as the result is equivalent. It picks scans (Seq, Index, Bitmap), join order and algorithms (Nested Loop, Hash, Merge), and pushes predicates down. Execution is a **pull-based iterator (Volcano) model**: each node asks its child for the next row, so rows stream through the plan. Blocking nodes like Sort and HashAggregate must consume all input first. Parallel workers can split scans and aggregates.",
+  "level": 2,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-redis-cache-commands",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you manage a cache in Redis, and which commands do you use?\nFollow-up: what is FLUSH (FLUSHDB/FLUSHALL), and when is it appropriate?",
+  "a": "A typical pattern is **cache-aside**. On a read, `GET`; on a miss, load from the DB and `SET key val EX ttl`. On a write, update the DB and then `DEL` the key (invalidate rather than update, to avoid races).\n\nUseful commands:\n\n- `GET` / `SET ... EX|PX|NX|XX`, `MGET` / `MSET`, `DEL`, and `UNLINK` (non-blocking delete).\n- `EXPIRE` / `TTL`, `HSET` / `HGETALL` for objects, `INCR` for counters.\n- `SCAN` with `MATCH` to iterate keys safely. Never use `KEYS *` in prod: it's O(N) and blocks the server.\n- Pipelining, `MULTI`/`EXEC`, or Lua for atomic multi-step updates.\n- `INFO memory` / `INFO stats` for the hit ratio (`keyspace_hits` / `keyspace_misses`).\n\n**FLUSHDB** deletes all keys in the current DB. **FLUSHALL** deletes all keys in every DB. Both have an `ASYNC` option. Use them only in tests or dev, or in an emergency full cache reset. In prod, a flush causes a cold cache and a thundering herd on the database.\n\nTo invalidate groups of keys, prefer versioned key prefixes (`user:v42:...`) or tracked sets.",
+  "level": 1,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "databases-redis-cluster-scaling",
+  "cat": "databases",
+  "kind": "behavioral",
+  "q": "Have you solved scaling problems with Redis in cluster mode?",
+  "a": "Redis Cluster shards the keyspace into **16384 hash slots** spread across masters (each with replicas); clients route by `CRC16(key) mod 16384` and follow `MOVED`/`ASK` redirects.\n\nTypical problems and fixes:\n- **Multi-key operations** (`MGET`, transactions, Lua) must hit one slot → use **hash tags** `{user:42}:cart`, but that can create hot slots.\n- **Hot keys**: split the key, add local in-process caching, or read from replicas (`READONLY`).\n- **Big keys** (huge hashes/lists): block the single-threaded command loop and slow migration → break them up.\n- **Resharding** moves slots live; clients need cluster-aware libraries (go-redis `ClusterClient`).\n- Pub/Sub broadcasts to all nodes (use sharded pub/sub in Redis 7).\n- Failover is asynchronous replication → possible loss of recent writes; don't treat it as a durable store.",
+  "level": 3,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-redis-use-cases",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What can Redis be used for?",
+  "a": "Redis is an in-memory data-structure server. Common uses:\n\n- **Cache** in front of a DB (cache-aside with TTL).\n- **Sessions and tokens** with expiry.\n- **Rate limiting**: `INCR` + `EXPIRE`, or a sliding window with sorted sets / Lua.\n- **Distributed locks**: `SET key val NX PX 30000`. Redlock is debated, and you need fencing tokens for correctness.\n- **Counters, leaderboards**: `INCR`, sorted sets (`ZADD`/`ZRANGE`).\n- **Queues and streams**: lists (`LPUSH`/`BRPOP`), **Streams** with consumer groups (`XADD`/`XREADGROUP`).\n- **Pub/Sub** for fire-and-forget notifications (no persistence).\n- **Deduplication and idempotency keys** (`SET NX`), sets, HyperLogLog for unique counts, geo indexes, Bloom filters (module).\n\nGotcha: memory is the limit. Set `maxmemory` plus an eviction policy. Don't store unbounded keys without a TTL. Remember async replication can lose recent writes on failover.",
+  "level": 1,
+  "asked": [
+   "MascotGames"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-schema-chats",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Design tables for users, chats and messages, then select all chats of a given user.\nA user can be in many chats; a message belongs to exactly one chat. Return chat_id, chat_name for user Vasya.",
+  "a": "Users ↔ chats is **many-to-many**, which needs a membership table. Message → chat is **many-to-one**, which is a plain FK.\n\n```sql\nCREATE TABLE app_user (\n    id            bigserial PRIMARY KEY,\n    name          text NOT NULL,\n    registered_at timestamptz NOT NULL DEFAULT now()\n);\nCREATE TABLE chat (\n    id         bigserial PRIMARY KEY,\n    name       text NOT NULL,\n    created_at timestamptz NOT NULL DEFAULT now()\n);\nCREATE TABLE chat_member (\n    chat_id   bigint NOT NULL REFERENCES chat(id) ON DELETE CASCADE,\n    user_id   bigint NOT NULL REFERENCES app_user(id) ON DELETE CASCADE,\n    joined_at timestamptz NOT NULL DEFAULT now(),\n    PRIMARY KEY (chat_id, user_id)\n);\nCREATE INDEX ON chat_member (user_id);\nCREATE TABLE message (\n    id         bigserial PRIMARY KEY,\n    chat_id    bigint NOT NULL REFERENCES chat(id) ON DELETE CASCADE,\n    author_id  bigint NOT NULL REFERENCES app_user(id),\n    body       text NOT NULL,\n    created_at timestamptz NOT NULL DEFAULT now()\n);\nCREATE INDEX ON message (chat_id, created_at);\n\nSELECT c.id AS chat_id, c.name AS chat_name\nFROM chat c\nJOIN chat_member m ON m.chat_id = c.id\nJOIN app_user u    ON u.id = m.user_id\nWHERE u.name = 'Vasya';\n```\n\n- The single `chat_id NOT NULL` column on `message` is what guarantees \"exactly one chat\".\n- The composite PK prevents duplicate memberships. The `(user_id)` index serves \"my chats\", and `(chat_id, created_at)` serves chat history with keyset pagination.\n- Names aren't unique, so in a real API filter by user id.\n- Optionally, add a trigger or app check that `author_id` is a member of the chat.\n\nVerified on PG18.",
+  "level": 1,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-sequence",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What is a sequence, and what is it for? Can a sequence \"break\"?",
+  "a": "A **sequence** is a special single-row object that generates unique increasing numbers: `nextval('s')`, `currval`, `setval`. It backs `serial` and `GENERATED ... AS IDENTITY` columns.\n\nIt is deliberately **non-transactional**: `nextval` is never rolled back, so concurrent transactions don't have to wait for each other.\n\nWays it can \"break\" or surprise you:\n\n- **Gaps**: rolled-back transactions, failed inserts (including `ON CONFLICT` on a PK), crashes, and caching (`CACHE n` per session) all burn values. Numbers are unique but **not gap-free**. Don't use them for invoice numbers that must be contiguous.\n- **Not strictly ordered by commit time**: ID 101 can commit before 100. Don't use `id > last_seen` as a reliable \"new rows\" cursor for CDC without care.\n- **Out of sync**: after inserting explicit IDs or restoring data, `nextval` can hit duplicates. Fix with `SELECT setval('t_id_seq', (SELECT max(id) FROM t))`.\n- **Overflow**: an `integer` column caps at 2,147,483,647. Use `bigint`.\n- Sequences aren't replicated by logical replication, so failover needs a manual `setval`. They also don't work across shards.",
+  "level": 2,
+  "asked": [
+   "Astra"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-sharding-experience",
+  "cat": "databases",
+  "kind": "behavioral",
+  "q": "Have you done sharding? Which shard keys did you use, and why?",
+  "a": "They check real experience with **horizontal partitioning** and choosing a key.\n\nA good shard key:\n- **High cardinality and even distribution** (`user_id`, `account_id`, hashed) to avoid hot shards.\n- **Matches the dominant access pattern**, so most queries hit one shard (all of a user's orders on the user's shard).\n- **Stable** — never changes for a record.\n\nTechniques: hash sharding (even, but range queries fan out), range sharding (good for time ranges, risk of hot latest shard), directory/lookup service. Use consistent hashing or many virtual shards (e.g. 1024 logical buckets mapped to fewer physical DBs) so resharding moves buckets, not rows.\n\nGotchas: cross-shard transactions and joins (avoid or use sagas), global unique IDs (Snowflake/UUIDv7), and rebalancing with online migration. Mention whether you used built-in (Citus, Vitess, Mongo) or app-level routing.",
+  "level": 3,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-sql-banned-purchases",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "SQL: list purchases made before a user was banned, and users whose purchases total more than 5000.\nReturn unique (user, SKU) pairs bought before the ban, sorted by user name then SKU; then users (id, first name, last name, total) with total > 5000.",
+  "code": "-- user\nid | firstname | lastname | birth\n1  | Ivan      | Petrov   | 1996-05-01\n2  | Anna      | Petrova  | 1999-06-01\n3  | Anna      | Petrova  | 1990-10-02\n\n-- purchase\nsku | price | user_id | date\n1   | 5500  | 1       | 2021-02-15\n1   | 5700  | 1       | 2021-01-15\n2   | 4000  | 1       | 2021-02-14\n3   | 8000  | 2       | 2021-03-01\n4   | 400   | 2       | 2021-03-02\n\n-- ban_list\nuser_id | date_from\n1       | 2021-03-08",
+  "a": "```sql\n-- 1. unique user+sku pairs bought before the ban (never-banned users count fully)\nSELECT DISTINCT u.id, u.firstname, u.lastname, p.sku\nFROM purchase p\nJOIN \"user\" u ON u.id = p.user_id\nLEFT JOIN ban_list b ON b.user_id = p.user_id\nWHERE b.user_id IS NULL OR p.date < b.date_from\nORDER BY u.firstname, u.lastname, u.id, p.sku;\n\n-- 2. users with total purchases > 5000\nSELECT u.id, u.firstname, u.lastname, SUM(p.price) AS total\nFROM \"user\" u\nJOIN purchase p ON p.user_id = u.id\nGROUP BY u.id, u.firstname, u.lastname\nHAVING SUM(p.price) > 5000;\n```\n\nResult on PG18:\n\n```text\n(1) 2 Anna Petrova 3 | 2 Anna Petrova 4 | 1 Ivan Petrov 1 | 1 Ivan Petrov 2\n(2) 1 Ivan Petrov 15200 | 2 Anna Petrova 8400\n```\n\nTraps:\n\n- An **INNER JOIN on `ban_list`** would drop never-banned users entirely, so use a LEFT JOIN with `IS NULL OR`.\n- There are **two different \"Anna Petrova\"** users. Group and deduplicate by `id`, never by name.\n- `user` is a reserved word, so quote it or rename the table.\n- If a user can be banned several times, use `NOT EXISTS (SELECT 1 FROM ban_list b WHERE b.user_id = p.user_id AND b.date_from <= p.date)`.",
+  "level": 2,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-sql-baskets-last-month",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Write a query to find users who spent 30,000 or more in total over the last month, counting only completed baskets (status = 'done').",
+  "code": "// table = baskets\ntype Basket struct {\n\tID        uint64    `db:\"id\"`\n\tUserID    uint64    `db:\"user_id\"`\n\tStatus    string    `db:\"status\"`\n\tTotal     uint64    `db:\"total\"`\n\tCreatedAt time.Time `db:\"created_at\"`\n}",
+  "a": "```sql\nSELECT user_id, SUM(total) AS spent\nFROM baskets\nWHERE status = 'done'\n  AND created_at >= now() - interval '1 month'\nGROUP BY user_id\nHAVING SUM(total) >= 30000;\n```\n\n- The filters on rows (`status`, date) go in `WHERE` so they run before aggregation. The threshold on the sum goes in `HAVING`.\n- Decide what \"last month\" means: a rolling 30 days/1 month (above), or the previous calendar month: `created_at >= date_trunc('month', now()) - interval '1 month' AND created_at < date_trunc('month', now())`. Use `timestamptz`.\n- Keep the column bare in the predicate (not `created_at::date = ...`), so an index can be used.\n\nTo speed it up, use a composite index matching equality then range, with the summed column included for an index-only scan:\n\n```sql\nCREATE INDEX CONCURRENTLY baskets_done_created_idx\n    ON baskets (status, created_at) INCLUDE (user_id, total);\n-- or partial: ON baskets (created_at) INCLUDE (user_id, total) WHERE status = 'done'\n```\n\nFor dashboards run often, keep a daily per-user rollup table, or a materialized view, instead of scanning raw baskets.\n\nVerified on PG18 with sample data: users 1 (35000) and 4 (30000). User 2's basket is older than a month, and user 3's isn't done.",
+  "level": 1,
+  "asked": [
+   "Magnit"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-sql-command-groups",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What groups of SQL commands and operators exist?",
+  "a": "SQL commands are usually grouped as:\n\n- **DDL** (Data Definition): `CREATE`, `ALTER`, `DROP`, `TRUNCATE`, `COMMENT` for schemas, tables, indexes, views. In Postgres DDL is transactional.\n- **DML** (Data Manipulation): `INSERT`, `UPDATE`, `DELETE`, `MERGE` (PG15+), and upsert with `INSERT ... ON CONFLICT`.\n- **DQL** (Query): `SELECT` with its clauses: `FROM`/`JOIN`, `WHERE`, `GROUP BY`, `HAVING`, `WINDOW`, `ORDER BY`, `LIMIT`/`OFFSET`, `UNION`/`INTERSECT`/`EXCEPT`.\n- **DCL** (Control): `GRANT`, `REVOKE`, plus roles and row-level security policies.\n- **TCL** (Transaction Control): `BEGIN`, `COMMIT`, `ROLLBACK`, `SAVEPOINT`, `SET TRANSACTION`.\n\nOperators inside queries:\n\n- Comparison: `=`, `<>`, `<`, `BETWEEN`, `IN`, `LIKE`/`ILIKE`, `IS [NOT] NULL`, `IS DISTINCT FROM`.\n- Logical: `AND`, `OR`, `NOT`.\n- Set: `UNION [ALL]`, `INTERSECT`, `EXCEPT`.\n- Subquery: `EXISTS`, `ANY`/`ALL`.\n- Plus `CASE`, `COALESCE`/`NULLIF`, and Postgres-specific ones (`@>`, `->>`, `||`).\n\nGotcha: anything compared with `NULL` using `=` yields `NULL`, not true. Use `IS NULL` / `IS DISTINCT FROM`.",
+  "level": 1,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-sql-customer-cart",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "SQL drill on customer/cart tables: cart items per customer, top-10 by cart value, and a HAVING threshold.\nList every customer with their cart items; the top-10 customers by cart value; Russian customers whose cart total is at least 1000.",
+  "code": "CREATE TABLE customer (\n    id      INTEGER PRIMARY KEY,\n    email   VARCHAR(100) NOT NULL,\n    country CHAR(2)      NOT NULL\n);\n\nCREATE TABLE cart_item (\n    id          INTEGER PRIMARY KEY,\n    customer_id INTEGER     NOT NULL,\n    title       VARCHAR(20) NOT NULL,\n    amount      INTEGER     NOT NULL,\n    price       INTEGER     NOT NULL\n);",
+  "a": "```sql\n-- 1. one row per cart item (use LEFT JOIN to also list customers with empty carts)\nSELECT c.id, c.email, ci.title, ci.amount\nFROM customer c\nJOIN cart_item ci ON ci.customer_id = c.id\nORDER BY c.id, ci.id;\n\n-- 2. top-10 customers by cart value\nSELECT c.id, c.email, SUM(ci.price * ci.amount) AS total\nFROM customer c\nJOIN cart_item ci ON ci.customer_id = c.id\nGROUP BY c.id, c.email\nORDER BY total DESC\nLIMIT 10;\n\n-- 3. Russian customers with cart total >= 1000\nSELECT c.id, c.email, SUM(ci.price * ci.amount) AS cart_total\nFROM customer c\nJOIN cart_item ci ON ci.customer_id = c.id\nWHERE c.country = 'ru'\nGROUP BY c.id, c.email\nHAVING SUM(ci.price * ci.amount) >= 1000;\n```\n\n- The cart value is `price * amount` summed. Summing `price` alone is the classic mistake.\n- The country filter goes in `WHERE` (rows), the total threshold in `HAVING` (groups). In Postgres, **`HAVING cart_total >= 1000` fails** (`column \"cart_total\" does not exist`), because aliases aren't visible in `HAVING`. Verified on PG18. It works in MySQL, which is why reference answers often get it wrong.\n- Mind the case: `country = 'ru'` vs `'RU'`, since the data is `CHAR(2)`. Also add an index `cart_item(customer_id)`.",
+  "level": 1,
+  "asked": [
+   "Lamoda"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-sql-data-types",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What column data types exist in SQL/PostgreSQL, and how do you pick them?",
+  "a": "The main families (Postgres names):\n\n- **Integers**: `smallint` (2 B), `integer` (4 B), `bigint` (8 B). Use `bigint` for IDs. Identity: `GENERATED ALWAYS AS IDENTITY` (or legacy `serial`).\n- **Exact decimals**: `numeric(p,s)`, for **money**, or integer minor units. **Floats**: `real`, `double precision` are approximate. Never use them for money.\n- **Text**: `text`, `varchar(n)`, `char(n)` (avoid).\n- **Boolean**: `boolean`.\n- **Date/time**: `date`, `time`, `timestamp`, and **`timestamptz`** (use this: it stores UTC and converts per session time zone), plus `interval`.\n- **Binary**: `bytea`. **UUID**: `uuid` (16 bytes; `gen_random_uuid()`, and PG18 `uuidv7()`).\n- **Semi-structured**: `jsonb`, arrays (`int[]`), `hstore`.\n- **Special**: `inet`/`cidr`, ranges (`tstzrange`, great with exclusion constraints), enums, `tsvector`, geometric/PostGIS types, composite and domain types.\n\nPick the **narrowest correct type**. It gives validation for free and smaller rows and indexes. Store time as `timestamptz`, money as `numeric` or `bigint` cents, and IDs as `bigint` or `uuid` (not `text`).",
+  "level": 1,
+  "asked": [
+   "RealIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-sql-department-employee",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "SQL drill on department/employee tables: joins, anti-join, aggregates with HAVING, and the top earner.\nList employees by department (dept ASC, salary DESC); departments with no employees; total and max salary per department; the same excluding Accountants and Security with avg salary >= 2000; the highest-paid employee.",
+  "code": "CREATE TABLE department (\n    id   INTEGER      NOT NULL PRIMARY KEY,\n    name VARCHAR(100) NOT NULL\n);\n\nCREATE TABLE employee (\n    id            INTEGER      NOT NULL PRIMARY KEY,\n    department_id INTEGER      NOT NULL,\n    name          VARCHAR(100) NOT NULL,\n    position      VARCHAR(100) NOT NULL,\n    salary        INTEGER      NOT NULL\n);",
+  "a": "```sql\n-- 1. employees with salary and department, dept ASC, salary DESC\nSELECT e.name, e.salary, d.name AS department\nFROM employee e JOIN department d ON d.id = e.department_id\nORDER BY d.name, e.salary DESC;\n\n-- 2. departments without employees (anti-join)\nSELECT d.name FROM department d\nWHERE NOT EXISTS (SELECT 1 FROM employee e WHERE e.department_id = d.id);\n\n-- 3. total and max salary per department (LEFT JOIN keeps empty ones)\nSELECT d.name, COALESCE(SUM(e.salary), 0) AS sum_salary, MAX(e.salary) AS max_salary\nFROM department d LEFT JOIN employee e ON e.department_id = d.id\nGROUP BY d.id, d.name;\n\n-- 4. same, excluding Accountants and Security, only avg >= 2000\nSELECT d.name, SUM(e.salary) AS sum_salary, MAX(e.salary) AS max_salary\nFROM department d JOIN employee e ON e.department_id = d.id\nWHERE d.name <> 'Security' AND e.position <> 'Accountant'\nGROUP BY d.id, d.name\nHAVING AVG(e.salary) >= 2000;\n\n-- 5. highest-paid employee(s), ties included\nSELECT name FROM employee WHERE salary = (SELECT MAX(salary) FROM employee);\n```\n\nNotes:\n\n- `LEFT JOIN ... WHERE e.id IS NULL` is equivalent to query 2.\n- **Group by `d.id`**, not just the name: two departments can share a name.\n- In query 4, row filters go in `WHERE` (before aggregation) and the average goes in `HAVING`. Excluding accountants *changes* the average, which is intended here.\n- Query 5: `ORDER BY salary DESC LIMIT 1` drops ties. Use the subquery or `FETCH FIRST 1 ROWS WITH TIES`.\n\nAll five were run on PG18 with sample data.",
+  "level": 1,
+  "asked": [
+   "Lamoda"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-sql-duplicate-emails",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Given a table (id, email), find duplicate emails, then delete the duplicates, keeping one row per email.",
+  "code": "-- users\n-- id | email",
+  "a": "```sql\n-- find\nSELECT email, COUNT(*) AS cnt\nFROM users\nGROUP BY email\nHAVING COUNT(*) > 1;\n\n-- delete, keeping the lowest id per email\nDELETE FROM users a\nUSING users b\nWHERE a.email = b.email\n  AND a.id > b.id;\n```\n\nAn alternative uses a window function, and lets you choose which row survives:\n\n```sql\nDELETE FROM users\nWHERE id IN (\n    SELECT id FROM (\n        SELECT id, row_number() OVER (PARTITION BY email ORDER BY id) AS rn\n        FROM users\n    ) t WHERE rn > 1\n);\n```\n\nThen **prevent recurrence**: `CREATE UNIQUE INDEX CONCURRENTLY ON users (lower(email));`, and use `INSERT ... ON CONFLICT DO NOTHING` in the app.\n\nGotchas:\n\n- `'A@x'` and `'a@x'` are different to `=`. Normalize with `lower(email)` if they should count as duplicates.\n- On a big table, delete in batches.\n- Check for FKs that reference the rows you're deleting (re-point them first).\n\nVerified on PG18: rows 4 and 5 were removed, and 1, 2, 3, 6 were kept.",
+  "level": 1,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-sql-explain-query",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Explain step by step what this SQL query does, clause by clause.",
+  "code": "SELECT\n    pt.id,\n    pt.name,\n    pt.supplier_id,\n    pt.meta,\n    pt.deleted_at,\n    STRING_AGG(DISTINCT ps.name, ', ') AS suppliers,\n    STRING_AGG(DISTINCT pc.name, ', ') AS categories,\n    COUNT(DISTINCT pt.id) AS product_count,\n    COUNT(DISTINCT pc.name) AS categories_count\nFROM\n    public.product pt\n    INNER JOIN public.product_supplier pps ON pt.id = pps.product_id\n    INNER JOIN public.supplier ps ON pps.supplier_id = ps.id\n    LEFT JOIN public.product_category ppc ON pt.id = ppc.product_id\n    LEFT JOIN public.category pc ON ppc.category_id = pc.id\nWHERE\n    pt.status = 'available'\nGROUP BY\n    pt.id, pt.name, pt.supplier_id, pt.meta, pt.deleted_at\nORDER BY\n    product_count ASC;",
+  "a": "It lists **available products** with their suppliers and categories, one row per product.\n\n1. `FROM product pt`, **INNER JOIN** `product_supplier` and `supplier`: only products that have at least one supplier survive. There's one row per (product, supplier) pair.\n2. **LEFT JOIN** `product_category` and `category`: keeps products without categories (`pc.name` is `NULL`). Rows multiply to product × supplier × category.\n3. `WHERE pt.status = 'available'` filters products before grouping.\n4. `GROUP BY pt.id, ...` collapses the multiplied rows back to one per product. (Grouping by `pt.id` alone would suffice, since it's the PK.)\n5. `STRING_AGG(DISTINCT ps.name, ', ')` and the same for categories give comma-separated unique names. `DISTINCT` is **required** because the join fan-out repeats each name. The order inside the string is arbitrary unless you add `ORDER BY` inside the aggregate.\n6. `COUNT(DISTINCT pc.name)` is the number of distinct categories. `NULL`s aren't counted, so it's 0 for uncategorized products.\n7. `COUNT(DISTINCT pt.id) AS product_count` is **always 1** per group, since we group by `pt.id`. So `ORDER BY product_count` is meaningless. That's the trick in the question.\n\nImprovements:\n\n- Aggregate suppliers and categories in separate subqueries or `LATERAL` joins, to avoid the cartesian fan-out.\n- Order by something meaningful.\n- `pt.supplier_id` duplicates the M:N link table, which looks like a leftover column.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "databases-sql-row-order-uuid",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "In what order will these rows come back, and why? (UUID default primary key, timestamptz default now(), rows inserted via generate_series)",
+  "code": "DROP TABLE IF EXISTS test;\nCREATE TABLE IF NOT EXISTS test(\n    id    uuid DEFAULT gen_random_uuid(),\n    ts    timestamptz DEFAULT now(),\n    value int\n);\n\nINSERT INTO test (value)\nSELECT id FROM generate_series(1, 10) id;\n\nSELECT * FROM test;",
+  "a": "In practice, **in insertion order: value 1..10**. But **no order is guaranteed**, because the query has no `ORDER BY`.\n\nOutput on PG18 (abbreviated):\n\n```text\n value | ts                            | id\n     1 | 2026-09-29 09:39:57.742487+00 | 98a63ff5-...\n     2 | 2026-09-29 09:39:57.742487+00 | 1d069139-...\n   ...\n    10 | 2026-09-29 09:39:57.742487+00 | ff3b2f77-...\n```\n\nWhy:\n\n- A fresh heap table is scanned sequentially, page by page, so rows come out in physical order, which here is the insertion order. The random `gen_random_uuid()` values (v4) don't affect physical order. There's also no index at all: `id` has no `PRIMARY KEY` here.\n- **All `ts` values are identical.** `now()` is the **transaction start time**, and one `INSERT ... SELECT` is one transaction. So `ORDER BY ts` wouldn't define an order either. Use `clock_timestamp()` for per-row time, and in any case add a tie-breaker.\n- After updates or deletes plus vacuum, new rows fill free space anywhere. Synchronized seq scans on big tables can start mid-table, and parallel scans interleave. So order \"changes randomly\".\n\nRule: if order matters, `ORDER BY` a unique key. For time-ordered IDs use UUIDv7 (`uuidv7()` in PG18) or an identity column.",
+  "level": 2,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-sql-salespersons",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Write a query returning every salesperson's id and the total amount they earned (salespersons → customers → orders), sorted by id.",
+  "code": "CREATE TABLE Salespersons (id SERIAL PRIMARY KEY, name VARCHAR(20));\nCREATE TABLE Customers    (id SERIAL PRIMARY KEY, salesperson_id INT);\nCREATE TABLE Orders       (id SERIAL PRIMARY KEY, customer_id INT, price INT);",
+  "a": "```sql\nSELECT s.id, COALESCE(SUM(o.price), 0) AS total\nFROM salespersons s\nLEFT JOIN customers c ON c.salesperson_id = s.id\nLEFT JOIN orders    o ON o.customer_id   = c.id\nGROUP BY s.id\nORDER BY s.id;\n```\n\n- Walk the chain salesperson → their customers → those customers' orders, then sum per salesperson.\n- **LEFT JOINs** keep salespeople with no customers or no orders. `COALESCE` turns their `NULL` sum into `0`. With INNER JOINs they would silently disappear, which is a common interviewer follow-up.\n- Grouping by `s.id` is enough because it's the PK. Add `s.name` if you output it.\n\nVerified on PG18 with sample data: `1 → 30`, `2 → 12`, `3 → 0`.\n\nPerformance: index `customers(salesperson_id)` and `orders(customer_id)`. For big data, pre-aggregate orders per customer in a subquery first to cut the join size.",
+  "level": 1,
+  "asked": [
+   "Kvando"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-sql-self-join-manager",
+  "cat": "databases",
+  "kind": "sql",
+  "q": "Given `staff(id, name, head_id)` where not everyone has a manager, return each employee's name with their manager's name (NULL if none).",
+  "code": "CREATE TABLE staff (\n    id      TEXT,\n    name    TEXT,\n    head_id TEXT\n);\n\n-- id | name  | head_id\n-- 1  | Ivan  | NULL\n-- 2  | Petr  | 1\n-- 3  | Alice | 1\n-- 4  | Max   | 2\n-- 5  | Alex  | 2\n-- 6  | Elena | 4\n-- 7  | Bob   | NULL",
+  "a": "It's a **self LEFT JOIN**: the same table plays both the employee and the manager role.\n\n```sql\nSELECT e.name AS employee_name,\n       m.name AS manager_name\nFROM staff e\nLEFT JOIN staff m ON m.id = e.head_id\nORDER BY e.id;\n```\n\nOutput on PG18 with the sample data:\n\n```text\nemployee_name | manager_name\nIvan          | NULL\nPetr          | Ivan\nAlice         | Ivan\nMax           | Petr\nAlex          | Petr\nElena         | Max\nBob           | NULL\n```\n\n- `LEFT` keeps employees without a manager (Ivan, Bob). An inner join would drop them.\n- Follow-up, the whole chain up to the top: `WITH RECURSIVE` walking `head_id`.\n- Schema nit: `id`/`head_id` should be integer with an FK `head_id REFERENCES staff(id)`, plus an index on `head_id`. As `TEXT`, sorting `'10' < '2'` and missing integrity bite.",
+  "level": 1,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-toast",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How does PostgreSQL store large values (TOAST)?",
+  "a": "**TOAST** (The Oversized-Attribute Storage Technique) handles values that don't fit comfortably in an 8 KB page. Rows must fit in a page, and Postgres targets about 2 KB per row (`TOAST_TUPLE_THRESHOLD`).\n\nWhen a row exceeds the threshold, variable-length columns (`text`, `bytea`, `jsonb`, arrays) are:\n\n1. **Compressed** inline (pglz, or **lz4** with PG14+ `default_toast_compression`).\n2. If still too big, **moved out of line** into the table's companion TOAST table (`pg_toast.pg_toast_<oid>`), split into ~2 KB chunks. The main row keeps an 18-byte pointer.\n\nPer-column strategies (`ALTER TABLE ... ALTER COLUMN ... SET STORAGE`): `PLAIN`, `MAIN` (compress, prefer inline), `EXTENDED` (the default: compress, then move out), and `EXTERNAL` (out of line, no compression, which makes `substring` on big text fast). The max value is 1 GB.\n\nConsequences:\n\n- `SELECT *` on wide rows pays to de-TOAST big columns, so select only what you need.\n- Updating a non-TOASTed column reuses the TOAST pointer, so no copy is made.\n- Updating a big `jsonb` rewrites the whole value, which creates WAL and bloat.\n- TOAST tables need vacuum too.",
+  "level": 2,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-transactions-in-go",
+  "cat": "databases",
+  "kind": "code",
+  "q": "How do you work with transactions in Go? How do you share one transaction between two repositories in a single request?",
+  "a": "With `database/sql`: `tx, err := db.BeginTx(ctx, opts)`, then **`defer tx.Rollback()`** (it's a no-op after a successful `Commit`), run statements on `tx`, then `return tx.Commit()`. Every query in the transaction must go through `tx`, which is bound to **one connection**. Using `db` inside the transaction runs outside it, and can deadlock a small pool.\n\nTo span several repositories, make them depend on a small interface that both `*sql.DB` and `*sql.Tx` satisfy, and use a **unit-of-work** helper:\n\n```go\ntype DBTX interface {\n\tExecContext(ctx context.Context, q string, args ...any) (sql.Result, error)\n\tQueryRowContext(ctx context.Context, q string, args ...any) *sql.Row\n}\n\ntype Orders struct{ db DBTX }\ntype Stock struct{ db DBTX }\n\nfunc (s *Store) InTx(ctx context.Context, fn func(Orders, Stock) error) error {\n\ttx, err := s.db.BeginTx(ctx, nil)\n\tif err != nil {\n\t\treturn err\n\t}\n\tdefer tx.Rollback()\n\tif err := fn(Orders{tx}, Stock{tx}); err != nil {\n\t\treturn err\n\t}\n\treturn tx.Commit()\n}\n```\n\nThe service calls `store.InTx(ctx, func(o Orders, s Stock) error { ... })`. That's the pattern sqlc generates (`WithTx`). Another option is to put the tx into `ctx` and have repositories pick it up. That's less explicit, but popular (e.g., avito-tech/go-transaction-manager).\n\nGotchas: keep network calls out of transactions, retry on `40001`/`40P01`, and pgx's `pgx.Tx` is **not** safe for concurrent use. (Code checked with `go vet`.)",
+  "level": 2,
+  "asked": [
+   "Velme"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "databases-tx-goroutines",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "Code opens a transaction and then, inside a for loop, starts a goroutine per iteration that writes through that transaction. What happens?",
+  "a": "It's broken in several ways:\n\n- **A transaction is one connection, which is one serial conversation.** Goroutines don't make it parallel. `database/sql` serializes statements on the tx's connection (at best there's no speedup). With pgx's native `pgx.Tx` or `pgx.Conn`, which aren't concurrency-safe, you get `conn busy` errors or protocol corruption. An open `Rows` blocks other statements on that connection.\n- **Commit races the goroutines**: without a `WaitGroup`/`errgroup`, the loop ends, `Commit()` (or the deferred `Rollback`) runs, and late goroutines get `sql: transaction has already been committed or rolled back` (`sql.ErrTxDone`). Their writes are silently missing, or partially included.\n- **Errors are lost**: a failed insert in a goroutine can't roll back the transaction unless the errors are collected.\n- Before Go 1.22, capturing the loop variable made goroutines write the wrong or duplicate items. Go 1.22+ uses per-iteration variables.\n- With a cancelled `ctx`, the whole tx is rolled back while goroutines keep going.\n\nFix: do the writes **sequentially inside the tx**, but **batch** them (multi-row `INSERT`, `COPY`, `pgx.Batch`) for speed. If you really need parallelism, use separate transactions per chunk with `errgroup.SetLimit`, and accept non-atomicity or make the chunks idempotent.",
+  "level": 2,
+  "asked": [
+   "Forward"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-varchar-char-text",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What are the differences between varchar, char and text in PostgreSQL, and are they stored differently?",
+  "a": "In Postgres **all three use the same underlying storage** (`varlena`): a 1-byte header for short values (4 bytes past 126 bytes), then the bytes. Large values get compressed and moved out of line via TOAST. There's **no performance difference** between `text` and `varchar(n)`.\n\n- **`text`**: unlimited length (up to 1 GB). This is the idiomatic default.\n- **`varchar(n)`**: text plus a length **check**. The limit is a constraint, not a storage optimization. Widening it is metadata-only. For evolvable limits, prefer `text` plus a `CHECK (char_length(x) <= n)`.\n- **`char(n)`**: **blank-padded** to n characters and stored padded. Trailing spaces are semantically insignificant in comparisons. It's usually slower and wastes space. Avoid it; the Postgres wiki says \"don't use char(n)\".\n\nGotchas: `n` counts characters, not bytes (UTF-8 may use up to 4 bytes per character). Collation, not the type, drives sort and comparison cost. In MySQL, unlike Postgres, `CHAR` vs `VARCHAR` storage and indexing limits genuinely differ.",
+  "level": 1,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-varchar-widen",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do you safely change a varchar(50) column to varchar(200) on a table with hundreds of thousands of rows?",
+  "a": "In Postgres (9.2+), **increasing** a `varchar` limit or converting `varchar(n)` → `text` is a **metadata-only change**: no table rewrite, no index rebuild, and it's near-instant.\n\n```sql\nSET lock_timeout = '3s';\nALTER TABLE users ALTER COLUMN nickname TYPE varchar(200);\n```\n\nIt still takes an **`ACCESS EXCLUSIVE`** lock briefly, so the real risk is lock queueing. If a long transaction is using the table, the `ALTER` waits, and every query behind it waits too. That's why you set `lock_timeout` and retry, run it off-peak, and deploy code that accepts longer values *after* the migration.\n\nCases that **do** rewrite or scan:\n\n- **Shrinking** the limit (`varchar(200)` → `varchar(50)`) must check every row, and fails if any are too long.\n- Changing to a different type (`int` → `bigint`, `text` → `int`).\n- Columns that are part of certain indexes or views: views must be dropped and recreated.\n\nMany teams avoid the issue by using `text` + `CHECK (char_length(col) <= 200)`. A check can be added `NOT VALID` and validated online, and changed later without type changes.\n\nMySQL differs: crossing the 255-byte length-prefix boundary forces a table copy.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-views-materialized",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "What are VIEW and MATERIALIZED VIEW for, and how do they differ?",
+  "a": "A **VIEW** is a saved query. It stores no data. Each query against it is expanded into the underlying SQL and planned together with it. Uses:\n\n- Hide complexity or joins behind a simple name.\n- Expose a stable API over a changing schema.\n- Restrict columns and rows for security (`security_barrier`, or PG15 `security_invoker`).\n\nIt is always fresh, and exactly as fast as the underlying query.\n\nA **MATERIALIZED VIEW** **stores the result** physically, like a table, and can be indexed. Reads are fast, which suits expensive aggregations, dashboards and reports. It's **stale until refreshed**:\n\n- `REFRESH MATERIALIZED VIEW mv` recomputes everything and takes an exclusive lock, blocking reads.\n- `REFRESH MATERIALIZED VIEW CONCURRENTLY mv` doesn't block readers, but needs a unique index and is slower.\n- Postgres has **no incremental refresh** built in. Schedule refreshes (cron, pg_cron), or maintain summary tables by hand or with pg_ivm.\n\nPick a view for abstraction, and a materialized view when the query is too slow and bounded staleness is acceptable.",
+  "level": 1,
+  "asked": [
+   "Kvando"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-where-vs-having",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How does WHERE differ from HAVING?",
+  "a": "**`WHERE` filters rows before grouping. `HAVING` filters groups after aggregation.**\n\n```sql\nSELECT customer_id, sum(amount) AS total\nFROM orders\nWHERE status = 'paid'\nGROUP BY customer_id\nHAVING sum(amount) > 5000;\n```\n\n- `WHERE` can't use aggregates (`sum`, `count`), because they don't exist yet at that stage.\n- `HAVING` can use aggregates and grouped columns.\n- Put everything you can in `WHERE`: it reduces rows early and can use indexes. A `HAVING` on a plain grouped column works, but is wasteful.\n\nGotcha: in Postgres, `HAVING` **can't reference a `SELECT` alias** (`HAVING total > 5000` fails with `column \"total\" does not exist`). Repeat the expression. MySQL and ClickHouse allow the alias, which is a common source of \"works on my DB\" bugs.",
+  "level": 1,
+  "asked": [
+   "RealIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "databases-window-functions",
+  "cat": "databases",
+  "kind": "theory",
+  "q": "How do window functions work, and how do you use them?",
+  "a": "A window function computes a value **over a set of rows related to the current row** without collapsing them. That's the difference from `GROUP BY`: every input row stays in the output.\n\n```sql\nSELECT\n    department_id, name, salary,\n    rank()       OVER (PARTITION BY department_id ORDER BY salary DESC) AS rnk,\n    avg(salary)  OVER (PARTITION BY department_id)                     AS dept_avg,\n    sum(amount)  OVER (ORDER BY created_at\n                       ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total,\n    lag(salary)  OVER (ORDER BY hired_at)                              AS prev_salary\nFROM employee;\n```\n\n- `PARTITION BY` splits rows into groups. `ORDER BY` orders rows within a partition. The **frame** (`ROWS`/`RANGE`/`GROUPS BETWEEN ...`) picks which rows the aggregate sees.\n- Functions: ranking (`row_number`, `rank`, `dense_rank`, `ntile`), offset (`lag`, `lead`, `first_value`, `last_value`, `nth_value`), and any aggregate (`sum`, `avg`, `count`).\n- Typical tasks: top-N per group (`row_number() ... WHERE rn <= 3` in a subquery), running totals, moving averages, deltas versus the previous row, dedup (keep `rn = 1`), and a total count alongside a page (`count(*) OVER ()`).\n\nGotchas: they run after `WHERE`/`GROUP BY`/`HAVING`, so you can't filter on them directly; wrap them in a subquery or CTE. With `ORDER BY`, the default frame ends at the current row, so `last_value` surprises people.",
+  "level": 2,
+  "asked": [
+   "DCloud"
+  ],
+  "n": 1
+ }
+]

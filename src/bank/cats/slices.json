@@ -1,0 +1,286 @@
+[
+ {
+  "id": "slices-append-growth",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "How does `append` work under the hood, and what happens when `len == cap`?\nFollow-ups: how does capacity grow? Why is append \"weird\" compared to other languages?",
+  "a": "`s = append(s, x...)`:\n1. If `len(s) + n <= cap(s)`: write the elements into the **existing** backing array after `len` and return a header with the **same pointer** and a larger len.\n2. Otherwise (`len == cap` and more is needed), `runtime.growslice`: allocate a **new** larger array, copy the old elements, add the new ones, and return a header pointing to the new array. The old array becomes garbage once unreferenced.\n\n**Growth policy** (Go 1.20+): if the needed length is over double the old cap, use exactly the needed length; otherwise **double** while cap < 256; above that, grow smoothly toward **×1.25** (`newcap += (newcap + 768) / 4`). Then the size is rounded up to the allocator's **size class**, so actual caps are often larger than the formula (e.g. 5 ints may give cap 6).\n\n**Why append is \"weird\":** it's a plain function over a value-type header, not a method on a list object. It returns a new header that you **must** assign (`s = append(s, x)`), and whether the result shares memory with the input depends on capacity. So two appends from the same base can overwrite each other, and appending inside a function doesn't change the caller's len.\n\nOther capacity facts:\n- `capacity` = number of elements from the slice's start to the end of the backing array;\n- `copy(dst, src)` copies `min(len(dst), len(src))` elements, doesn't allocate, and handles overlap;\n- adding an element: `append`; inserting in the middle: `slices.Insert`.",
+  "level": 2,
+  "asked": [
+   "CloudX",
+   "FrogStudio",
+   "MascotGames",
+   "Plata",
+   "QROQO",
+   "RSHB",
+   "Sovkombank",
+   "T-Bank",
+   "X5 Group"
+  ],
+  "n": 9
+ },
+ {
+  "id": "slices-what-is-slice",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "What is a slice, and how is it structured in memory?\nFollow-ups: what are its quirks, and what's the complexity of common operations?",
+  "a": "A slice is a **descriptor (view) over an underlying array**. Its header is 3 words (24 bytes on 64-bit):\n\n```go\ntype slice struct {\n    array unsafe.Pointer // pointer to the first element of the view\n    len   int            // number of accessible elements\n    cap   int            // elements from array start to end of backing array\n}\n```\n\nThe elements live in a separate backing array (heap or stack, depending on escape analysis). Several slices can share one backing array: `s[i:j]` creates a new header pointing into the same memory, with no copy.\n\nComplexity:\n- index read/write, `len`, `cap`, reslicing: **O(1)**;\n- `append`: **amortized O(1)** (O(n) when it has to grow and copy);\n- insert/delete in the middle (`slices.Insert/Delete`): O(n);\n- search: O(n), or O(log n) with `slices.BinarySearch` on sorted data.\n\nQuirks:\n- passed by value, but the header copy shares the elements;\n- `append` may or may not reallocate, so aliasing effects depend on capacity;\n- slices aren't comparable (only `== nil`); use `slices.Equal`;\n- a small subslice keeps the whole big array alive;\n- a nil slice is valid for `len`, `range` and `append`.",
+  "level": 1,
+  "asked": [
+   "Crtex",
+   "EyesOfWonder",
+   "Ozon",
+   "Plata",
+   "QROQO",
+   "RSHB",
+   "T-Bank"
+  ],
+  "n": 8
+ },
+ {
+  "id": "slices-vs-arrays",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "What's the difference between an array and a slice in Go?",
+  "a": "**Array `[N]T`**\n- fixed size, and the size is **part of the type**: `[3]int` and `[4]int` are different types;\n- a **value**: assignment and passing copy all elements;\n- comparable with `==` if `T` is comparable, so it can be a map key;\n- can live entirely on the stack and has no header overhead.\n\n**Slice `[]T`**\n- dynamic length; a 24-byte header (ptr, len, cap) over a backing array;\n- copying a slice copies only the header, and both copies share the elements;\n- grows with `append` (possibly reallocating);\n- not comparable (only with `nil`), can't be a map key;\n- zero value is `nil`.\n\nRelationship: every slice is backed by an array, and `arr[:]` makes a slice over an array. Since Go 1.20 you can convert a slice to an array (`[4]int(s)`, panics if `len(s) < 4`), and since 1.17 to an array pointer.\n\nWhen to use arrays: fixed-size data (hashes `[32]byte`, UUIDs, coordinates), map keys, and avoiding allocations. Everything else is slices.\n\nGotcha: `for _, v := range arr` over an array **value** copies the whole array first; range over `&arr` or a slice instead.",
+  "level": 1,
+  "asked": [
+   "RealIT",
+   "Sarafan",
+   "Sovkombank",
+   "VK",
+   "X5 Group"
+  ],
+  "n": 6
+ },
+ {
+  "id": "slices-append-shared-backing-two-appends",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? Two `append` calls are made from the same base slice that has spare capacity.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\ts := make([]int, 0, 5)\n\ts = append(s, 1, 2, 3)\n\ta := append(s, 4)\n\tb := append(s, 5)\n\tfmt.Println(a)\n\tfmt.Println(b)\n}\n",
+  "a": "```text\n[1 2 3 5]\n[1 2 3 5]\n```\n`s` has len 3, **cap 5**. Both appends fit in the capacity, so neither reallocates:\n- `a := append(s, 4)` writes `4` into index 3 of the shared array and returns a len-4 header;\n- `b := append(s, 5)` starts from the same `s` (still len 3), so it writes `5` into the **same index 3**, overwriting the `4`.\n\n`a` and `b` are two len-4 views over one array, so both print `[1 2 3 5]`.\n\nA common variant builds the base with appends from empty:\n```go\nx := []int{}\nx = append(x, 0) // cap 1\nx = append(x, 1) // cap 2\nx = append(x, 2) // cap 4\ny := append(x, 3)\nz := append(x, 4)\nfmt.Println(y, z) // [0 1 2 4] [0 1 2 4]\n```\n(verified: capacity grows 0 → 1 → 2 → 4, so after three appends there's one free slot to fight over). With cap 3, both appends would reallocate independently and print `[0 1 2 3] [0 1 2 4]`.\n\nFix: never branch two appends from one base you don't own. Copy first (`slices.Clone`), or cap the base: `x[:len(x):len(x)]`.",
+  "level": 2,
+  "asked": [
+   "Ozon",
+   "WMX",
+   "X5 Group"
+  ],
+  "n": 3,
+  "verified": true
+ },
+ {
+  "id": "slices-pass-to-function",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "Is a slice passed to a function by value or by reference? What happens if the function changes an element or appends?\nFollow-up: is it better to pass a slice by value or by pointer?",
+  "a": "By **value**: the function gets a copy of the 24-byte header (ptr, len, cap), and both headers point to the **same backing array**.\n\n- **Changing an element** (`s[i] = x`) is visible to the caller: same array.\n- **`append` inside the function**:\n  - within capacity, it writes into the shared array, but only the local header's `len` grows. The caller's slice still has the old length and doesn't \"see\" the new element (it's there beyond its len, and a later append from the caller will overwrite it);\n  - beyond capacity, it reallocates, and from then on the local slice is detached. Even element changes made after that point are invisible to the caller.\n\n**By value or pointer?** Pass by value, and if the function changes length, **return the new slice** (`s = add(s, x)`), like `append` itself. Passing `*[]T` is legitimate but rarer (e.g. methods on `type Stack []T` with a pointer receiver, or decoding into a caller-owned slice).\n\nGotcha: to make sure a function can't affect the caller's backing array, pass `s[:len(s):len(s)]` (cap = len) or a clone.",
+  "level": 1,
+  "asked": [
+   "RSHB",
+   "Sovkombank",
+   "SpaceIT"
+  ],
+  "n": 3
+ },
+ {
+  "id": "slices-copy",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "What does `copy` do, and how do you copy a slice into a new underlying array?",
+  "a": "`n := copy(dst, src)` copies `min(len(dst), len(src))` elements from `src` into `dst` and returns the count. It never allocates or grows `dst`, handles overlapping slices correctly (like `memmove`), and can copy from a string into `[]byte`.\n\nClassic mistake: `var dst []int; copy(dst, src)` copies **0** elements, because `dst` has length 0. Allocate first:\n\n```go\ndst := make([]int, len(src))\ncopy(dst, src)\n```\n\nIdiomatic alternatives that allocate a new backing array:\n- `dst := slices.Clone(src)` (Go 1.21+; returns nil for a nil input);\n- `dst := append([]int(nil), src...)`, or `append(src[:0:0], src...)`.\n\nWhy you need it: to detach from a shared backing array before modifying, to keep a small part of a huge buffer without keeping the whole buffer alive, or to hand data to another goroutine safely.\n\nGotcha: `copy` and `Clone` are **shallow**. Pointers, maps and nested slices inside the elements are still shared.",
+  "level": 1,
+  "asked": [
+   "Sovkombank"
+  ],
+  "n": 2
+ },
+ {
+  "id": "slices-nil-vs-empty",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "What is `var a []int` right after declaration? What's the difference between a nil slice and an empty slice?\nFollow-up: what happens if you index or append to them?",
+  "a": "`var a []int` is a **nil slice**: header `{nil, 0, 0}`, `a == nil` is `true`. `a := []int{}` or `make([]int, 0)` is an **empty non-nil slice**: len 0, cap 0, but the pointer is non-nil (points to `runtime.zerobase`), so `a == nil` is `false`.\n\nThey behave the same almost everywhere:\n- `len` and `cap` are 0, and `range` does zero iterations;\n- `append` works on both (allocates a backing array);\n- indexing `a[0]` **panics** on both: `index out of range [0] with length 0`;\n- slicing `a[0:0]` is fine.\n\nWhere they differ:\n- `a == nil` checks;\n- `encoding/json`: nil gives `null`, empty gives `[]`, which matters for API contracts;\n- `reflect.DeepEqual(nilSlice, emptySlice)` is `false` (but `slices.Equal` is `true`).\n\nBest practice: check emptiness with `len(a) == 0`, not `a == nil`. Return nil for \"no results\" unless the API needs `[]` in JSON.",
+  "level": 1,
+  "asked": [
+   "EyesOfWonder",
+   "X5 Tech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "slices-preallocate",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "Why specify capacity upfront, and how do you avoid allocations from constantly appending to a slice?",
+  "a": "Every time `append` runs out of capacity it allocates a new array (~2× size), copies all existing elements, and leaves the old array for the GC. For n elements that's about log2(n) allocations, O(n) extra copying, and extra GC pressure. Growth also means memory bursts, since the old and new arrays are alive at the same time during the copy.\n\nWays to avoid it:\n- **preallocate** when the final size is known or bounded: `make([]T, 0, n)` then `append`, or `make([]T, n)` and assign by index;\n- `slices.Grow(s, n)` to reserve room before a batch of appends;\n- **reuse buffers**: `buf = buf[:0]` keeps the capacity for the next round (clear pointers first so they don't keep objects alive: `clear(buf)`);\n- `sync.Pool` for short-lived temporary buffers in hot paths;\n- avoid `[]*T` when `[]T` works (fewer allocations, better locality).\n\nGotchas:\n- don't over-allocate huge caps \"just in case\"; that's wasted memory;\n- `make([]T, n)` followed by `append` is a classic bug (n zero values plus your elements);\n- measure with `go test -bench . -benchmem`, and check escape analysis with `-gcflags=-m`.",
+  "level": 1,
+  "asked": [
+   "Plata"
+  ],
+  "n": 2
+ },
+ {
+  "id": "slices-unique-elements",
+  "cat": "slices",
+  "kind": "code",
+  "q": "Write a function that removes duplicates from a slice, keeping the first occurrence order.\nE.g. `[1 2 2 3 3 7 7 4 4 4 4 5 5 5 5]` → `[1 2 3 7 4 5]`; names `[Lupa Lupa Pupa Lupa ...]` → `[Lupa Pupa]`.",
+  "a": "Track seen values in a set (`map[T]struct{}`) and append only the first time. Using generics, one function covers both ints and names:\n\n```go\nfunc Unique[T comparable](in []T) []T {\n\tseen := make(map[T]struct{}, len(in))\n\tout := make([]T, 0, len(in))\n\tfor _, v := range in {\n\t\tif _, ok := seen[v]; ok {\n\t\t\tcontinue\n\t\t}\n\t\tseen[v] = struct{}{}\n\t\tout = append(out, v)\n\t}\n\treturn out\n}\n```\nOutput: `[1 2 3 7 4 5]` and `[Lupa Pupa]`.\n\nComplexity: O(n) time, O(n) memory.\n\nDiscussion:\n- `map[T]struct{}` vs `map[T]bool`: the empty struct takes 0 bytes per value and states the intent;\n- preallocating `out` and `seen` avoids regrowth; the size hint is an upper bound;\n- **sorted input, or order doesn't matter**: `slices.Sort(s); s = slices.Compact(s)` gives O(n log n) time with O(1) extra memory, done in place;\n- in-place variant: reuse the input's backing array (`out := in[:0]`) if the caller no longer needs the input;\n- for names, \"duplicates\" may need normalization (`strings.ToLower`, `strings.TrimSpace`) before using them as keys; ask the interviewer.",
+  "level": 1,
+  "asked": [
+   "Evrone",
+   "Sovkombank"
+  ],
+  "n": 2
+ },
+ {
+  "id": "slices-append-in-func-spare-capacity",
+  "cat": "slices",
+  "kind": "output",
+  "q": "A slice with len 0 and cap 100 is passed to a function that appends one element. What does the caller print?",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc add(s []int) {\n\ts = append(s, 1)\n}\n\nfunc main() {\n\ts := make([]int, 0, 100)\n\tadd(s)\n\tfmt.Println(s, len(s), cap(s))\n\tfmt.Println(s[:1])\n}\n",
+  "a": "```text\n[] 0 100\n[1]\n```\nThe function gets a **copy of the header** (len 0, cap 100). `append` fits within capacity, so it writes `1` into index 0 of the **shared** backing array and updates only the **local** len to 1. The caller's header still says len 0, so `fmt.Println(s)` prints `[]`.\n\nThe value is physically there: reslicing within capacity (`s[:1]`) shows `[1]`. The caller's next `append` would overwrite it.\n\nFixes: return the slice (`s = add(s)`), or take `*[]int`.",
+  "level": 1,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-append-pitfalls",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "What problems come up when using `append` with slices?",
+  "a": "1. **Not assigning the result back**: `t := append(s, x)` and then continuing to use `s` (a bare `append(s, x)` statement doesn't even compile, since the result is unused).\n2. **Shared backing arrays**: `a := append(s, 1)` and `b := append(s, 2)` both write into `s`'s spare capacity, so the second overwrites the first. Subslices can overwrite the parent's elements: `append(parent[:2], x)` writes into `parent[2]`.\n3. **Behavior depends on capacity**: whether a change is visible to other slices depends on whether `append` reallocated, which is hard to see when reading the code.\n4. **Appending in a callee**: the caller's `len` doesn't change. Return the slice or pass a pointer.\n5. **Stale pointers**: `p := &s[0]`, then an `append` that reallocates means `p` points into the old array.\n6. **Memory retention**: a tiny subslice of a big buffer keeps the whole buffer alive, and `s = s[:0]` on a `[]*T` keeps the pointees alive.\n7. **Data races**: concurrent `append` to one slice loses elements or corrupts it.\n8. `make([]T, n)` + `append`: n unexpected zero values in front.\n\nFixes: the full slice expression `s[lo:hi:max]` limits capacity so the next `append` must copy; `slices.Clone` before mutating; preallocate; return new slices from functions; protect shared slices with a mutex.",
+  "level": 2,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "slices-append-pointer-elements",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? A slice of `*int` is passed by value into a helper that appends one more element within capacity.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n)\n\nfunc appendLen(numbers []*int) {\n\tsize := len(numbers)\n\tnumbers = append(numbers, &size)\n}\n\nfunc main() {\n\tnumbers := make([]*int, 0, 5)\n\tvar number int\n\tfor range 3 {\n\t\tnumber++\n\t\tnumbers = append(numbers, &number)\n\t}\n\n\tappendLen(numbers)\n\n\tfor _, number := range numbers {\n\t\tfmt.Printf(\"%d \", *number)\n\t}\n}\n",
+  "a": "```text\n3 3 3\n```\nTwo things happen:\n\n1. **All three elements point to the same variable.** `number` is declared once outside the loop, and each iteration appends `&number`, the same address. After three increments `number == 3`, so each element dereferences to `3`. (Go 1.22's per-iteration variables only apply to variables declared by the `for` statement itself, not to `number`.)\n2. **`appendLen` doesn't affect `main`'s slice.** It gets a copy of the header (len 3, cap 5). The append fits within capacity, so it writes `&size` into index 3 of the **shared** backing array, but only the local header's len becomes 4. `main`'s `numbers` still has len 3, so the loop prints three values.\n\nThe 4th pointer is in the backing array; `numbers[:4]` would reveal it (`*numbers[3] == 3`, the value of `size`).\n\nFix, if you wanted distinct values: append `&v` where `v` is a new variable each iteration (e.g. `v := number`). Return the slice from `appendLen` to make the append visible.",
+  "level": 2,
+  "asked": [
+   "T-Bank"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-append-subslice-overwrites-parent",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? `append` into a subslice `a[1:2]` and then a write into the result.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc test() {\n\ta := []string{\"0\", \"1\", \"2\"}\n\tb := append(a[1:2], \"a\")\n\tb[0] = \"b\"\n\tfmt.Printf(\"%v\\n\", a)\n}\n\nfunc main() {\n\ttest()\n}\n",
+  "a": "```text\n[0 b a]\n```\n- `a = [\"0\" \"1\" \"2\"]`, len 3, cap 3.\n- `a[1:2]` is `[\"1\"]` with len 1 and **cap 2** (it extends to the end of `a`'s array).\n- `append(a[1:2], \"a\")` fits in capacity, so it writes `\"a\"` into the shared array at `a[2]`. `b` is a len-2 view over `a[1:3]`.\n- `b[0] = \"b\"` writes `a[1]`.\n- `a` is now `[0 b a]`.\n\nFix: `b := append(a[1:2:2], \"a\")` (full slice expression, cap = len) forces a reallocation, and `a` stays `[0 1 2]`.",
+  "level": 2,
+  "asked": [
+   "DIT Moscow"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-append-subslice-primes",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? A subslice `s := primes[1:4]` is appended to beyond and within its remaining capacity.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tprimes := []int{2, 3, 5, 7, 11, 13}\n\n\ts := primes[1:4]\n\tfmt.Println(\"old s:\", s)\n\tfmt.Println(\"old primes:\", primes)\n\n\tnewS := append(s, 15, 16, 17, 18)\n\tfmt.Println(\"new s:\", newS)\n\tfmt.Println(\"new primes:\", primes)\n\n\tnewS = append(s, 15, 16)\n\tfmt.Println(\"new s:\", newS)\n\tfmt.Println(\"new primes:\", primes)\n\n\tnewS2 := append(newS, 17)\n\tfmt.Println(\"new 2s:\", newS2)\n\tfmt.Println(\"new 2primes:\", primes)\n}\n",
+  "a": "```text\nold s: [3 5 7]\nold primes: [2 3 5 7 11 13]\nnew s: [3 5 7 15 16 17 18]\nnew primes: [2 3 5 7 11 13]\nnew s: [3 5 7 15 16]\nnew primes: [2 3 5 7 15 16]\nnew 2s: [3 5 7 15 16 17]\nnew 2primes: [2 3 5 7 15 16]\n```\n`s := primes[1:4]` gives `[3 5 7]`, `len 3`, and **`cap 5`** (from index 1 to the end of the 6-element array).\n\n1. `append(s, 15, 16, 17, 18)` needs len 7 > cap 5, so it **reallocates**. `newS` is a fresh array and `primes` is untouched.\n2. `append(s, 15, 16)` needs len 5 ≤ cap 5, so it writes **in place** into `primes[4]` and `primes[5]`: `primes` becomes `[2 3 5 7 15 16]`. `11` and `13` are silently overwritten.\n3. `append(newS, 17)`: `newS` now has len 5 == cap 5, so it **reallocates**. `newS2` is detached and `primes` stays as is.\n\nLesson: appending to a subslice writes into the parent's memory as long as capacity allows. To force a copy, cap the subslice with a full slice expression: `s := primes[1:4:4]`.",
+  "level": 2,
+  "asked": [
+   "MascotGames"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-defer-mutates-returned-slice",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? A function returns a slice that a deferred closure then mutates.\nThe defer writes an index, appends, sorts, and writes another index after `return n`.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sort\"\n)\n\nfunc main() {\n\tfmt.Println(do([]int{1, 2, 3}))\n}\n\nfunc do(n []int) []int {\n\tdefer func() {\n\t\tn[2] = -2\n\t\tn = append(n, 0)\n\t\tsort.Ints(n)\n\t\tn[1] = 10\n\t}()\n\tn[0] = 2\n\tn = append(n, 0)\n\treturn n\n}\n",
+  "a": "```text\n[-2 10 0 2]\n```\n1. Input `[1 2 3]` (len 3, cap 3). `n[0] = 2` gives `[2 2 3]`.\n2. `n = append(n, 0)` exceeds cap, so it reallocates to a **new array X** with cap 6: `n = X[0:4] = [2 2 3 0]`.\n3. `return n`: the result is **unnamed**, so the header (ptr = X, **len 4**) is copied into the result now. Later reassignments of `n` can't change the result header, but writes to X can change what it shows.\n4. The defer runs:\n   - `n[2] = -2` makes X = `[2 2 -2 0 _ _]`;\n   - `n = append(n, 0)`: len 5 ≤ cap 6, so it goes **in place** into X[4]; `n` is len 5;\n   - `sort.Ints(n)` sorts X[0:5] = `[2 2 -2 0 0]` into `[-2 0 0 2 2]`;\n   - `n[1] = 10` makes X = `[-2 10 0 2 2 _]`.\n5. The caller sees X through the saved header with len 4: **`[-2 10 0 2]`**.\n\nKey ideas: a returned slice header is fixed at `return`, but the backing array is shared with the deferred closure, and the defer's append didn't reallocate (cap 6), so its writes and sort are visible. If the result were named (`(n []int)`), the caller would get the defer's len-5 slice: `[-2 10 0 2 2]`.",
+  "level": 3,
+  "asked": [
+   "Basis"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-fill-then-sort-shared",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? A len-3/cap-5 slice is filled and appended to in one function, then sorted in another.\n`fill` writes 3 elements and appends a 4th, `sr` prints and sorts, then `main` prints `v`.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sort\"\n)\n\nfunc main() {\n\tv := make([]int, 3, 5)\n\tfill(v)\n\tsr(v)\n\tfmt.Println(v)\n}\n\nfunc fill(arr []int) {\n\tarr[0] = 4\n\tarr[1] = 3\n\tarr[2] = 2\n\tarr = append(arr, 1)\n\tfmt.Println(arr)\n}\n\nfunc sr(arr []int) {\n\tfmt.Println(arr)\n\tsort.Ints(arr)\n}\n",
+  "a": "```text\n[4 3 2 1]\n[4 3 2]\n[2 3 4]\n```\n- `v` has len 3, cap 5, and shares its backing array with every copy passed to the functions.\n- `fill`: the index writes change the shared array to `[4 3 2 _ _]`. `append(arr, 1)` fits in the capacity, so it writes `1` into the shared index 3, but only the **local** header has len 4. It prints `[4 3 2 1]`.\n- `sr(v)`: `v` still has len 3, so it prints `[4 3 2]` (the `1` sits beyond its length). `sort.Ints` sorts those 3 elements **in place** in the shared array: `[2 3 4]`.\n- `main` prints `v`, which is `[2 3 4]`: the sort is visible (same array), the append isn't (the caller's len didn't change).\n\n`v[:4]` in `main` would print `[2 3 4 1]`: the appended element is still there, just outside `v`'s length.",
+  "level": 2,
+  "asked": [
+   "Basis"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-mutate-element-in-func",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? (a function writes to an element of a passed slice)\nFollow-up: how does `append` decide it needs to allocate a new underlying array?",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\ta := []int{0, 1, 2, 3}\n\tb := a\n\n\tch(a)\n\n\tfmt.Printf(\"%v\", b)\n}\n\nfunc ch(a []int) {\n\ta[0] = 11\n}\n",
+  "a": "```text\n[11 1 2 3]\n```\n`b := a` copies only the slice header, so `a` and `b` share one backing array. `ch(a)` gets another header copy pointing to the same array, and `a[0] = 11` writes into that shared array. `b` sees it.\n\nNothing here reallocates, because no `append` happens. If `ch` did `a = append(a, 4)`, then with `len == cap == 4` it would allocate a new array, and any writes after that would be invisible to `b`.\n\n**When append allocates:** it compares `len(s) + number of new elements` with `cap(s)`. If it fits, it writes in place; otherwise `growslice` allocates a bigger array (×2 below 256 elements, then gradually ×1.25, rounded up to a size class) and copies.",
+  "level": 1,
+  "asked": [
+   "Ximilabs"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-pointer-vs-value-param",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? A slice is modified via a pointer (`*[]int`, with append) and then via a value (index write, then append).",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc slices1(s []int) {\n\ts[1] = 20\n\ts = append(s, 80)\n}\n\nfunc slices2(s *[]int) {\n\t(*s)[1] = 10\n\t*s = append(*s, 40)\n}\n\nfunc main() {\n\ts := []int{1, 2, 3}\n\tslices2(&s)\n\tslices1(s)\n\n\tfmt.Println(s)\n}\n",
+  "a": "```text\n[1 20 3 40]\n```\n1. `s = [1 2 3]`, len 3, cap 3.\n2. `slices2(&s)`: `(*s)[1] = 10` gives `[1 10 3]`. `*s = append(*s, 40)` exceeds cap, so it reallocates to a new array (cap 6), and **main's `s` is updated through the pointer**: `[1 10 3 40]`, len 4, cap 6.\n3. `slices1(s)` gets a header copy pointing to the same new array. `s[1] = 20` writes into the shared array, so main sees `[1 20 3 40]`. `append(s, 80)` fits (len 4 < cap 6): it writes `80` into index 4 of the shared array, but only the local len grows, so main's len stays 4.\n4. It prints `[1 20 3 40]`.\n\nThe pointer version changes the caller's header (len/ptr); the value version can only change elements within the caller's view.",
+  "level": 2,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-subslice-append-capacity",
+  "cat": "slices",
+  "kind": "output",
+  "q": "What does this program print? A subslice shares the parent's array; `append` grows it in place until capacity runs out.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n)\n\nfunc main() {\n\tarr := []int{1, 2, 3, 4, 5}\n\tfmt.Println(arr)\n\tsl := arr[2:4]\n\tfmt.Println(sl)\n\tsl[0] = 0\n\tfmt.Println(sl)\n\tfmt.Println(arr)\n\tsl = append(sl, 9)\n\tfmt.Println(sl)\n\tfmt.Println(arr)\n\tsl = append(sl, 9)\n\tfmt.Println(sl)\n\tfmt.Println(arr)\n}\n",
+  "a": "```text\n[1 2 3 4 5]\n[3 4]\n[0 4]\n[1 2 0 4 5]\n[0 4 9]\n[1 2 0 4 9]\n[0 4 9 9]\n[1 2 0 4 9]\n```\n- `arr` has len 5, cap 5. `sl := arr[2:4]` gives **`[3 4]`**, len 2, **cap 3** (indices 2..4 of `arr`).\n- `sl[0] = 0` writes `arr[2]`, so `arr = [1 2 0 4 5]`.\n- First `append(sl, 9)`: len 3 ≤ cap 3, so it goes **in place** into `arr[4]`: `sl = [0 4 9]`, `arr = [1 2 0 4 9]`.\n- Second `append(sl, 9)`: len 4 > cap 3, so it **reallocates**. `sl` gets a new array `[0 4 9 9]`, and `arr` is **unchanged** at `[1 2 0 4 9]`.\n\nA common wrong answer claims the second append still fits and writes into `arr`. It doesn't: a subslice's capacity is measured from its start (`cap(arr) - 2 = 3`), not the parent's cap of 5.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "slices-thread-safety",
+  "cat": "slices",
+  "kind": "theory",
+  "q": "How thread-safe is a slice?",
+  "a": "Slices are **not** thread-safe; there's no internal locking.\n\n- Concurrent **reads** are safe.\n- Concurrent writes to **different indexes** of a preallocated slice are safe: each element is a separate memory location, so there's no data race (useful for parallel fan-out: `results[i] = f(i)`). False sharing may cost performance, but correctness is fine.\n- Concurrent writes to the **same** index, or a write concurrent with a read, is a data race.\n- Concurrent **`append`** to a shared slice is a race on the header (len/ptr) and the backing array, so elements get lost or overwritten, even if \"it seems to work\".\n\nFixes:\n- guard with `sync.Mutex`;\n- preallocate `make([]T, n)` and give each goroutine its own index;\n- have goroutines send results over a channel to one collector;\n- per-goroutine local slices merged at the end.\n\nAlways run tests with `go test -race`. Unlike maps, the runtime won't crash with a fatal error, so slice races silently corrupt data.",
+  "level": 2,
+  "asked": [
+   "Sovkombank"
+  ],
+  "n": 1
+ }
+]

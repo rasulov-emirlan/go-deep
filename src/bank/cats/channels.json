@@ -1,0 +1,352 @@
+[
+ {
+  "id": "channels-what-and-kinds",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "What is a channel in Go, and what kinds of channels are there?\nFollow-ups: what other ways do goroutines communicate, and what happens if you read from a buffered channel more than n times?",
+  "a": "A channel is a typed, goroutine-safe queue that both **transfers values** and **synchronizes** goroutines (\"share memory by communicating\"). A send happens-before the corresponding receive completes.\n\nKinds:\n- **Unbuffered** `make(chan T)`: a send blocks until a receiver takes the value (rendezvous).\n- **Buffered** `make(chan T, n)`: a send blocks only when the buffer is full, a receive only when it's empty.\n- **Directional** types: `chan<- T` (send-only) and `<-chan T` (receive-only), used in function signatures.\n- **nil** channel (zero value): every send and receive blocks forever; handy for disabling `select` cases.\n\nReading a buffered channel more than n times: once it's empty, the next receive **blocks** until someone sends. If no one ever will, you get a goroutine leak or `fatal error: all goroutines are asleep - deadlock!`. If the channel is closed, the extra receives return the zero value with `ok == false`.\n\nOther communication mechanisms: shared memory guarded by `sync.Mutex`/`RWMutex`, `sync/atomic`, `sync.Cond`, `sync.WaitGroup`/`errgroup` for completion, `context.Context` for cancellation and deadlines.\n\nMain gotchas: sending on a closed channel panics, closing twice panics, nil channels block forever, and forgotten receivers cause goroutine leaks.",
+  "level": 1,
+  "asked": [
+   "A7",
+   "Andersen",
+   "InfoWatch",
+   "LinIT",
+   "Magnit",
+   "Plata",
+   "QROQO",
+   "RealIT",
+   "Sovkombank",
+   "VseInstrumenty"
+  ],
+  "n": 10
+ },
+ {
+  "id": "channels-buffered-vs-unbuffered",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "What's the difference between buffered and unbuffered channels? Is a buffer of size 1 the same as unbuffered?\nFollow-ups: which one doesn't block the sender, what happens when the buffer is full, how does a receive on an unbuffered channel work, and when should you use each?",
+  "a": "- **Unbuffered**: a send blocks until a receiver takes the value. It's a **synchronous handoff**: when the send completes, you know the receiver has the value.\n- **Buffered (n)**: a send blocks only when the buffer is **full**, a receive only when it's empty. It decouples producer and consumer by up to n items. When full, the sender parks until space frees up (use `select` with `default` to drop instead of blocking).\n\n**Size 1 ≠ unbuffered.** With `cap=1` the first send succeeds with no receiver present, so the sender doesn't know whether anyone got it. The memory-model guarantee also differs: for unbuffered, the receive happens-before the send completes; for capacity C, the k-th receive happens-before the (k+C)-th send completes.\n\nHow a receive on an unbuffered channel works: under `hchan.lock`, if a sender is parked in `sendq` the value is copied directly from it and the sender is woken. Otherwise the receiver enqueues a `sudog` in `recvq` and parks, and the next sender copies the value straight into the receiver's stack and readies it.\n\nWhen to use:\n- Unbuffered: signals, handoffs, when you need synchronization.\n- Buffered: a known number of results (a buffer of N prevents leaks when the caller leaves early), semaphores (`make(chan struct{}, limit)`), absorbing short bursts.\n\nPitfall: adding a buffer to \"fix\" a deadlock usually just hides it until load grows.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "LinIT",
+   "Magnit",
+   "MascotGames",
+   "Plata",
+   "RealIT",
+   "SpaceIT"
+  ],
+  "n": 7
+ },
+ {
+  "id": "channels-nil-closed-behavior",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "What happens when you read from, write to, or close a nil channel or a closed channel?\nFollow-ups: what errors can channels cause, and can you check if a channel is closed without consuming a value?",
+  "a": "- **nil channel**: send blocks forever, receive blocks forever, `close` panics (`close of nil channel`).\n- **Closed channel**: send **panics** (`send on closed channel`), receive returns the remaining buffered values and then the **zero value with `ok == false`** immediately, forever; `close` again panics (`close of closed channel`).\n- **Open channel**: send/receive block as usual (unbuffered, or buffer full/empty); `close` succeeds.\n\nIf every goroutine ends up blocked (e.g. on a nil channel), the runtime aborts with `fatal error: all goroutines are asleep - deadlock!`. Otherwise it's a silent **goroutine leak**.\n\nTypical channel errors: those panics, deadlocks, leaks, `for range` over a channel that's never closed, and data races on values sent by pointer and then mutated.\n\nChecking closed without consuming: **not possible** in the language. `v, ok := <-ch` consumes a value, and `len(ch)` doesn't reveal closure. Design around ownership: the sender that closes knows, and others learn it via `ok == false` or a separate done channel/context.\n\nRestricting direction: use `chan<- T` (send-only) or `<-chan T` (receive-only) in signatures. The compiler rejects the wrong operation, and receive-only channels can't be closed.",
+  "level": 1,
+  "asked": [
+   "FrogStudio",
+   "InfoWatch",
+   "LinIT",
+   "RSHB",
+   "Sovkombank",
+   "VseInstrumenty"
+  ],
+  "n": 6
+ },
+ {
+  "id": "channels-select",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "What is `select` for, and which case runs if several channels are ready at once?",
+  "a": "`select` waits on several channel operations (sends and/or receives) and executes **exactly one** that can proceed. It's how you multiplex channels, add timeouts and handle cancellation:\n\n```go\nselect {\ncase v := <-results:\n\thandle(v)\ncase <-ctx.Done():\n\treturn ctx.Err()\ncase <-time.After(time.Second):\n\treturn errTimeout\n}\n```\n\nRules:\n- If **several cases are ready**, one is chosen **uniformly at random**. Source order doesn't matter, which prevents starvation. Don't rely on priority; if you need it, use nested selects.\n- If none are ready, it blocks, unless there's a `default`, which makes it non-blocking.\n- Cases on **nil channels** are never ready, which is useful to disable a branch dynamically.\n- `select {}` blocks forever.\n- All channel and value expressions in the cases are evaluated once, in source order, on entry, even for the case that isn't picked.\n\nGotcha: `time.After` in a hot loop allocates a timer per iteration. Since Go 1.23 unreferenced timers are collected promptly, but a reusable `time.Timer` or a context deadline is still cleaner.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Kvando",
+   "QROQO",
+   "SpaceIT",
+   "VK"
+  ],
+  "n": 5
+ },
+ {
+  "id": "channels-hchan-internals",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "How is a channel implemented internally (hchan), and how is it made thread-safe?\nFollow-ups: how is the buffer size set, and how does the ring buffer know it's full or where to write next?",
+  "a": "`make(chan T, n)` allocates a `runtime.hchan` on the heap. The channel value is a pointer to it:\n\n```go\ntype hchan struct {\n\tqcount   uint           // elements currently in buffer\n\tdataqsiz uint           // capacity n, fixed at make\n\tbuf      unsafe.Pointer // ring buffer of n elements\n\telemsize uint16\n\tclosed   uint32\n\telemtype *_type\n\tsendx    uint  // next slot to write\n\trecvx    uint  // next slot to read\n\trecvq    waitq // parked receivers (sudog list)\n\tsendq    waitq // parked senders\n\tlock     mutex\n}\n```\n\n- **Ring buffer**: two indexes, `sendx` for writes and `recvx` for reads, each wrapping to 0 at `dataqsiz`. It's full when `qcount == dataqsiz` and empty when `qcount == 0`.\n- **Thread safety**: every send, receive and close takes `hchan.lock`, a runtime mutex. A few fast paths (non-blocking select on an obviously empty or full channel) check atomically without the lock.\n- **Direct handoff**: if a receiver is already waiting in `recvq`, the sender copies the value **straight onto the receiver's stack** and readies it, skipping the buffer. Symmetrically, a receiver takes directly from a parked sender. Unbuffered channels always work this way.\n- **Blocking**: the goroutine wraps itself in a `sudog`, enqueues it in `sendq`/`recvq` and `gopark`s. The other side dequeues it and calls `goready`.\n\nThe capacity is fixed at creation; `cap(ch)` and `len(ch)` read it without guarantees under concurrency.",
+  "level": 2,
+  "asked": [
+   "Amtech",
+   "Digital Spirit",
+   "X5 Group",
+   "ZeBrains"
+  ],
+  "n": 4
+ },
+ {
+  "id": "channels-read-after-close-buffered",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "What happens when you read from a buffered channel after it's been closed? Do you lose the buffered data?\nFollow-ups: write 3 values, close, read them — what is the second `ok`? Does a select case on a closed channel fire?",
+  "a": "**No data is lost.** `close` only marks the channel closed; values already in the buffer stay there and are delivered in FIFO order. After the buffer is drained, every receive returns immediately with the zero value and `ok == false`.\n\n- Write 500 values and close: `for v := range ch` yields all 500, then the loop ends.\n- Write 3 values and close: the 1st, 2nd and 3rd receives give `ok == true` (so the **second `ok` is `true`**); the 4th and later give `0, false`.\n\nIn a `select`, a case receiving from a closed channel is **always ready**. It fires immediately every time, yielding the zero value and `ok == false`. In a loop this becomes a busy spin, so on `!ok` set that channel variable to `nil` (a nil channel's case never fires) or return.\n\nData *can* be lost if nobody reads: when the receivers exit early, buffered values are simply garbage-collected with the channel. That's a design bug, not a property of `close`.",
+  "level": 1,
+  "asked": [
+   "Plata",
+   "Sovkombank",
+   "VseInstrumenty"
+  ],
+  "n": 3
+ },
+ {
+  "id": "channels-check-closed",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "How do you check whether a channel is closed, and how do you tell an empty channel from a closed one?\nFollow-up: the `ok` flag isn't always reliable — how do you make closed-state handling robust?",
+  "a": "The comma-ok receive tells you: `v, ok := <-ch` gives `ok == false` only when the channel is **closed and drained**. To distinguish empty from closed without blocking:\n\n```go\nselect {\ncase v, ok := <-ch:\n\tif !ok {\n\t\t// closed\n\t} else {\n\t\t// got v (consumed!)\n\t}\ndefault:\n\t// open but empty (at this instant)\n}\n```\n\nLimitations: the check **consumes** a value when there is one, `len(ch)` says nothing about closure, and any answer can be stale immediately (check-then-act race).\n\nMaking it robust means designing so you never need to ask:\n- **Single owner closes**: the sender that owns the channel closes it, receivers only observe `ok == false` / the end of `range`.\n- Many senders: don't close the data channel. Signal shutdown via `ctx.Done()` or a `done` channel, and have senders `select` on it.\n- If you really need a \"closed\" flag, an atomic bool alone is **not enough**, because check-then-send is still racy. Put the flag and the send/close under the same `sync.Mutex` (or make close idempotent with `sync.Once`) so checking and acting are atomic.",
+  "level": 2,
+  "asked": [
+   "Data Driven Labs",
+   "ZeBrains"
+  ],
+  "n": 2
+ },
+ {
+  "id": "channels-deadlock",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "How do you get a deadlock in Go? What happens if you read from a channel that nobody writes to?",
+  "a": "A receive from a channel nobody writes to **blocks forever**. If that leaves *every* goroutine blocked, the runtime aborts with:\n\n```text\nfatal error: all goroutines are asleep - deadlock!\n```\n\nIf other goroutines are still alive (an HTTP server, timers, a network poller), nothing is reported; it's a silent **goroutine leak**.\n\nCommon ways to deadlock:\n- Send on an unbuffered channel with no receiver in another goroutine (`ch <- 1` in `main`).\n- `for v := range ch` where nobody ever closes `ch`.\n- `wg.Wait()` with a missing `wg.Done()`, or `wg.Add` called inside the goroutine.\n- Locking a `sync.Mutex` twice in the same goroutine (mutexes aren't reentrant), including via `RLock` → `Lock` upgrade attempts.\n- Lock-order inversion: goroutine 1 holds A and waits for B, goroutine 2 holds B and waits for A.\n- A nil channel, or `select {}` with nothing else running.\n\nPrevention: clear channel ownership, consistent lock ordering, contexts with timeouts. Detect partial deadlocks with goroutine dumps (`pprof`, `SIGQUIT`) and leak checks.",
+  "level": 1,
+  "asked": [
+   "RSHB",
+   "SpaceIT"
+  ],
+  "n": 2
+ },
+ {
+  "id": "channels-non-blocking-select",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "How do you do a non-blocking read or write on a channel (avoid blocking in select)?",
+  "a": "Add a `default` case. If no other case is ready right now, `default` runs immediately:\n\n```go\nselect {\ncase v, ok := <-ch:\n\tif !ok {\n\t\t// closed and drained\n\t}\n\tuse(v)\ndefault:\n\t// nothing available right now\n}\n\nselect {\ncase ch <- v:\ndefault:\n\tdropped++ // buffer full / no receiver: drop instead of blocking\n}\n```\n\nOther ways to bound blocking: a timeout case (`<-time.After(d)`, `<-ctx.Done()`), or a buffered channel sized for the expected load.\n\nGotchas:\n- A `for { select { ...; default: } }` loop without any blocking case is a **busy spin** that burns a core. Use `default` for one-shot polling or load shedding, not as a loop body.\n- The check is racy by nature: \"empty now\" can change a nanosecond later.",
+  "level": 1,
+  "asked": [
+   "Data Driven Labs",
+   "Sovkombank"
+  ],
+  "n": 2
+ },
+ {
+  "id": "channels-range-never-closed-sum",
+  "cat": "channels",
+  "kind": "output",
+  "q": "What does this program print? 100 goroutines write random values into a channel and main sums them with range. Find and fix the bug.\nFollow-up: if a developer really wanted parallel code, what other problems exist, e.g. with large values?",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"math/rand\"\n)\n\nfunc main() {\n\tc := make(chan int, 1000)\n\tfor i := 0; i < 100; i++ {\n\t\tgo foo(c)\n\t}\n\n\tsum := 0\n\tfor r := range c {\n\t\tsum += r\n\t}\n\n\tfmt.Println(sum)\n}\n\nfunc foo(c chan int) {\n\tr := rand.Int()\n\tfor i := 0; i < r; i++ {\n\t\tc <- r\n\t}\n}",
+  "a": "**It prints nothing and never terminates.** Killed by a timeout in my run (`exit 124`), with no deadlock message.\n\nTwo bugs stack up:\n1. `rand.Int()` returns a value up to 2^63-1, so each goroutine tries to send ~10^18 values. The writers effectively run forever while `main` keeps receiving. That's why there's **no** \"all goroutines are asleep\" error, even though a deadlock is what you'd expect.\n2. Nobody closes `c`, so even with small counts `for range c` blocks after draining, and then you get the deadlock. Verified with `rand.Intn(10)`:\n\n```text\nfatal error: all goroutines are asleep - deadlock!\n\ngoroutine 1 [chan receive]:\n```\n\nFix: bound the counts, wait for the writers and close from a separate goroutine:\n\n```go\nfunc main() {\n\tc := make(chan int, 1000)\n\tvar wg sync.WaitGroup\n\tfor i := 0; i < 100; i++ {\n\t\twg.Go(func() { foo(c) })\n\t}\n\tgo func() {\n\t\twg.Wait()\n\t\tclose(c)\n\t}()\n\n\tsum := 0\n\tfor r := range c {\n\t\tsum += r\n\t}\n\tfmt.Println(sum)\n}\n\nfunc foo(c chan<- int) {\n\tr := rand.IntN(100)\n\tfor i := 0; i < r; i++ {\n\t\tc <- r\n\t}\n}\n```\n\nOther problems:\n- `sum += r` with large values **overflows `int` silently**. Use smaller ranges, `math/big`, or check for overflow.\n- One shared channel is a contention point: millions of tiny sends cost far more than the additions. Have each goroutine sum locally and send **one** result (or write into `results[i]`); the parallel version then scales.\n- The buffer size doesn't change correctness, only how far writers can run ahead.",
+  "level": 2,
+  "asked": [
+   "Plata"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "channels-select-closed-send-panic",
+  "cat": "channels",
+  "kind": "output",
+  "q": "What does this program print? Both channels are closed before the select; does the default branch help?\nFollow-up (without default): what's the difference between a buffered and an unbuffered channel?",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tmsgChan := make(chan string, 1)\n\tstopChan := make(chan struct{})\n\tclose(msgChan)\n\tclose(stopChan)\n\n\tselect {\n\tcase msgChan <- \"msg\":\n\t\tfmt.Println(\"msg sent\")\n\tcase <-stopChan:\n\t\tfmt.Println(\"stop received\")\n\tdefault:\n\t\tfmt.Println(\"default\")\n\t}\n}",
+  "a": "**Nondeterministic**: either `stop received` or a panic. Never `msg sent`, never `default`. 40 runs on Go 1.26:\n\n```text\nstop received                                  25 runs\npanic: send on closed channel                  15 runs\n\ngoroutine 1 [running]:\nmain.main()\nexit status 2\n```\n\nWhy:\n- A send on a closed channel counts as \"ready\" (it proceeds immediately) and then **panics**. The buffer having room doesn't matter.\n- A receive from the closed `stopChan` is also ready and yields the zero value.\n- With several ready cases, `select` picks **uniformly at random**, so it's roughly 50/50.\n- `default` runs only when **no** case is ready, so it's never chosen here. The variant without `default` behaves the same (`stop signal received` or the panic).\n\nFollow-up: an unbuffered channel hands the value directly to a waiting receiver (send blocks until received); a buffered one lets the sender continue while there is space. Neither matters once the channel is closed: sending panics either way.\n\nLesson: only the owner closes, and never close a channel someone may still send on.",
+  "level": 2,
+  "asked": [
+   "Kaspersky",
+   "Ximilabs"
+  ],
+  "n": 2
+ },
+ {
+  "id": "channels-who-closes",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "Which side should close a channel, and how do you avoid writing to a closed channel?",
+  "a": "**The sender, specifically the single owner, closes. Never the receiver.** Closing is a message: \"no more values\". Only the side that produces values knows when that's true, and a receiver closing would make the sender panic with `send on closed channel`.\n\nPatterns:\n- **One sender**: it does `defer close(ch)` when done producing.\n- **Many senders**: each sender calls `wg.Done()`, and a separate goroutine does `wg.Wait(); close(ch)`. No individual sender closes.\n- **Receiver wants to stop early**: it cancels a context or closes a separate `done` channel, and senders `select` on `ctx.Done()` alongside the send.\n- Make close idempotent where needed: `sync.Once`.\n\nYou often don't need to close at all. Channels aren't resources; an unreferenced channel is GC'd. Close only to signal completion (e.g. to end a `for range`).\n\nAnti-pattern: `recover()` around the send, or an \"is closed\" flag checked before sending. Both are racy hacks around unclear ownership.",
+  "level": 2,
+  "asked": [
+   "MascotGames",
+   "Sarafan"
+  ],
+  "n": 2
+ },
+ {
+  "id": "channels-comma-ok-receive",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "What does a channel receive return, and why can you write both `v := <-ch` and `v, ok := <-ch`?\nFollow-up: why can't a regular two-result function be assigned to a single variable?",
+  "a": "A receive yields the **value** and, optionally, a **bool `ok`**: `true` if the value came from a send, `false` if the channel is closed and drained (then the value is the zero value).\n\nBoth forms work because the comma-ok form is **special syntax built into the language** for a few expressions: channel receive, map index `v, ok := m[k]`, type assertion `v, ok := x.(T)`. The compiler sees how many variables are on the left and emits a different operation (e.g. `runtime.chanrecv1` vs `chanrecv2`). It's not overloading: Go has no function or method overloading.\n\nA user-defined function has a fixed result count. `x := f()` where `f` returns two values is a **compile-time error** (`assignment mismatch: 1 variable but f returns 2 values`), not a runtime panic. You must take all results (`a, b := f()`), discarding with `_` as needed.\n\nGotcha: `for v := range ch` hides `ok`. It just ends when the channel is closed and drained.",
+  "level": 2,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "channels-directional",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "What are directional (send-only/receive-only) channels, and can you create one directly with make?",
+  "a": "Directional channel types restrict what code can do with a channel, checked at **compile time**:\n- `chan<- T`: send-only (also `close`-able).\n- `<-chan T`: receive-only (can't send, can't close).\n\nA bidirectional `chan T` converts implicitly to either one, so the usual pattern is to create a normal channel and expose a restricted view:\n\n```go\nfunc producer(n int) <-chan int {\n\tch := make(chan int)\n\tgo func() {\n\t\tdefer close(ch)\n\t\tfor i := range n {\n\t\t\tch <- i\n\t\t}\n\t}()\n\treturn ch\n}\n\nfunc consume(in <-chan int, out chan<- string) { /* ... */ }\n```\n\nThis documents ownership: whoever has `chan<-` produces and closes, whoever has `<-chan` only reads.\n\nCreating one directly: `make(<-chan int)` **compiles**, but it's useless. Nobody can ever send to or close a receive-only channel, so receives block forever. Same for `make(chan<- int)` with no reader. You can't convert back from a directional type to `chan T`.",
+  "level": 1,
+  "asked": [
+   "Magnit"
+  ],
+  "n": 1
+ },
+ {
+  "id": "channels-first-closed-of-many",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "How do you find out which of several channels gets closed first?",
+  "a": "Use `select` over all of them with comma-ok receives. The first case that yields `ok == false` identifies the channel. Set drained channels to `nil` so their case stops firing:\n\n```go\nfunc firstClosed(a, b <-chan int) string {\n\tfor {\n\t\tselect {\n\t\tcase _, ok := <-a:\n\t\t\tif !ok {\n\t\t\t\treturn \"a\"\n\t\t\t}\n\t\tcase _, ok := <-b:\n\t\t\tif !ok {\n\t\t\t\treturn \"b\"\n\t\t\t}\n\t\t}\n\t}\n}\n```\n\nThis consumes values; if you still need them, process them in the `ok` branch.\n\nFor a dynamic number of channels:\n- start one goroutine per channel that does `for range ch {}` and then sends its index to a shared `closed` channel; the first value received wins;\n- or use `reflect.Select` with a slice of `reflect.SelectCase` (slower, but no extra goroutines).\n\nGotcha: if two channels close almost simultaneously, which one \"wins\" is decided by random `select` choice and scheduling. \"First\" is only meaningful up to that race.",
+  "level": 2,
+  "asked": [
+   "Data Driven Labs"
+  ],
+  "n": 1
+ },
+ {
+  "id": "channels-foobar-single-channel",
+  "cat": "channels",
+  "kind": "code",
+  "q": "Using a single channel and without changing the loops, make printFoo and printBar produce \"FooBar\\n\" 10 times, interleaved.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc printFoo() {\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Print(\"Foo\")\n\t}\n}\n\nfunc printBar() {\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Print(\"Bar\\n\")\n\t}\n}\n\nfunc main() {\n\tprintFoo()\n\tprintBar()\n}",
+  "a": "Run one function in a goroutine and ping-pong on **one unbuffered channel**. Each unbuffered send/receive pair is a rendezvous, so the two goroutines strictly alternate:\n\n```go\npackage main\n\nimport \"fmt\"\n\nvar ch = make(chan struct{})\n\nfunc printFoo() {\n\tfor i := 0; i < 10; i++ {\n\t\tfmt.Print(\"Foo\")\n\t\tch <- struct{}{}\n\t\t<-ch\n\t}\n}\n\nfunc printBar() {\n\tfor i := 0; i < 10; i++ {\n\t\t<-ch\n\t\tfmt.Print(\"Bar\\n\")\n\t\tch <- struct{}{}\n\t}\n}\n\nfunc main() {\n\tgo printFoo()\n\tprintBar()\n}\n```\n\nOutput (verified, also with `-race`): `FooBar` ten times.\n\nHow it works: Foo prints, then blocks on `ch <-` until Bar receives. Bar prints `Bar\\n` and sends back, while Foo waits in `<-ch` before its next iteration. So `Foo` never runs ahead of `Bar`.\n\nWhy not a buffered channel: with a buffer, Foo's send would complete without waiting and Foo could print twice in a row. The single-channel constraint relies on unbuffered handoff semantics. The \"classic\" version uses two channels (one per direction), which is easier to reason about.",
+  "level": 2,
+  "asked": [
+   "Wildberries"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "channels-price-writer-bugs",
+  "cat": "channels",
+  "kind": "code",
+  "q": "Find and fix the bugs in this price writer/reader code.\nThe writer never closes its channel, main reads in an infinite loop, and the commented-out processor mutates shared maps with a WaitGroup passed by value.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\n//func RunProcessor(wg sync.WaitGroup, prices []map[string]int) {\n//    go func() {\n//        defer wg.Done()\n//        for _, price := range prices {\n//            for key, value := range price {\n//                price[key] = value + 1\n//            }\n//            fmt.Println(price)\n//        }\n//    }()\n//}\n\nfunc RunWriter() <-chan map[string]int {\n\tvar prices = make(chan map[string]int)\n\tgo func() {\n\t\tvar currentPrice = map[string]int{\n\t\t\t\"AAPL\": 163,\n\t\t\t\"USD\":  117,\n\t\t\t\"EUR\":  124,\n\t\t\t\"NVDA\": 234,\n\t\t}\n\n\t\tfor i := 1; i < 5; i++ {\n\t\t\tfor key, value := range currentPrice {\n\t\t\t\tcurrentPrice[key] = int(float64(value) * 1.3)\n\t\t\t}\n\t\t\tprices <- currentPrice\n\t\t\ttime.Sleep(100 * time.Millisecond)\n\t\t}\n\t}()\n\treturn prices\n}\n\nfunc main() {\n\tp := RunWriter()\n\tvar prices []map[string]int\n\n\tfor {\n\t\tprices = append(prices, <-p)\n\t}\n\n\tfor _, price := range prices {\n\t\tfmt.Println(price)\n\t}\n\n\t//wg := sync.WaitGroup{}\n\t//for i := 0; i < 10; i++ {\n\t//    wg.Add(1)\n\t//    RunProcessor(wg, prices)\n\t//}\n}",
+  "a": "Bugs:\n1. **Channel never closed + infinite `for`**: after 4 values the writer exits and `main` blocks on `<-p` forever: `fatal error: all goroutines are asleep - deadlock!` (verified). The printing loop after `for {}` is unreachable (`go vet` flags it).\n2. **The same map is sent 4 times**: the writer mutates `currentPrice` in place, so every slice element aliases one map (you'd print the last prices 4 times), and it's a data race between the writer and the reader.\n3. **`sync.WaitGroup` passed by value**: `Done` decrements a copy and `Wait` hangs (`go vet` copylocks catches this).\n4. **Concurrent map writes** from 10 processors: `fatal error: concurrent map writes`, or a race.\n\nFixed version (`go vet` clean, `-race` clean):\n\n```go\nfunc RunWriter() <-chan map[string]int {\n\tprices := make(chan map[string]int)\n\tgo func() {\n\t\tdefer close(prices)\n\t\tcurrent := map[string]int{\"AAPL\": 163, \"USD\": 117, \"EUR\": 124, \"NVDA\": 234}\n\t\tfor i := 1; i < 5; i++ {\n\t\t\tsnapshot := make(map[string]int, len(current))\n\t\t\tfor k, v := range current {\n\t\t\t\tcurrent[k] = int(float64(v) * 1.3)\n\t\t\t\tsnapshot[k] = current[k]\n\t\t\t}\n\t\t\tprices <- snapshot\n\t\t\ttime.Sleep(100 * time.Millisecond)\n\t\t}\n\t}()\n\treturn prices\n}\n\nfunc RunProcessor(wg *sync.WaitGroup, mu *sync.Mutex, prices []map[string]int) {\n\twg.Go(func() {\n\t\tmu.Lock()\n\t\tdefer mu.Unlock()\n\t\tfor _, price := range prices {\n\t\t\tfor k, v := range price {\n\t\t\t\tprice[k] = v + 1\n\t\t\t}\n\t\t}\n\t})\n}\n\nfunc main() {\n\tvar prices []map[string]int\n\tfor p := range RunWriter() {\n\t\tprices = append(prices, p)\n\t}\n\tfor _, p := range prices {\n\t\tfmt.Println(p)\n\t}\n\n\tvar wg sync.WaitGroup\n\tvar mu sync.Mutex\n\tfor i := 0; i < 10; i++ {\n\t\tRunProcessor(&wg, &mu, prices)\n\t}\n\twg.Wait()\n\tfmt.Println(prices[len(prices)-1])\n}\n```\n\nKey points: the writer `defer close(prices)`, and main uses `for p := range`. Send a fresh snapshot, never a map you keep mutating. Pass `*sync.WaitGroup` (or use `wg.Go`, Go 1.25). Guard the shared maps with a mutex, or give each processor its own copy.",
+  "level": 2,
+  "asked": [
+   "T-Bank"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "channels-range-requires-close",
+  "cat": "channels",
+  "kind": "code",
+  "q": "What's wrong with this code that sends 5 values into a buffered channel and then ranges over it? Fix it.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tch := make(chan int, 5)\n\n\tfor i := 1; i <= 5; i++ {\n\t\tch <- i\n\t}\n\n\tfor v := range ch {\n\t\tfmt.Println(v)\n\t}\n}",
+  "a": "It prints `1..5` and then crashes. `for range ch` keeps receiving until the channel is **closed**, and nobody closes it:\n\n```text\n1\n2\n3\n4\n5\nfatal error: all goroutines are asleep - deadlock!\n```\n\nFix: close the channel after the last send (the sender owns the close). The range then drains the buffer and exits:\n\n```go\nfunc main() {\n\tch := make(chan int, 5)\n\n\tfor i := 1; i <= 5; i++ {\n\t\tch <- i\n\t}\n\tclose(ch)\n\n\tfor v := range ch {\n\t\tfmt.Println(v)\n\t}\n}\n```\n\nNotes:\n- Closing a buffered channel doesn't lose the buffered values; they're still delivered.\n- If the buffer were smaller than the number of sends (say cap 3), the send loop itself would deadlock before reaching the range. Then you need the producer in its own goroutine: `go func() { defer close(ch); for ... { ch <- i } }()`.",
+  "level": 1,
+  "n": 1,
+  "verified": true,
+  "asked": []
+ },
+ {
+  "id": "channels-select-default-drops",
+  "cat": "channels",
+  "kind": "output",
+  "q": "What does this program print? (buffered channel of 2, the sender uses select with default, the reader sleeps 0.5 s per value)",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n\t\"time\"\n)\n\nfunc main() {\n\ttestChan := make(chan int, 2)\n\twg := sync.WaitGroup{}\n\twg.Add(1)\n\n\tgo func() {\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase k, ok := <-testChan:\n\t\t\t\tif !ok {\n\t\t\t\t\twg.Done()\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t\tfmt.Println(k)\n\t\t\t\ttime.Sleep(time.Second / 2)\n\t\t\t}\n\t\t}\n\t}()\n\n\tfor i := 0; i < 15; i++ {\n\t\tselect {\n\t\tcase testChan <- i:\n\t\tdefault:\n\t\t}\n\t}\n\n\tclose(testChan)\n\twg.Wait()\n}",
+  "a": "In practice:\n\n```text\n0\n1\n```\n\nThat was 200 of 200 runs on Go 1.26, taking about 1 s. It isn't strictly guaranteed: `0 1 2` (or more) is possible if the reader goroutine happens to receive before the loop finishes.\n\nWhy:\n- The `for` loop with `select { case testChan <- i: default: }` never blocks. When the buffer (cap 2) is full, the value is **silently dropped** by `default`.\n- The loop of 15 non-blocking sends runs in well under a microsecond. The reader goroutine usually hasn't even started, so only `0` and `1` fit; `2..14` hit `default`.\n- `close(testChan)` doesn't discard buffered values. The reader prints `0`, sleeps, prints `1`, sleeps, then gets `ok == false`, calls `wg.Done()` and exits.\n\nNotes: the `select` with a single case in the reader is redundant (`for k := range testChan` is equivalent). The pattern is legit **load shedding**, but make drops visible (a counter or metric).",
+  "level": 2,
+  "asked": [
+   "Ximilabs"
+  ],
+  "n": 1
+ },
+ {
+  "id": "channels-select-send-receive-alternate",
+  "cat": "channels",
+  "kind": "output",
+  "q": "What does this program print? A buffered channel (cap 1) is used in a select with a receive case and a send case inside a 10-iteration loop.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tch := make(chan int, 1)\n\n\tfor i := 0; i < 10; i++ {\n\t\tselect {\n\t\tcase b := <-ch:\n\t\t\tfmt.Println(b)\n\t\tcase ch <- i:\n\t\t\tcontinue\n\t\t}\n\t}\n}",
+  "a": "```text\n0\n2\n4\n6\n8\n```\n\nIt's deterministic despite `select`'s randomness, because in every iteration **exactly one** case is ready:\n- i=0: buffer empty, so only the send is possible. It sends `0` and `continue`s.\n- i=1: buffer full, so only the receive is possible. It prints `0`; the value `1` is never sent.\n- i=2: empty again, sends `2`; i=3 prints `2`; and so on.\n\nEven values are sent, odd iterations print them. After i=8 is sent, i=9 prints `8`, and the loop ends with an empty buffer.\n\nRandom choice only kicks in when several cases are ready at once. With cap ≥ 2, both cases would be ready in some iterations and the output would vary.",
+  "level": 2,
+  "asked": [
+   "Basis"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "channels-sum-of-squares-quit",
+  "cat": "channels",
+  "kind": "code",
+  "q": "Implement SumOfSquares(c, quit chan int): send 1², 2², 3², … on c until quit fires, so the given consumer prints 55.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc SumOfSquares(c, quit chan int) {\n\t// write code here.\n}\n\nfunc main() {\n\tmychannel := make(chan int)\n\tquitchannel := make(chan int)\n\n\tsum := 0\n\n\tgo func() {\n\t\tfor i := 0; i < 5; i++ {\n\t\t\tsum += <-mychannel\n\t\t}\n\t\tfmt.Println(sum)\n\t\tquitchannel <- 1\n\t}()\n\n\tSumOfSquares(mychannel, quitchannel)\n}",
+  "a": "Generator with a quit signal: keep sending successive squares and stop when the consumer signals on `quit`. `select` lets the send and the quit check race safely:\n\n```go\nfunc SumOfSquares(c, quit chan int) {\n\tfor i := 1; ; i++ {\n\t\tselect {\n\t\tcase c <- i * i:\n\t\tcase <-quit:\n\t\t\treturn\n\t\t}\n\t}\n}\n```\n\nOutput (verified): `55` (1+4+9+16+25).\n\nWhy `select`: after the 5th value the consumer stops receiving and sends on `quit`. A plain `c <- i*i` would block forever (deadlock), and a plain `<-quit` check before each send would block forever at the start. With `select`, whichever operation can proceed wins.\n\nNote: `SumOfSquares` runs in `main`, so `main` only returns after quit arrives, which guarantees the `Println` in the consumer has happened. Idiomatically you'd use `ctx.Done()` or a `chan struct{}` for quit.",
+  "level": 1,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "channels-sum-two-channels",
+  "cat": "channels",
+  "kind": "code",
+  "q": "Write a function that reads from two channels until both are closed and returns the sum of all received values.",
+  "a": "Use `select` over both channels, and set a channel to `nil` once it's closed. A nil channel's case never fires, so the loop naturally waits only on the still-open one and ends when both are nil:\n\n```go\nfunc sum2(a, b <-chan int) int {\n\ttotal := 0\n\tfor a != nil || b != nil {\n\t\tselect {\n\t\tcase v, ok := <-a:\n\t\t\tif !ok {\n\t\t\t\ta = nil\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\ttotal += v\n\t\tcase v, ok := <-b:\n\t\t\tif !ok {\n\t\t\t\tb = nil\n\t\t\t\tcontinue\n\t\t\t}\n\t\t\ttotal += v\n\t\t}\n\t}\n\treturn total\n}\n```\n\nWith `gen(1, 2, 3)` and `gen(10, 20)` it prints `36` (verified, `-race` clean). O(n) in the number of values, O(1) extra memory.\n\nWhy the nil trick: a closed channel's case is always ready (zero value, `ok == false`). Without nil-ing it you'd busy-spin and add zeros forever.\n\nVariants interviewers ask about:\n- Read exactly one value from each: `return <-a + <-b` (sequential, fine).\n- Honour cancellation: add `case <-ctx.Done(): return total, ctx.Err()`.\n- N channels: fan-in with one goroutine per channel into a merged channel plus a WaitGroup that closes it, or `reflect.Select`.",
+  "level": 2,
+  "asked": [
+   "InfoWatch"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "channels-unbuffered-send-deadlock",
+  "cat": "channels",
+  "kind": "output",
+  "q": "What happens when main sends on an unbuffered channel and then receives from it?",
+  "code": "package main\n\nimport \"time\"\n\nfunc main() {\n\ttest := make(chan bool)\n\ttest <- true\n\t<-test\n\n\ttime.Sleep(time.Second * 5)\n}",
+  "a": "```text\nfatal error: all goroutines are asleep - deadlock!\n\ngoroutine 1 [chan send]:\nmain.main()\n\tmain.go:7\nexit status 2\n```\n\nA send on an **unbuffered** channel blocks until another goroutine receives. `main` is the only goroutine, and the receive `<-test` is on the next line of the same goroutine, so it's never reached. The runtime sees every goroutine blocked and aborts immediately; the 5-second `Sleep` never runs.\n\nFixes:\n- Receive or send in another goroutine: `go func() { test <- true }(); <-test`.\n- Or give the channel a buffer (`make(chan bool, 1)`), so the send completes without a receiver.\n\nGotcha: the runtime only detects a deadlock when **all** goroutines are blocked. In a real service (HTTP server, timers running) the same bug is a silent hang or leak.",
+  "level": 1,
+  "asked": [
+   "MascotGames"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "channels-url-workers-fan-out",
+  "cat": "channels",
+  "kind": "output",
+  "q": "In this URL-checking function, does the input channel finish before the workers start, or does something block? Why doesn't it deadlock?",
+  "code": "func processURLs(urls <-chan string) <-chan string {\n\tout := make(chan string)\n\tif urls == nil {\n\t\tclose(out)\n\t\treturn out\n\t}\n\n\tvar wg sync.WaitGroup\n\tfor url := range urls {\n\t\twg.Add(1)\n\t\tgo func() {\n\t\t\tdefer wg.Done()\n\t\t\tresp, err := http.Get(url)\n\t\t\tif err != nil || resp == nil {\n\t\t\t\tout <- fmt.Sprintf(\"%s - not ok\", url)\n\t\t\t\treturn\n\t\t\t}\n\t\t\tresp.Body.Close()\n\t\t\tif resp.StatusCode == http.StatusOK {\n\t\t\t\tout <- fmt.Sprintf(\"%s - ok\", url)\n\t\t\t} else {\n\t\t\t\tout <- fmt.Sprintf(\"%s - not ok\", url)\n\t\t\t}\n\t\t}()\n\t}\n\n\tgo func() {\n\t\twg.Wait()\n\t\tclose(out)\n\t}()\n\n\treturn out\n}",
+  "a": "The `for url := range urls` loop runs **synchronously in the caller**, so `processURLs` doesn't return until `urls` is closed. Meanwhile each URL gets a goroutine immediately (workers start before the input is finished), but every worker then **blocks on `out <- ...`**, because `out` is unbuffered and nobody can read it yet: the caller doesn't have `out` until the function returns.\n\nWhy it still doesn't deadlock: the goroutine feeding `urls` is a separate one that eventually closes it. The range ends, the closer goroutine (`wg.Wait(); close(out)`) is started, `out` is returned, the caller drains it, the blocked workers complete, and `out` gets closed. A wrapper with a feeder goroutine and 2 unreachable URLs printed `2` results.\n\nIt **does** deadlock if the caller fills an unbuffered `urls` in the same goroutine before calling, or never closes `urls`.\n\nProblems and fixes:\n- Move the range loop into a goroutine so `out` is returned immediately and results stream.\n- Unbounded goroutines, one per URL, all parked holding results: use a fixed worker pool or a semaphore.\n- `http.Get` has no timeout or context: use a client with a timeout and `http.NewRequestWithContext`.\n- Before Go 1.22 the closure captured the shared `url` variable (a race and wrong URLs). Since 1.22 each iteration has its own `url`.",
+  "level": 3,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "channels-vs-mutex",
+  "cat": "channels",
+  "kind": "theory",
+  "q": "Channels vs mutexes: what are the advantages and disadvantages of each?",
+  "a": "Rule of thumb: **channels for transferring ownership and coordinating goroutines; mutexes for protecting shared state.**\n\nChannels, pros:\n- Compose with `select`: timeouts, cancellation, multiplexing many sources.\n- Express pipelines, worker pools, fan-in/fan-out and \"done\" signals naturally.\n- Ownership transfer makes data-race-free designs obvious.\n\nChannels, cons:\n- Slower: each op takes the channel's internal lock, copies the value and may park/wake goroutines. That's hundreds of ns versus tens for an uncontended mutex.\n- Easy to leak goroutines or deadlock when closing and ownership are unclear, and they need extra goroutines.\n- Awkward for \"read-mostly shared map/counter/cache\".\n\nMutex, pros: simplest and fastest for guarding a struct, cache or counter; `RWMutex` for read-heavy data; `sync/atomic` for single words.\nMutex, cons: no timeouts or select; easy to forget unlocking (use `defer`); lock ordering bugs; contention under heavy write load (sharding helps).\n\nPick whichever gives simpler code. A counter behind a channel-serving goroutine is usually over-engineering; a pipeline built from mutexes and condition variables usually is too.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit"
+  ],
+  "n": 1
+ }
+]

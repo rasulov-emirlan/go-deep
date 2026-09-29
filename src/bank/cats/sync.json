@@ -1,0 +1,373 @@
+[
+ {
+  "id": "sync-primitives-overview",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What synchronization primitives do you know in Go, and when do you use which?\nFollow-ups: what's in the `sync` package, what syntactic sugar exists around them, and which primitives exist outside Go?",
+  "a": "Primitives exist to order memory accesses between goroutines (establish happens-before) and to coordinate their lifecycle.\n\n- **Channels + `select`**: transfer ownership of data, signal events (closing a channel broadcasts), pipelines, backpressure.\n- **`sync.Mutex` / `sync.RWMutex`**: protect shared state; RW only for read-heavy data with non-trivial critical sections.\n- **`sync/atomic`** (`atomic.Int64`, `atomic.Bool`, `atomic.Pointer[T]`): counters, flags, lock-free pointer swaps.\n- **`sync.WaitGroup`**: wait for N goroutines (Go 1.25 `wg.Go(f)`); **`errgroup`** adds error propagation, ctx cancel and `SetLimit`.\n- **`sync.Once`** / `OnceFunc`/`OnceValue`/`OnceValues`: lazy one-time init.\n- **`sync.Cond`**: wait for a condition with repeated broadcast (rare).\n- **`sync.Pool`**: reuse of temporary objects (not synchronization, but lives in `sync`); **`sync.Map`**: concurrent map for specific patterns.\n- **`context`**: cancellation/deadlines across goroutines; `x/sync/semaphore`, `singleflight`.\n\nSugar: `defer mu.Unlock()`, `for v := range ch`, `select` with `default`/timeouts, `wg.Go`, `sync.OnceValue`, embedding a mutex next to the fields it guards.\n\nOutside Go: counting/binary semaphores, monitors and condition variables, spinlocks, futexes, barriers/latches (`CountDownLatch`), reentrant locks, STM; distributed: locks/leases in etcd/Redis/ZooKeeper, DB row locks.\n\nRule of thumb: channels to pass data or signal, mutex to guard state, atomics for single words. Gotcha: none of them are reentrant in Go.",
+  "level": 1,
+  "asked": [
+   "CloudX",
+   "Digital Spirit",
+   "InDrive",
+   "Magnit",
+   "Plata",
+   "QROQO",
+   "Sovkombank",
+   "Tutu",
+   "VK",
+   "VseInstrumenty",
+   "WMX",
+   "X5 Group"
+  ],
+  "n": 14
+ },
+ {
+  "id": "sync-data-race",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What is a data race, why is it dangerous, and how do you detect and fix one?\nFollow-up: what non-blocking primitives do you know?",
+  "a": "A data race: two goroutines access the same memory location concurrently, at least one access is a write, and there's no happens-before ordering between them (no mutex, channel op, atomic, WaitGroup...).\n\n```go\nvar n int\nfor range 1000 {\n\tgo func() { n++ }()\n}\n```\n\n`n++` is read-modify-write, so updates get lost. Worse, the compiler and CPU may reorder or cache values, you can see torn multi-word values (interfaces, slices, strings), and concurrent map writes crash the process. Go treats racy programs as incorrect; there are no \"benign\" races.\n\nDetect:\n- `go test -race` / `go run -race` (ThreadSanitizer). Finds races only on paths actually executed; roughly 2-20x slower and 5-10x more memory, so run it in CI and in load tests.\n- `go vet` catches some related bugs (copied locks, loop captures).\n\nFix:\n- mutex around shared state;\n- channels to hand over ownership (\"share memory by communicating\");\n- atomics for single words;\n- confinement (one goroutine owns the data) and immutability.\n\nNon-blocking primitives: `sync/atomic` operations and CAS loops, lock-free structures built on them (`atomic.Pointer` copy-on-write), `select` with `default` (try-send/try-receive), `Mutex.TryLock`.",
+  "level": 1,
+  "asked": [
+   "Forward",
+   "MascotGames",
+   "WMX"
+  ],
+  "n": 5
+ },
+ {
+  "id": "sync-map-when-to-use",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What is sync.Map, when is it worth using, and how does it differ from a map guarded by a mutex?",
+  "a": "`sync.Map` is a concurrency-safe map with `Load`, `Store`, `LoadOrStore`, `LoadAndDelete`, `Delete`, `Range`, plus `Swap`/`CompareAndSwap`/`CompareAndDelete` (1.20) and `Clear` (1.23). The zero value is ready to use.\n\nThe docs recommend it for two cases only:\n- keys written once and read many times (append-only caches, registries);\n- goroutines working on **disjoint** key sets.\n\nThere, it scales better than `map + RWMutex` because reads don't contend on one lock.\n\nVersus `map + Mutex`:\n- `sync.Map` is untyped (`any`): boxing allocations and type assertions; no `len`.\n- `Range` is not a consistent snapshot.\n- A mutex-guarded map lets you do multi-step operations atomically (check-then-set across several keys) and is simpler; for general read/write workloads it is usually as fast or faster.\n- Sharding (N maps with N mutexes by key hash) is a common middle ground.\n\nGo 1.24 reimplemented `sync.Map` on a concurrent hash-trie, which made mixed/write workloads much cheaper, but the guidance stands: default to a typed map with a mutex and switch after profiling.",
+  "level": 2,
+  "asked": [
+   "Magnit",
+   "MascotGames",
+   "Tehzor"
+  ],
+  "n": 4
+ },
+ {
+  "id": "sync-mutex-basics",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What is a mutex in Go and how do you use it correctly? What kinds of mutexes are there?",
+  "a": "A mutex (mutual exclusion lock) guarantees that only one goroutine at a time executes a critical section, and it creates a happens-before edge: everything done before `Unlock` is visible after the next `Lock`.\n\nGo has `sync.Mutex` (`Lock`, `Unlock`, `TryLock` since 1.18) and `sync.RWMutex` (adds `RLock`/`RUnlock` for many concurrent readers or one writer). Both implement `sync.Locker`.\n\n```go\ntype Counter struct {\n\tmu sync.Mutex\n\tn  map[string]int\n}\n\nfunc (c *Counter) Inc(k string) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.n[k]++\n}\n```\n\nRules:\n- Zero value is an unlocked mutex; never copy it after first use (`go vet` copylocks) - use pointer receivers.\n- Keep the mutex next to the data it guards; keep critical sections short; don't do I/O or channel sends while holding it.\n- Not reentrant: locking twice in the same goroutine deadlocks. No owner: another goroutine may unlock it.\n- `defer Unlock` protects against panics and early returns; open-coded defers make it nearly free.\n\nGotcha: `TryLock` usually signals a design problem.",
+  "level": 1,
+  "asked": [
+   "Kvando"
+  ],
+  "n": 4
+ },
+ {
+  "id": "sync-atomics-vs-mutex",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What are atomics in Go, what are their limitations, and when would you choose a mutex instead? (E.g. which would you use for a counter?)",
+  "a": "`sync/atomic` exposes CPU atomic instructions (LOCK XADD, CMPXCHG, ...): `Add`, `Load`, `Store`, `Swap`, `CompareAndSwap`, plus `And`/`Or` (1.23). Prefer the typed wrappers (`atomic.Int64`, `atomic.Bool`, `atomic.Pointer[T]`, since 1.19): they can't be accessed non-atomically by mistake and are 64-bit aligned on 32-bit platforms. In the Go memory model atomics are sequentially consistent and create happens-before edges.\n\n**Counter: use an atomic** (`atomic.Int64.Add`). It's a single instruction, never parks the goroutine, no lock convoy.\n\nLimitations, where a mutex wins:\n- Only one word at a time. You can't atomically update two fields or keep an invariant (\"balance >= 0 and history appended\").\n- Complex updates need CAS loops that burn CPU under contention, and bring ABA issues.\n- Harder to reason about; easy to write \"atomic check then act\" races.\n\nWhy custom atomic structures can beat mutexes: no parking/wakeups, no convoys, readers never block (e.g. copy-on-write config via `atomic.Pointer`). Correction to a common claim: an uncontended `sync.Mutex` does **not** make syscalls, it's one CAS; the cost appears under contention (spinning, parking via the runtime scheduler, possibly a futex). Heavy contention on one atomic still hurts because of cache-line bouncing.",
+  "level": 2,
+  "asked": [
+   "Crtex",
+   "RSHB"
+  ],
+  "n": 3
+ },
+ {
+  "id": "sync-mutex-vs-rwmutex",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What's the difference between sync.Mutex and sync.RWMutex, and when is RWMutex worth it?",
+  "a": "`Mutex` allows one holder at a time. `RWMutex` allows either **many readers** (`RLock`) or **one writer** (`Lock`).\n\nUse RWMutex when reads vastly outnumber writes **and** the read section does real work (e.g. a config or routing table read on every request). Otherwise plain `Mutex` is usually faster: `RLock` does an atomic add on a shared `readerCount`, and with many cores that cache line bounces between CPUs, so for tiny critical sections RWMutex can lose to Mutex.\n\nSemantics worth knowing:\n- A pending writer blocks **new** readers, so writers aren't starved.\n- No upgrade: holding `RLock` and calling `Lock` deadlocks.\n- Recursive `RLock` in one goroutine can deadlock if a writer arrives between the two `RLock`s.\n- `RLocker()` returns a `Locker` for the read side (useful with `sync.Cond`).\n\nFor read-mostly data that is replaced wholesale, `atomic.Pointer[T]` (copy-on-write) is often better than either lock.",
+  "level": 1,
+  "asked": [
+   "MascotGames",
+   "SpaceIT",
+   "Tutu"
+  ],
+  "n": 3
+ },
+ {
+  "id": "sync-pool",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What is sync.Pool and what is it used for?",
+  "a": "`sync.Pool` is a concurrency-safe cache of **temporary, reusable objects** to reduce allocations and GC pressure: `Get()` returns a pooled object or calls `New`, `Put(x)` gives it back.\n\n```go\nvar bufPool = sync.Pool{New: func() any { return new(bytes.Buffer) }}\n\nbuf := bufPool.Get().(*bytes.Buffer)\nbuf.Reset()\ndefer bufPool.Put(buf)\n```\n\nInternals: per-P local storage (a private slot plus a lock-free shared chain other Ps can steal from), so it scales without a global lock. Pools are cleared by GC: since Go 1.13 objects survive one cycle in a victim cache, then are dropped.\n\nTypical uses: byte buffers, encoders/decoders, scratch slices on hot paths (`fmt`, `encoding/json`, `net/http` use it).\n\nGotchas:\n- No guarantees: any object may vanish at any time. Not for connections, sessions or anything that must be closed; use a real pool for that.\n- Always reset state before reuse; never keep a reference after `Put`.\n- Store pointers (putting a slice value allocates on every `Put`).\n- Don't pool huge buffers of wildly varying size: one 10 MB request pins 10 MB forever. Cap what you return.\n- Profile first; for cheap small objects the pool can be slower than allocating.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "RSHB",
+   "X5 Group"
+  ],
+  "n": 3
+ },
+ {
+  "id": "sync-race-condition-vs-data-race",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What is a race condition, and how does it differ from a data race?",
+  "a": "A **race condition** is a logic bug: the result depends on the timing/interleaving of operations. Typical shapes are check-then-act and read-modify-write spread over several steps. A **data race** is a specific memory-level bug: unsynchronized concurrent access to the same location with at least one write.\n\nThey overlap but neither implies the other:\n\n- Race condition **without** a data race: every access is under a mutex, but the logic is split.\n\n```go\nif acc.Balance() >= amount { // locks inside\n\tacc.Withdraw(amount) // locks inside\n}\n```\n\nTwo goroutines can both pass the check and overdraw. The race detector stays silent.\n- Data race **without** a harmful race condition: e.g. setting a `done bool` flag without sync. It may look \"fine\", but in Go it's still undefined behaviour (the compiler may hoist the read out of a loop).\n\nFixes differ: data races go away with proper synchronization (mutex/atomic/channel). Race conditions need the whole invariant made atomic: one critical section, a CAS, or at DB level a transaction, `SELECT ... FOR UPDATE`, conditional `UPDATE ... WHERE balance >= $1`, or optimistic versioning. `-race` finds only data races.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "VK",
+   "Velme"
+  ],
+  "n": 3
+ },
+ {
+  "id": "sync-waitgroup-how-it-works",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "How does sync.WaitGroup work? Follow-up: what happens under the hood when you call Done()?",
+  "a": "`WaitGroup` waits for a collection of goroutines: `Add(n)` increments a counter, `Done()` is `Add(-1)`, `Wait()` blocks until the counter is zero. Go 1.25 added `wg.Go(f)`, which does `Add(1)` + `go` + `defer Done()` for you.\n\nInternals: a single `atomic.Uint64` state (high 32 bits = counter, low 32 = number of waiters) plus a runtime semaphore.\n- `Add` atomically adds to the counter. Negative counter panics.\n- `Wait`: if counter is 0, return; otherwise CAS waiters+1 and park on the semaphore.\n- `Done`: when the add brings the counter to 0 and there are waiters, it resets state to 0 and releases the semaphore once per waiter, waking them all. Done happens-before the Wait it unblocks.\n\nRules:\n- Call `Add` **before** `go`, not inside the goroutine, or `Wait` may return early (vet has a check since 1.25). `wg.Go` removes this bug class.\n- Don't copy a WaitGroup (pass `*sync.WaitGroup`).\n- Reuse only after the previous `Wait` has returned.\n- It carries no errors or results; use `errgroup` for that.",
+  "level": 1,
+  "asked": [
+   "DCloud",
+   "SpaceIT"
+  ],
+  "n": 3
+ },
+ {
+  "id": "sync-concurrency-problems-deadlock",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What problems occur in concurrent code (deadlock, data race, etc.), and how do you fight them?",
+  "a": "Main problems:\n- **Data race**: unsynchronized access with a write. Fix: mutex/atomic/channels, `-race`.\n- **Race condition**: timing-dependent logic (check-then-act). Fix: make the invariant atomic.\n- **Deadlock**: goroutines wait on each other in a cycle (A holds L1 wants L2, B holds L2 wants L1), or wait on a channel nobody will ever use. Coffman conditions: mutual exclusion, hold-and-wait, no preemption, circular wait. Go's runtime only detects a **global** deadlock (`fatal error: all goroutines are asleep - deadlock!`); a partial one in a server is just stuck goroutines.\n- **Livelock**: goroutines keep reacting to each other without progress (e.g. retrying in lockstep).\n- **Starvation**: a goroutine never gets the resource (greedy lock holders, readers starving writers).\n- **Goroutine leaks**: blocked forever on a channel/lock nobody releases.\n\nHow to fight them:\n- Consistent lock ordering (e.g. by id); never hold a lock while doing I/O, calling callbacks or sending on a channel.\n- `defer Unlock`; small critical sections.\n- Timeouts and `context` cancellation on every blocking operation; buffered result channels so senders can exit.\n- Clear ownership: who closes a channel, who owns data.\n- Tooling: `-race`, `go vet`, goroutine dumps (`pprof` goroutine profile, SIGQUIT), `goleak` in tests, `testing/synctest` (1.25) for deterministic concurrency tests.",
+  "level": 1,
+  "asked": [
+   "Sovkombank",
+   "WMX"
+  ],
+  "n": 2
+ },
+ {
+  "id": "sync-loop-var-max-mutex",
+  "cat": "sync",
+  "kind": "output",
+  "q": "What does this program print? Goroutines find the max even number under a mutex, but the closure reads loop variable `i`, not parameter `n`.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\tvar max int\n\tmu := sync.Mutex{}\n\twg := sync.WaitGroup{}\n\n\tfor i := 1000; i > 0; i-- {\n\t\twg.Add(1)\n\t\tgo func(n int) {\n\t\t\tdefer wg.Done()\n\t\t\tmu.Lock()\n\t\t\tif i%2 == 0 && i > max {\n\t\t\t\tmax = i\n\t\t\t}\n\t\t\tmu.Unlock()\n\t\t}(i)\n\t}\n\twg.Wait()\n\n\tfmt.Printf(\"Maximum is %d\", max)\n}",
+  "a": "With Go 1.22+ (module `go` directive >= 1.22):\n\n```text\nMaximum is 1000\n```\n\nDeterministic, and `go run -race` is clean. Since Go 1.22 each iteration of a `for` loop has its **own** `i`, so every closure sees the value of its iteration, the unused parameter `n` doesn't matter, and all reads/writes of `max` are under the mutex. `wg.Wait()` makes the final read safe.\n\nPre-1.22 semantics (e.g. `go 1.21` in go.mod), five runs:\n\n```text\nMaximum is 978\nMaximum is 972\nMaximum is 892\nMaximum is 974\nMaximum is 972\n```\n\nAll goroutines share one `i` that the main goroutine keeps decrementing, so each goroutine reads whatever value `i` has when it runs. Reading `i` in goroutines while main writes it is a **data race** (`-race` reports it), and the result is usually below 1000.\n\nFix for any version: use the parameter (`if n%2 == 0 && n > max`). Also, `max` shadows the builtin since Go 1.21. One transcription of this puzzle omits `import \"sync\"` and then fails to compile with `undefined: sync`.",
+  "level": 2,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "sync-thread-safe-singleton",
+  "cat": "sync",
+  "kind": "code",
+  "q": "How do you implement a thread-safe singleton in Go? What's wrong with this naive Config singleton?",
+  "code": "package main\n\nimport \"sync\"\n\ntype Config struct {\n\tPort int\n\tHost string\n}\n\nvar config *Config\n\nfunc GetConfig() *Config {\n\tconfig = &Config{Port: 8080, Host: \"localhost\"}\n\treturn config\n}",
+  "a": "The naive version isn't a singleton at all: it allocates a **new** `Config` on every call, and it writes the global `config` from many goroutines without synchronization, which is a data race (callers can even get different pointers). As transcribed it also doesn't compile: `\"sync\" imported and not used`.\n\nIdiomatic fix, Go 1.21+: `sync.OnceValue`.\n\n```go\nvar GetConfig = sync.OnceValue(func() *Config {\n\treturn &Config{Port: 8080, Host: \"localhost\"}\n})\n```\n\nClassic form with `sync.Once`:\n\n```go\nvar (\n\tonce   sync.Once\n\tconfig *Config\n)\n\nfunc GetConfig() *Config {\n\tonce.Do(func() {\n\t\tconfig = &Config{Port: 8080, Host: \"localhost\"}\n\t})\n\treturn config\n}\n```\n\n`Once.Do` runs the function exactly once, concurrent callers block until it finishes, and the write inside happens-before every return from `Do`, so readers see a fully built value.\n\nAlternatives: eager initialization (`var config = load()` or `init()`) when construction is cheap and can't fail; `sync.OnceValues` when init returns `(T, error)`.\n\nGotchas: if the function passed to `Once.Do` panics, `Once` still counts it as done, so later callers get a nil config; `OnceValue` re-panics instead. Global singletons also hurt testability: prefer passing dependencies explicitly.",
+  "level": 1,
+  "asked": [
+   "DCloud",
+   "X5 Group"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "sync-account-transfer-race",
+  "cat": "sync",
+  "kind": "output",
+  "q": "Code review: concurrent transfers between two Accounts. What does it print, what are the concurrency bugs, and how do you fix them?",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\ntype Account struct {\n\tid        int\n\tamount    int\n\tsuspended bool\n}\n\nfunc (account *Account) Inc(amount int) {\n\taccount.amount += amount\n}\n\nfunc (account *Account) Dec(amount int) {\n\taccount.amount -= amount\n}\n\nfunc (account *Account) SetSuspended(isSuspended bool) {\n\taccount.suspended = isSuspended\n}\n\nfunc (account *Account) IsSuspended() bool {\n\treturn account.suspended\n}\n\n// =====================================================================\n\nconst numberOfTransactions = 100\n\nfunc main() {\n\twaitchannel := make(chan bool, numberOfTransactions*2)\n\n\tvar a = Account{id: 1, amount: 1000, suspended: false}\n\tvar b = Account{id: 2, amount: 1000, suspended: false}\n\n\ttransactionsStartSignal := sync.WaitGroup{}\n\ttransactionsStartSignal.Add(numberOfTransactions * 2)\n\n\ttransferRoutine := func(sourceAccount *Account, destinationAccount *Account, amount int) {\n\t\ttransactionsStartSignal.Done()\n\t\ttransactionsStartSignal.Wait()\n\n\t\tif !sourceAccount.IsSuspended() && !destinationAccount.IsSuspended() {\n\t\t\tsourceAccount.Dec(amount)\n\t\t\tdestinationAccount.Inc(amount)\n\t\t}\n\n\t\twaitchannel <- true\n\t}\n\n\tfor i := 0; i < numberOfTransactions; i++ {\n\t\tgo transferRoutine(&a, &b, 10)\n\t\tgo transferRoutine(&b, &a, 10)\n\t}\n\n\tfor i := 0; i < numberOfTransactions*2; i++ {\n\t\t<-waitchannel\n\t}\n\n\tfmt.Println(a.amount, b.amount)\n}",
+  "a": "Nondeterministic. Five runs:\n\n```text\n1010 990\n1010 990\n1000 1000\n990 1010\n1010 990\n```\n\nThe expected result is always `1000 1000` (100 transfers each way of 10). `go run -race` reports `WARNING: DATA RACE` in `Inc`/`Dec`.\n\nProblems:\n- `amount` and `suspended` are read and written by 200 goroutines with no synchronization. `+=`/`-=` are read-modify-write, so updates get lost and money appears or disappears.\n- Even with per-method locking, a transfer is a **race condition**: \"not suspended?\" then `Dec` then `Inc` must be one atomic operation, or an account can be suspended mid-transfer and observers see money missing from both sides.\n- No insufficient-funds check: `Dec` can drive the balance negative.\n- Locking two accounts naively (`from` then `to`) deadlocks when A->B and B->A run concurrently.\n\nFix: a mutex per account, both locked in a **global order** (by id), with the whole check-and-move inside.\n\n```go\ntype Account struct {\n\tmu        sync.Mutex\n\tid        int\n\tamount    int\n\tsuspended bool\n}\n\nfunc Transfer(from, to *Account, amount int) error {\n\tfirst, second := from, to\n\tif second.id < first.id {\n\t\tfirst, second = second, first\n\t}\n\tfirst.mu.Lock()\n\tdefer first.mu.Unlock()\n\tsecond.mu.Lock()\n\tdefer second.mu.Unlock()\n\n\tif from.suspended || to.suspended {\n\t\treturn ErrSuspended\n\t}\n\tif from.amount < amount {\n\t\treturn ErrInsufficient\n\t}\n\tfrom.amount -= amount\n\tto.amount += amount\n\treturn nil\n}\n```\n\nWith this, output is always `1000 1000` and `-race` is clean. In a real system this lives in the DB: one transaction, rows locked in id order (`SELECT ... FOR UPDATE`), plus a `CHECK (amount >= 0)`.",
+  "level": 2,
+  "asked": [
+   "Astra"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-concurrent-map-slice-writes",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What happens if you write to a map or a slice from several goroutines concurrently?",
+  "a": "**Map**: the runtime has a cheap concurrent-write detector (a \"writing\" flag in the map header). Concurrent writes, or a write concurrent with a read/iteration, usually end with `fatal error: concurrent map writes` (or `concurrent map read and map write`). It is a **fatal error, not a panic**: `recover` can't catch it and the whole process dies. Detection is best-effort; without it you'd get corrupted internal state. This still holds with Go 1.24 Swiss-table maps.\n\n**Slice**: no runtime check. Concurrent `append` to a shared slice is a data race: goroutines read the same `len`, write into the same slot, and elements get lost; when `append` reallocates, some writes go to an old backing array. Header (ptr/len/cap) updates can also tear. Nothing crashes, you silently get wrong data.\n\nSafe patterns:\n- Preallocate `res := make([]T, n)` and let each goroutine write **its own index** (distinct memory locations, no race), then read after `wg.Wait()`.\n- Guard the map/slice with a `Mutex`, or send results over a channel to one collector goroutine.\n- `sync.Map` for its specific use cases.",
+  "level": 1,
+  "asked": [
+   "MascotGames"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-cond",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What is sync.Cond for?",
+  "a": "`sync.Cond` is a condition variable: goroutines wait until some **state guarded by a lock** changes, and another goroutine wakes one (`Signal`) or all (`Broadcast`) of them.\n\n```go\nmu.Lock()\nfor len(queue) == 0 {\n\tcond.Wait()\n}\nitem := queue[0]\nqueue = queue[1:]\nmu.Unlock()\n```\n\n`Wait` atomically unlocks `L`, parks, and re-locks before returning. Always re-check the condition in a `for` loop: wakeups can be spurious, and another goroutine may have consumed the state first.\n\nWhen it fits:\n- Many waiters need to be woken **repeatedly** on state changes (closing a channel broadcasts only once).\n- Bounded queues/pools where producers and consumers wait on \"not full\"/\"not empty\".\n\nWhy it's rare in Go: channels cover most cases, and `Cond.Wait` can't be combined with `select`, a timeout or `context` cancellation, which makes shutdown awkward. The Go team itself suggests channels for simple signaling. Gotcha: `Signal` with no waiters is lost; it isn't remembered like a buffered send.",
+  "level": 2,
+  "asked": [
+   "CloudX"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-custom-waitgroup-rwmutex",
+  "cat": "sync",
+  "kind": "output",
+  "q": "What's wrong with this WaitGroup built on sync.RWMutex, and how would you fix it?\nFollow-up: imagine WaitGroup doesn't exist - implement the same functionality without it.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n\t\"sync/atomic\"\n\t\"time\"\n)\n\ntype WaitGroup struct {\n\tmu sync.RWMutex\n}\n\nfunc (w *WaitGroup) Go(f func()) {\n\tgo func() {\n\t\tw.mu.RLock()\n\t\tf()\n\t\tw.mu.RUnlock()\n\t}()\n}\n\nfunc (w *WaitGroup) Wait() {\n\tw.mu.Lock()\n\tw.mu.Unlock()\n}\n\nfunc main() {\n\tvar wg WaitGroup\n\tvar done atomic.Int32\n\tfor i := 0; i < 5; i++ {\n\t\twg.Go(func() {\n\t\t\ttime.Sleep(100 * time.Millisecond)\n\t\t\tdone.Add(1)\n\t\t})\n\t}\n\twg.Wait()\n\tfmt.Println(\"finished:\", done.Load())\n}",
+  "a": "Output varies from run to run, for example:\n\n```text\nfinished: 2\nfinished: 0\nfinished: 1\nfinished: 0\nfinished: 0\n```\n\n(five separate runs; `5` is expected.)\n\nThe bug: `RLock` is taken **inside** the spawned goroutine. `Wait()` often runs before those goroutines are scheduled, so `Lock()` succeeds immediately and `Wait` returns while the work hasn't even started. Same bug class as calling `wg.Add(1)` inside the goroutine.\n\nFix: take the read lock synchronously in `Go`, before `go`:\n\n```go\nfunc (w *WaitGroup) Go(f func()) {\n\tw.mu.RLock()\n\tgo func() {\n\t\tdefer w.mu.RUnlock()\n\t\tf()\n\t}()\n}\n```\n\nCaveats: once `Wait` is waiting, a new `Go` call blocks (a pending writer blocks new readers), and it's `RWMutex` abuse. Still a nice trick.\n\nWithout WaitGroup: a counter under a mutex plus a channel closed at zero.\n\n```go\ntype Group struct {\n\tmu   sync.Mutex\n\tn    int\n\tdone chan struct{}\n}\n\nfunc (g *Group) Go(f func()) {\n\tg.mu.Lock()\n\tif g.n == 0 {\n\t\tg.done = make(chan struct{})\n\t}\n\tg.n++\n\tg.mu.Unlock()\n\tgo func() {\n\t\tdefer func() {\n\t\t\tg.mu.Lock()\n\t\t\tg.n--\n\t\t\tif g.n == 0 {\n\t\t\t\tclose(g.done)\n\t\t\t}\n\t\t\tg.mu.Unlock()\n\t\t}()\n\t\tf()\n\t}()\n}\n\nfunc (g *Group) Wait() {\n\tg.mu.Lock()\n\tif g.n == 0 {\n\t\tg.mu.Unlock()\n\t\treturn\n\t}\n\tdone := g.done\n\tg.mu.Unlock()\n\t<-done\n}\n```\n\nFor a known count, you can also collect `n` values from a channel (`for range n { <-doneCh }`).",
+  "level": 2,
+  "asked": [
+   "InfoWatch"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-delay-cancel-race",
+  "cat": "sync",
+  "kind": "code",
+  "q": "Fix the data race on the `canceled` flag shared between the goroutine and the returned cancel function.",
+  "code": "func delay(duration time.Duration, fn func()) func() {\n\tcanceled := false\n\n\tgo func() {\n\t\ttime.Sleep(duration)\n\t\tif !canceled {\n\t\t\tfn()\n\t\t}\n\t}()\n\n\treturn func() {\n\t\tcanceled = true\n\t}\n}",
+  "a": "The goroutine reads `canceled` and the cancel closure writes it with no synchronization: a data race (`-race` reports it), and the compiler is free to never observe the write.\n\nMinimal fix: an atomic flag.\n\n```go\nfunc delay(duration time.Duration, fn func()) func() {\n\tvar canceled atomic.Bool\n\tgo func() {\n\t\ttime.Sleep(duration)\n\t\tif !canceled.Load() {\n\t\t\tfn()\n\t\t}\n\t}()\n\treturn func() { canceled.Store(true) }\n}\n```\n\nBetter: don't park a goroutine at all. `time.AfterFunc` does exactly this, and `Stop` tells you whether it prevented the call.\n\n```go\nfunc delay(d time.Duration, fn func()) (cancel func() bool) {\n\treturn time.AfterFunc(d, fn).Stop\n}\n```\n\nSemantics to mention: with the flag version, cancel racing with the check can still let `fn` start just after cancel returns (check-then-act). If the caller must know, return a bool as `Timer.Stop` does, or guard check+run with a mutex. A `context`-based variant (`select` on `time.After` and `ctx.Done()`) also works and releases the goroutine early on cancel.",
+  "level": 1,
+  "asked": [
+   "Digital Habits"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "sync-implement-mutex",
+  "cat": "sync",
+  "kind": "code",
+  "q": "Implement a mutex without using sync.Mutex.",
+  "a": "Simplest correct version: a CAS spinlock on `atomic.Bool` that yields the processor while contended.\n\n```go\ntype Mutex struct {\n\tstate atomic.Bool\n}\n\nfunc (m *Mutex) Lock() {\n\tfor !m.state.CompareAndSwap(false, true) {\n\t\truntime.Gosched()\n\t}\n}\n\nfunc (m *Mutex) Unlock() {\n\tif !m.state.CompareAndSwap(true, false) {\n\t\tpanic(\"unlock of unlocked mutex\")\n\t}\n}\n```\n\nAtomics in Go are sequentially consistent, so a successful CAS in `Lock` observes everything written before the previous `Unlock`: the needed happens-before.\n\nAlternative with no busy waiting: a channel with capacity 1.\n\n```go\ntype ChanMutex chan struct{}\n\nfunc NewChanMutex() ChanMutex { return make(ChanMutex, 1) }\nfunc (m ChanMutex) Lock()     { m <- struct{}{} }\nfunc (m ChanMutex) Unlock()   { <-m }\n```\n\nWaiters are parked by the runtime, and you get `TryLock`/timeouts for free via `select`.\n\nWhat the real `sync.Mutex` adds: brief spinning, then parking on a runtime semaphore instead of burning CPU; a waiter counter; starvation mode (FIFO hand-off after 1 ms of waiting). A spinlock is fine only for tiny critical sections; under contention it wastes CPU and is unfair.",
+  "level": 2,
+  "asked": [
+   "InfoWatch"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "sync-map-internals",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "Why is sync.Map optimized for reads? What mechanism makes it work (read map, dirty map, double-checking)?",
+  "a": "Classic design (Go 1.9-1.23):\n\n- `read`: an atomically loaded `readOnly` struct holding a plain map of `*entry`. Loads of existing keys hit it with **no lock**, just an atomic pointer load, so readers don't contend.\n- `dirty`: a map guarded by `mu` that holds new keys (plus copies of all live read entries).\n- **Miss path**: if a key isn't in `read` and `read.amended` is true, take `mu` and **re-check `read`** (double-checked, it may have been promoted meanwhile), then look in `dirty` and increment `misses`.\n- **Promotion**: when `misses >= len(dirty)`, `dirty` becomes the new `read` (one pointer swap) and `dirty` is reset to nil. The next new key rebuilds `dirty` by copying the live read entries, marking deleted ones as `expunged`.\n- Updating an existing key is a CAS on its `entry.p` in the read map, lockless too.\n\nSo stable key sets are fast; many new keys cause lock traffic and O(n) dirty rebuilds, which is why it was bad for write-heavy use.\n\nSince **Go 1.24**, `sync.Map` is backed by `internal/sync.HashTrieMap`, a concurrent hash-trie with per-node locks and lock-free reads, which removed the promotion/copying pathology (opt-out via `GOEXPERIMENT=nosynchashtriemap`). Interviewers often still expect the read/dirty story, so give both.",
+  "level": 3,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-mutex-internals",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "How does sync.Mutex work under the hood?",
+  "a": "`sync.Mutex` is two words: `state int32` (bits: locked, woken, starving, plus a waiter count) and `sema uint32` (a runtime semaphore key).\n\n- **Fast path**: `Lock` does one CAS `0 -> locked`. Uncontended lock/unlock is a couple of atomic instructions, no syscalls.\n- **Spinning**: if locked, a goroutine may spin briefly (only on multicore, with other running Ps, a few iterations) hoping the owner releases soon.\n- **Parking**: then it increments the waiter count and calls `runtime_SemacquireMutex`, which parks the goroutine (`gopark`) in the runtime's semaphore table keyed by `&sema`. The OS thread (M) is freed to run other goroutines; the kernel is involved only if the whole M goes idle (futex).\n- **Normal mode**: `Unlock` wakes one waiter, but it competes with newly arriving goroutines that are already on CPU, which usually win. Good throughput, possible unfairness.\n- **Starvation mode** (since Go 1.9): if a waiter waited longer than **1 ms**, the mutex switches mode: `Unlock` hands ownership directly to the head of the FIFO queue, newcomers don't spin and queue at the tail. It switches back when a waiter is the last one or waited under 1 ms.\n\n`RWMutex` is built on top: a writer `Mutex`, `readerCount` (a writer subtracts 2^30 so new readers block), `readerWait`, and two semaphores.",
+  "level": 3,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "sync-once-use-cases",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What is sync.Once for? Give some use cases.",
+  "a": "`sync.Once` guarantees that a function runs **exactly once**, no matter how many goroutines call `once.Do(f)` concurrently. Callers that arrive while `f` is running block until it finishes, and `f`'s effects are visible to all of them afterwards.\n\nUse cases:\n- Lazy initialization of expensive or optional resources: DB/HTTP clients, parsed config, compiled regexps, templates.\n- Thread-safe singletons.\n- Idempotent `Close()`/`Stop()`: close a channel or release a resource exactly once, so double close doesn't panic.\n- One-time registration or warning logs (\"deprecated option used\").\n\nGo 1.21 helpers: `sync.OnceFunc(f)`, `sync.OnceValue(f)` and `sync.OnceValues(f)` return functions that run `f` once and cache the result (and error).\n\nInternals: an atomic `done` flag for the fast path plus a mutex for the slow path, so after init a call costs one atomic load.\n\nGotchas:\n- If `f` panics, `Once` treats it as done and never retries (`OnceFunc`/`OnceValue` re-panic on every call).\n- Calling `once.Do` on the same `Once` from inside `f` deadlocks.\n- No retry on error: for init that may fail and should be retried, use a mutex + state instead.",
+  "level": 1,
+  "asked": [
+   "CloudX"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-process-incoming-data-review",
+  "cat": "sync",
+  "kind": "code",
+  "q": "Refactor ProcessIncomingData: it concurrently inserts records into Postgres and then sends them as JSON. Find and fix the bugs.",
+  "code": "type Data struct {\n\tid        int    `json:\"id\"`\n\tfirstName string `json:\"first_name\"`\n}\n\n// data := []Data{{1,\"Alice\"}, {2,\"Bob\"}, {3,\"Charlie\"}}\n\nfunc ProcessIncomingData(data []Data) int {\n\tdb, err := sql.Open(\"postgres\", \"some database connection\")\n\tif err != nil {\n\t\tlog.Println(\"Error opening the database:\", err)\n\t\treturn 0\n\t}\n\tdefer db.Close()\n\n\tctx := context.TODO()\n\n\tvar seen map[int]string\n\tvar wg sync.WaitGroup\n\tinserted := 0\n\n\tfor _, d := range data {\n\t\tgo func() {\n\t\t\twg.Add(1)\n\n\t\t\tseen[d.id] = d.firstName\n\t\t\td.firstName = \"New \" + d.firstName\n\n\t\t\tquery := fmt.Sprintf(\"INSERT INTO data (name) VALUES ('%s')\", d.firstName)\n\t\t\t_, err := db.Exec(query)\n\t\t\tif err != nil {\n\t\t\t\tlog.Println(\"Error inserting data:\", err)\n\t\t\t\treturn\n\t\t\t}\n\n\t\t\tinserted++\n\t\t\twg.Done()\n\t\t}()\n\t}\n\n\twg.Wait()\n\n\tf, err := json.Marshal(data)\n\tif err != nil {\n\t\tlog.Println(\"Error marshalling data:\", err)\n\t\treturn inserted\n\t}\n\n\tvar buf bytes.Buffer\n\tbuf.Write(f)\n\n\treq, err := http.NewRequestWithContext(ctx, \"GET\", \"https://somesrv\", &buf)\n\tif err != nil {\n\t\tlog.Println(\"Error creating request:\", err)\n\t\treturn inserted\n\t}\n\n\tresp, err := (&http.Client{}).Do(req)\n\tif err != nil {\n\t\tlog.Println(err)\n\t\treturn inserted\n\t}\n\n\tbody, _ := io.ReadAll(resp.Body)\n\tlog.Println(string(body))\n\n\treturn inserted\n}",
+  "a": "Bugs:\n1. `var seen map[int]string` is nil: the first write panics (`assignment to entry in nil map`); it's also written from many goroutines (fatal `concurrent map writes`). It isn't used anyway, so drop it or `make` it and guard it.\n2. `wg.Add(1)` inside the goroutine: `Wait` can return before goroutines start. Call `Add` before `go`, or use `wg.Go`.\n3. `wg.Done()` isn't called on the error path: `Wait` hangs forever. Use `defer`.\n4. `inserted++` from many goroutines: data race. Use a mutex or `atomic.Int64`.\n5. Loop variable capture: fine since Go 1.22 (per-iteration `d`), a classic bug before. Also `d.firstName = ...` modifies a copy, so the JSON still carries old names.\n6. SQL built with `fmt.Sprintf`: SQL injection. Use placeholders (`$1`) and `ExecContext(ctx, ...)`.\n7. Unexported fields `id`/`firstName`: `encoding/json` ignores them, so the payload is `[{},{},{}]`. Export them.\n8. A `GET` with a body: use `POST` + `Content-Type`. Also: no client timeout, response body never closed, status code unchecked, read error ignored.\n9. `sql.Open` per call: `*sql.DB` is a long-lived pool, so inject it. Unbounded goroutines vs a limited connection pool: bound them. The function should return an `error`.\n\n```go\ntype Data struct {\n\tID        int    `json:\"id\"`\n\tFirstName string `json:\"first_name\"`\n}\n\nfunc ProcessIncomingData(ctx context.Context, db Execer, client *http.Client, url string, data []Data) (int, error) {\n\tvar (\n\t\twg       sync.WaitGroup\n\t\tmu       sync.Mutex\n\t\tinserted int\n\t\tsem      = make(chan struct{}, 8)\n\t\tout      = make([]Data, len(data))\n\t\tok       = make([]bool, len(data))\n\t)\n\tfor i, d := range data {\n\t\tsem <- struct{}{}\n\t\twg.Go(func() {\n\t\t\tdefer func() { <-sem }()\n\t\t\td.FirstName = \"New \" + d.FirstName\n\t\t\tif _, err := db.ExecContext(ctx, \"INSERT INTO data (name) VALUES ($1)\", d.FirstName); err != nil {\n\t\t\t\treturn\n\t\t\t}\n\t\t\tout[i], ok[i] = d, true\n\t\t\tmu.Lock()\n\t\t\tinserted++\n\t\t\tmu.Unlock()\n\t\t})\n\t}\n\twg.Wait()\n\n\tsaved := make([]Data, 0, inserted)\n\tfor i := range out {\n\t\tif ok[i] {\n\t\t\tsaved = append(saved, out[i])\n\t\t}\n\t}\n\tbody, err := json.Marshal(saved)\n\tif err != nil {\n\t\treturn inserted, err\n\t}\n\treq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))\n\tif err != nil {\n\t\treturn inserted, err\n\t}\n\treq.Header.Set(\"Content-Type\", \"application/json\")\n\tresp, err := client.Do(req)\n\tif err != nil {\n\t\treturn inserted, err\n\t}\n\tdefer resp.Body.Close()\n\tif resp.StatusCode >= 300 {\n\t\treturn inserted, fmt.Errorf(\"upstream status %d\", resp.StatusCode)\n\t}\n\t_, err = io.Copy(io.Discard, resp.Body)\n\treturn inserted, err\n}\n```\n\n`Execer` is `interface{ ExecContext(ctx, query string, args ...any) (sql.Result, error) }`, which `*sql.DB` satisfies. Even better for throughput: one multi-row `INSERT` or `COPY` in a transaction instead of N goroutines.",
+  "level": 2,
+  "asked": [
+   "Wildberries"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "sync-rwmutex-writer-starvation",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "If a writer can't get Lock() because readers keep taking RLock(), how do you avoid starving the writer?",
+  "a": "In Go you don't have to: **`sync.RWMutex` is already writer-preferring**. When `Lock` is called, the writer first takes the internal mutex, then atomically subtracts `rwmutexMaxReaders` (2^30) from `readerCount`. Every subsequent `RLock` sees a negative count and parks on `readerSem`. The writer waits only for the readers that were already inside (`readerWait`); the last of them wakes it. After `Unlock`, the blocked readers are released.\n\nThat's exactly the idea of \"once current readers leave, block new readers until the pending writer gets its turn\".\n\nConsequences / gotchas:\n- Recursive read locking is a deadlock hazard: goroutine A holds `RLock`, writer B queues, A calls `RLock` again and blocks behind B, while B waits for A.\n- If you build your own RW lock, you need a \"writer waiting\" flag or ticket queue that new readers check.\n- If writes are frequent enough that this matters, reconsider the design: shard the data, or use copy-on-write with `atomic.Pointer[T]` so readers never block.",
+  "level": 3,
+  "asked": [
+   "Tutu"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-singleton-without-once",
+  "cat": "sync",
+  "kind": "code",
+  "q": "Implement a thread-safe lazy singleton without sync.Once.",
+  "a": "Double-checked locking with an atomic pointer: the fast path is a single atomic load, the slow path takes a mutex and re-checks.\n\n```go\nvar (\n\tinstance atomic.Pointer[Config]\n\tmu       sync.Mutex\n)\n\nfunc GetConfig() *Config {\n\tif c := instance.Load(); c != nil {\n\t\treturn c\n\t}\n\tmu.Lock()\n\tdefer mu.Unlock()\n\tif c := instance.Load(); c != nil {\n\t\treturn c\n\t}\n\tc := &Config{Port: 8080}\n\tinstance.Store(c)\n\treturn c\n}\n```\n\nWhy each part is needed:\n- The second check under the lock stops two goroutines that both saw `nil` from creating two instances.\n- The pointer must be atomic. Classic DCL with a plain `*Config` is a data race: a reader may see a non-nil pointer before the fields written by the constructor are visible. `atomic.Store`/`Load` give the needed happens-before.\n\nSimpler alternatives: always take the mutex (fine unless it's a hot path), or eager init in a package-level `var`/`init()`. This is essentially how `sync.Once` itself is built: an atomic `done` fast path plus a mutex slow path.",
+  "level": 2,
+  "asked": [
+   "CloudX"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "sync-struct-fields-race",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "What happens if several goroutines access the same struct field? Is it a data race if they write to different fields of the same struct?",
+  "a": "Same field, at least one writer, no synchronization: a data race (lost updates, stale reads, torn multi-word values like strings or interfaces). `-race` reports it.\n\nDifferent fields: **not a data race**. In the Go memory model each struct field (and each array/slice element) is a separate memory location, and Go has no bit-fields, so writing `s.a` in one goroutine and `s.b` in another is fine.\n\nCaveats:\n- Any operation that touches the **whole struct** races with field writes: copying it (`x := *s`), passing by value, comparing, `fmt.Println(s)`, `json.Marshal(s)`.\n- **False sharing**: fields on the same 64-byte cache line written by different cores make the line bounce between CPUs and can slow things down several times. Pad hot fields (e.g. `_ [56]byte`) or split them into separate structs.\n- If the fields form one invariant together (e.g. `min` and `max`), updating them independently is a race condition even without a data race: use one mutex for both.",
+  "level": 2,
+  "asked": [
+   "Tehzor"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-unsynchronized-counter",
+  "cat": "sync",
+  "kind": "output",
+  "q": "What does this program print? 100 goroutines increment a shared counter with no synchronization, and main prints it right after the loop.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tcounter := 0\n\n\tfor i := 0; i < 100; i++ {\n\t\tgo func() {\n\t\t\tcounter++\n\t\t}()\n\t}\n\n\tfmt.Println(counter)\n}",
+  "a": "Nondeterministic. Five runs on Go 1.26:\n\n```text\n93\n85\n70\n86\n86\n```\n\nAnything from `0` to `100` is possible; on a single core it's often `0`. Two independent bugs:\n\n1. **No waiting**: `main` prints immediately after starting the goroutines. Some have run, some haven't; if `main` returns, the rest are killed.\n2. **Data race**: `counter++` is a read-modify-write on a shared variable with no synchronization, so concurrent increments get lost even if you waited. `go run -race` prints `WARNING: DATA RACE`.\n\nFix:\n\n```go\nvar counter atomic.Int64\nvar wg sync.WaitGroup\nfor range 100 {\n\twg.Go(func() { counter.Add(1) })\n}\nwg.Wait()\nfmt.Println(counter.Load())\n```\n\nThis always prints `100`. A `Mutex` around `counter++` works too; for a plain counter an atomic is cheaper.",
+  "level": 1,
+  "asked": [
+   "MascotGames"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-waitgroup-by-value-puzzle",
+  "cat": "sync",
+  "kind": "output",
+  "q": "What does this program print? The sync.WaitGroup is passed by value into each goroutine, which calls Done() on its copy.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n\t\"time\"\n)\n\nfunc main() {\n\twg := sync.WaitGroup{}\n\tfor i := 0; i < 10; i++ {\n\t\twg.Add(1)\n\t\ti := i\n\t\tgo func(wg sync.WaitGroup) {\n\t\t\tdefer wg.Done()\n\t\t\tfmt.Println(i)\n\t\t}(wg)\n\t}\n\n\twg.Wait()\n\tfmt.Println(\"some text\")\n\ttime.Sleep(1 * time.Minute)\n\tfmt.Println(\"some text2\")\n}",
+  "a": "The numbers 0-9 in random order, then a deadlock crash. One run:\n\n```text\n9\n3\n1\n2\n6\n4\n5\n7\n8\n0\nfatal error: all goroutines are asleep - deadlock!\n\ngoroutine 1 [sync.WaitGroup.Wait]:\n...\nexit status 2\n```\n\n`\"some text\"` and `\"some text2\"` are never printed, and the one-minute sleep is never reached.\n\nWhy: `func(wg sync.WaitGroup)` receives a **copy** of the WaitGroup. `Done()` decrements the copy's counter (each copy had a positive count, so no negative-counter panic), and the original's counter stays at 10. `wg.Wait()` blocks forever. Once all 10 goroutines have exited, the only goroutine left is `main`, blocked on Wait, so the runtime detects a global deadlock. In a server with other live goroutines it would just hang silently.\n\n`go vet` flags it: `func passes lock by value: sync.WaitGroup contains sync.noCopy`.\n\nFix: pass `&wg` (parameter `*sync.WaitGroup`), capture `wg` in the closure, or use Go 1.25 `wg.Go(func() { fmt.Println(i) })`. The `i := i` line is unnecessary since Go 1.22 but harmless.",
+  "level": 2,
+  "asked": [
+   "Basis"
+  ],
+  "n": 1
+ },
+ {
+  "id": "sync-waitgroup-pass-by-value",
+  "cat": "sync",
+  "kind": "theory",
+  "q": "Why is it unsafe to pass a sync.WaitGroup by value? Can you pass it into a goroutine at all?",
+  "a": "A `WaitGroup` is a struct holding its counter and semaphore state. Passing it by value copies that state: `Done()` on the copy decrements the **copy**, the original's counter never reaches zero, and `Wait()` blocks forever (in a small program: `fatal error: all goroutines are asleep - deadlock!`, in a server: a silent hang). If the copy's counter goes below zero you get a `negative WaitGroup counter` panic instead.\n\n`WaitGroup` embeds `noCopy`, so `go vet` (copylocks) reports `passes lock by value`.\n\nCorrect ways:\n- pass a pointer: `go worker(&wg)` / `func worker(wg *sync.WaitGroup)`;\n- capture it in a closure (captures by reference);\n- best since Go 1.25: `wg.Go(func() { ... })`.\n\nThe same applies to `Mutex`, `RWMutex`, `Once`, `Cond` and structs containing them: use pointer receivers and don't copy them after first use.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ }
+]

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import data from './questions.json'
-import { categories, kindLabel, type Question } from './types'
+import { allQuestions } from './data'
+import { categories, kindLabel } from './types'
 
-const qs = data as Question[]
+const qs = allQuestions
 const cats = new Set(categories.map((c) => c.slug))
 
 describe('question bank data', () => {

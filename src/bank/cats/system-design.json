@@ -1,0 +1,310 @@
+[
+ {
+  "id": "system-design-classifieds-avito",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design an Avito-like classifieds backend: search results, ad card, 'my ads', and posting an ad that shows up in search.\nNFRs: 100 → ~20k RPS, reads dominate writes (100:1 to 1000:1), 99.9% availability, ≤ 300 ms, 5 photos per ad.",
+  "code": "GET /search {start, end, filters: [city, label, description]}\n    -> [{id, label, description[:100], img_src}]\nGET /items/:id -> {id, label, description, img_src}\nGET /myItems -> [{id, label, description[:100], img_src}]\nPOST /items {label, description, images} -> {id}\nPUT /items/:id {label, description, images} -> 204\nDELETE /items/:id -> 204",
+  "a": "**Separate the write path (source of truth) from the read and search path, and connect them with events.**\n\n- **Estimate**:\n  - At 20k RPS and 1000:1 there are ~20 writes/s; at 100:1, ~200 writes/s.\n  - Even the pessimistic ratio is fine for a single Postgres primary.\n  - Reads need caching, a search engine and a CDN.\n- **API**:\n  - `GET /search?q&city&category&cursor` returns a list of `{id, title, snippet, thumb_url}`.\n  - `GET /items/{id}`, `GET /me/items`.\n  - `POST /items` (with an idempotency key), `PUT`/`DELETE /items/{id}`.\n  - Photos upload via presigned URLs.\n- **Services and storage**:\n  - **Item service**, backed by Postgres: `items(id, user_id, title, description, city, category, status, created_at)` and `item_photos`.\n    - Index `(user_id, created_at)` for \"my ads\".\n    - Read replicas; Redis cache for hot cards.\n  - **Media service**: S3 plus thumbnail generation, served through a **CDN**. Photos never pass through the API.\n  - **Search service**: Elasticsearch/OpenSearch fed by `item.created/updated/deleted` events (outbox → Kafka → indexer). New ads appear within seconds, which is acceptable eventual consistency; show the author their own ad from the primary DB immediately.\n  - An API gateway handles auth, rate limiting and routing, behind an L7 load balancer.\n- **Scaling**:\n  - Stateless services scale horizontally.\n  - ES scales with shards and replicas.\n  - Cache the first pages of popular queries for a short TTL.\n  - Use cursor pagination and cap deep paging.\n- **Availability of 99.9%**: at least two AZs, DB failover (Patroni), ES replicas, graceful degradation (if search is down, the card view still works).\n- **Trade-offs**: indexing lag vs write latency; ES is not the source of truth, so it must be rebuildable from Postgres; moderation can sit as an async step before indexing.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit",
+   "Employcity"
+  ],
+  "n": 3
+ },
+ {
+  "id": "system-design-exchange-rate-proxy",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design a proxy for exchange rates (client → our service → exchange) that meets 10k RPS at p95 while minimising paid exchange calls.\nThe exchange can take up to 30 s per call and charges per request. Rates change once an hour. Implement the improvement in Go at the Repository layer only.",
+  "code": "type Repository interface {\n\tGet(ctx context.Context, key string) (string, error)\n}\n\ntype ExchRateFetcher interface {\n\tGet(ctx context.Context, key string) (string, error)\n}\n\n// key:   currency pair, e.g. \"USD/EUR\"\n// value: rate as a string, e.g. \"1.234\"",
+  "a": "Rates change hourly and the set of currency pairs is small, so **serve everything from a cache and let only one request per key per TTL reach the exchange**.\n\n- **Design**:\n  - An in-memory cache per instance with TTL ≤ 1 h (aligned to the exchange's update time, if known).\n  - **Single-flight**: concurrent misses for a key share one upstream call. Without it, a cold key at 10k RPS triggers thousands of 30-second calls.\n  - **Stale-while-revalidate**: after the TTL, keep serving the old value while one background refresh runs. Clients therefore never wait 30 s, which protects p95.\n  - Optionally, a proactive refresher that fetches all known pairs just after each hourly update.\n- **Evaluation**:\n  - Upstream calls ≈ pairs × instances per hour.\n  - With many instances, add a shared Redis layer plus a distributed lock, bringing it down to about pairs per hour.\n  - Serving stale data during an exchange outage is a deliberate availability choice; alert on staleness.\n  - Alternatives:\n    - A pure background poller with no request-time fetches gives the simplest latency, but it only knows the keys it was configured with.\n    - A CDN or HTTP cache is coarser.\n\n```go\ntype entry struct {\n\tval     string\n\tfetched time.Time\n}\n\ntype call struct {\n\tdone chan struct{}\n\tval  string\n\terr  error\n}\n\ntype CachedRepo struct {\n\tfetcher ExchRateFetcher\n\tttl     time.Duration\n\tstale   time.Duration\n\n\tmu       sync.RWMutex\n\tcache    map[string]entry\n\tinflight map[string]*call\n}\n\nfunc NewCachedRepo(f ExchRateFetcher, ttl, stale time.Duration) *CachedRepo {\n\treturn &CachedRepo{\n\t\tfetcher:  f,\n\t\tttl:      ttl,\n\t\tstale:    stale,\n\t\tcache:    make(map[string]entry),\n\t\tinflight: make(map[string]*call),\n\t}\n}\n\nfunc (r *CachedRepo) Get(ctx context.Context, key string) (string, error) {\n\tr.mu.RLock()\n\te, ok := r.cache[key]\n\tr.mu.RUnlock()\n\tage := time.Since(e.fetched)\n\tswitch {\n\tcase ok && age < r.ttl:\n\t\treturn e.val, nil\n\tcase ok && age < r.ttl+r.stale:\n\t\tr.refresh(key)\n\t\treturn e.val, nil\n\t}\n\tc := r.refresh(key)\n\tselect {\n\tcase <-c.done:\n\t\treturn c.val, c.err\n\tcase <-ctx.Done():\n\t\treturn \"\", ctx.Err()\n\t}\n}\n\nfunc (r *CachedRepo) refresh(key string) *call {\n\tr.mu.Lock()\n\tif c, ok := r.inflight[key]; ok {\n\t\tr.mu.Unlock()\n\t\treturn c\n\t}\n\tc := &call{done: make(chan struct{})}\n\tr.inflight[key] = c\n\tr.mu.Unlock()\n\n\tgo func() {\n\t\tctx, cancel := context.WithTimeout(context.Background(), 35*time.Second)\n\t\tdefer cancel()\n\t\tc.val, c.err = r.fetcher.Get(ctx, key)\n\t\tr.mu.Lock()\n\t\tif c.err == nil {\n\t\t\tr.cache[key] = entry{val: c.val, fetched: time.Now()}\n\t\t}\n\t\tdelete(r.inflight, key)\n\t\tr.mu.Unlock()\n\t\tclose(c.done)\n\t}()\n\treturn c\n}\n```\n\n- **Hardening for production**:\n  - Add eviction for unknown keys: validate pair codes and bound the map.\n  - Add a circuit breaker on the fetcher.\n  - Export metrics: hit ratio, upstream calls, staleness.\n- **Verification**: 1,000 concurrent `Get`s on a cold key produced **one** fetcher call under `-race`.",
+  "level": 3,
+  "asked": [
+   "Andersen",
+   "InDrive"
+  ],
+  "n": 2
+ },
+ {
+  "id": "system-design-scaling-growing-service",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Your service's RPS keeps growing. How do you scale, load-balance and optimise it?\nVariant: service A is external and unchangeable, service B is yours, and read/write load on B keeps rising.",
+  "a": "**Find the bottleneck first**, then apply the matching lever. Because A can't change, B must absorb its traffic shape: protect B with limits and shape the load behind B's API.\n\n- **Measure**: RED metrics, pprof (CPU, allocations, lock and block profiles), DB slow queries, saturation of pools and connections.\n- **Code-level**:\n  - Fix hot paths and allocations (preallocate, `sync.Pool`, avoid reflection-heavy JSON).\n  - Batch DB/network calls, reuse connections, tune pool sizes.\n  - Remove N+1 queries; set timeouts everywhere.\n- **Horizontal scaling**:\n  - Make B stateless and run replicas behind an L4/L7 load balancer (round-robin or least-connections; client-side balancing for gRPC).\n  - Use HPA on CPU/RPS.\n- **Reads**: caches (in-process, then Redis), read replicas, CDN/HTTP caching, request coalescing (single-flight), precomputed or denormalised read models (CQRS).\n- **Writes**:\n  - Make them async through a queue (accept, then acknowledge with 202, then process), batch inserts, and use idempotency keys since A may retry.\n  - Partition or shard the DB by a key; use a write-optimised store for append-heavy data (Cassandra, ClickHouse for analytics).\n- **Protection**: rate limiting per client, backpressure, bulkheads, circuit breakers on B's own dependencies, load shedding under overload.\n- **Trade-offs**: caches and async processing bring eventual consistency; sharding complicates transactions and queries. State which consistency A actually needs.",
+  "level": 2,
+  "asked": [
+   "Ozon",
+   "VK"
+  ],
+  "n": 2
+ },
+ {
+  "id": "system-design-telemetry-ingestion",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "How would you build a GPS/telemetry ingestion pipeline — ingestion flow, validation, storage, RPS and batching?",
+  "a": "Treat it as a **high-write, append-only stream**: accept cheaply, buffer durably, batch everywhere.\n\n- **Clarify**: number of devices and send interval (e.g. 50k devices every 5 s = 10k msg/s), payload size, latency needs (live map vs analytics), retention.\n- **Ingest**:\n  - A stateless gateway over HTTP/gRPC or MQTT/UDP for constrained devices.\n  - It authenticates the device, does cheap validation, and **writes straight to Kafka**, partitioned by `device_id` to keep per-device order.\n  - It acknowledges after Kafka's acknowledgement.\n  - Devices should batch points on their side (send every N s with multiple points), which cuts connection and request overhead dramatically.\n- **Process** (consumers):\n  - Validate coordinates, timestamps and speed jumps; dedupe by `(device_id, ts)`.\n  - Enrich (order, courier), then fan out:\n    - the latest position goes to Redis for the live map,\n    - history goes in **batches** to ClickHouse or TimescaleDB (partitioned by time, ordered by device and ts),\n    - bad points go to a DLQ.\n- **Storage and retention**: raw points are kept for N days with TTL; downsampled tracks are kept longer.\n- **Scaling**: more partitions and consumers; batch size and linger tuned between latency and throughput.\n- **Failures and monitoring**:\n  - Kafka buffers during DB outages; consumers are idempotent.\n  - Watch consumer lag, ingest RPS, validation rejection rate, end-to-end delay.",
+  "level": 2,
+  "asked": [
+   "WMX"
+  ],
+  "n": 2
+ },
+ {
+  "id": "system-design-travel-orders-list",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design a 'my orders' section for a travel aggregator that lists a client's train, bus and flight orders from three separate databases.\nPage 1 is a combined list sorted by creation time (what changes to sort by trip date?). Page 2 shows per-type order details.",
+  "code": "My order list\nTrain #123   Date: 01/10/21   Moscow-SPB        More\nFlight #111  Date: 01/22/21   SPB-Moscow        More\nBus #234     Date: 02/11/21   SPB-Petrozavodsk  More\n\nOrder details (train)\nTrain #123, 01/10/21, Moscow-SPB, car 3\nPassengers: 2 (seats 12, 13)\nCost: 5000 rub\n\nOrder details (flight)\nFlight #111, 01/22/21, SPB-Moscow\nPassengers: 1 (seat 3A)\nBaggage 20 kg, meal\nCost: 10000 rub",
+  "a": "Two options: **API composition** for a first iteration, and a **materialised read model** once sorting and pagination matter.\n\n- **API**:\n  - `GET /orders?sort=created|trip&cursor=…&limit=20` returns summary items `{id, type, number, route, date, trip_date}`.\n  - `GET /orders/{type}/{id}` returns the type-specific details.\n- **v1, API composition**:\n  - An orders-aggregator calls the train, bus and flight services in parallel (errgroup with a timeout), then merges and sorts.\n  - Details are proxied to the owning service; each type keeps its own DTO (car/seats vs baggage/meal).\n  - Pagination across three sources is painful: fetch `limit` from each, then do a k-way merge by the sort key using a composite cursor that records the last value per source.\n- **v2, read model**:\n  - Each order service emits `order.created/updated` events (outbox → Kafka).\n  - The aggregator consumes them into its own table `user_orders(user_id, type, order_id, created_at, trip_at, summary jsonb)` with indexes on `(user_id, created_at)` and `(user_id, trip_at)`.\n  - The list becomes a single indexed query with keyset pagination.\n  - **Sorting by trip date** is just another index. You must add `trip_at` to the events, and a trip change is an update event.\n  - Details still come from the source service (it is the source of truth), with a Redis cache.\n- **Metrics**:\n  - Aggregator: RPS, latency, errors, goroutines, CPU/memory.\n  - DB: CPU, slow queries. Redis: hit rate. Kafka: **consumer lag**, which here means read-model staleness.\n- **Trade-offs**:\n  - Composition is simple but its latency equals the slowest source, and it partially fails when one source is down. Return partial results with a flag.\n  - The read model is fast and sortable but eventually consistent, and it needs a backfill.",
+  "level": 2,
+  "asked": [
+   "Tutu"
+  ],
+  "n": 2
+ },
+ {
+  "id": "system-design-airline-tickets",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design an airline-ticket sales service that never sells the same seat twice.\nAlso required: post-purchase emails without blocking the API, fast search by city, real-time activity metrics, and handling repeated identical queries the DB can't keep up with.",
+  "code": "Airline ticket sales service:\n1. Can't sell the same ticket twice\n2. Send emails after purchase without slowing down the API\n3. Fast search by city\n4. Real-time activity metrics for users\n5. The same queries repeat often and the DB can't keep up",
+  "a": "Map each requirement to a mechanism.\n\n1. **No double selling**:\n   - Postgres is the source of truth, with `seats(flight_id, seat_no, status, hold_until, order_id)`.\n   - Booking is an atomic conditional update: `UPDATE seats SET status='HELD', hold_until=now()+'10 min' WHERE flight_id=$1 AND seat_no=$2 AND status='FREE'`, and you check the rows affected.\n   - Alternatively use `SELECT … FOR UPDATE`, or a unique constraint on `(flight_id, seat_no)` in `tickets`.\n   - Payment moves the seat HELD → SOLD, idempotently. Expired holds are released by a job.\n2. **Non-blocking emails**:\n   - Write the purchase and an outbox event in one transaction; a relay publishes to Kafka/RabbitMQ.\n   - An email worker sends with retries and a DLQ, idempotent per order.\n3. **Fast search by city**:\n   - Use indexes on `(from_city, to_city, date)` in Postgres. For fuzzy or city-name search and filters, use an Elasticsearch index fed by events.\n   - Normalise cities to IATA or city codes.\n4. **Real-time activity metrics**: stream events (searches, bookings) to Kafka, then aggregate in ClickHouse or a time-series DB (Prometheus/Influx for technical metrics), with Grafana dashboards. Keep it off the transactional DB.\n5. **Repeated identical queries**:\n   - Put a Redis cache on search results with a short TTL (availability changes).\n   - Use single-flight to coalesce identical in-flight requests, plus HTTP/CDN caching for static parts. Prices and availability are rechecked at booking time, so a stale search result can't sell a seat twice.\n\nTrade-offs: search is eventually consistent, booking is strongly consistent. The hold TTL trades conversion against inventory lock-up.",
+  "level": 3,
+  "asked": [
+   "Evrone"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-async-resource-provisioning",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design a service that creates a disk, an address and a VM through a slow async cloud API, then links them.\nEach creation takes about 10 minutes: the API returns immediately and exposes a separate status endpoint. Your service sits between the user and that API.",
+  "a": "Model it as a **durable, resumable workflow (orchestrated saga)**, not a request that waits.\n\n- **API**:\n  - `POST /deployments` (with an idempotency key) returns `202 {id, status: PENDING}`.\n  - `GET /deployments/{id}` returns the status of each step.\n  - Optionally a webhook or SSE for completion.\n- **Data model**:\n  - `deployments(id, user_id, status, created_at)`.\n  - `steps(deployment_id, kind[disk|address|vm|link], external_id, status, attempts, next_check_at, error)`.\n  - This is a persisted state machine: `PENDING → CREATING → READY | FAILED`.\n- **Workflow engine**:\n  - Workers pick due steps (`SELECT … FOR UPDATE SKIP LOCKED` or a queue).\n  - Each worker calls the create API with an **idempotency key or client token**, stores the returned operation or resource id **before** polling, then polls the status endpoint with backoff by rescheduling `next_check_at`. It never sleeps in memory.\n  - The disk and the address can be created in parallel. The VM starts once both exist, attached to them. Linking happens after all three are ready.\n  - Alternatively, use Temporal or Cadence, which gives durable timers, retries and history for free.\n- **Failure modes**:\n  - A crash mid-step resumes from the DB state; idempotency prevents duplicate resources.\n  - A step fails permanently → run **compensations** (delete the created disk and address) and mark the deployment failed.\n  - An orphan sweeper finds resources tagged with a deployment id but unknown to the DB.\n  - Enforce timeouts per step and alert when a step is stuck.\n- **Scaling**: workers are stateless and horizontally scalable. Rate-limit calls to the provider API, and use a status cache to reduce polling.",
+  "level": 3,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-avito-messenger",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design a buyer–seller messenger for Avito: chats per listing, send/read messages, chat list, <3 s delivery, messages kept forever.\n3M DAU, 10 msgs/user/day, 99.9%, images ~1 MB, users across Russia and nearby countries.",
+  "a": "**Persist first, then deliver over persistent connections via a fan-out bus, with a message store partitioned by chat.**\n\n- **Estimate**:\n  - 30M messages/day is about 350/s on average, perhaps 2-3k/s at peak.\n  - Text at ~200 B with metadata is about 6 GB/day, roughly 2 TB/year, forever.\n  - Images go to S3 + CDN; even 5% of messages with a 1 MB image is about 1.5 TB/day.\n  - Around 1M concurrent connections at peak.\n- **API**:\n  - WebSocket (fallback: long-poll) for real-time; REST for history.\n  - `POST /chats {listing_id, seller_id}` is idempotent, unique per `(listing, buyer)`.\n  - `POST /chats/{id}/messages {client_msg_id, text, attachments}`.\n  - `GET /chats?cursor`, `GET /chats/{id}/messages?before=`.\n  - `POST /chats/{id}/read {up_to_msg_id}`.\n- **Data**:\n  - Messages in **Cassandra/ScyllaDB**, partitioned by `chat_id` and clustered by a time-ordered id (Snowflake or UUIDv7), for append-heavy writes kept forever.\n  - Chats and per-user chat list with `last_message` and unread count in Postgres (sharded by user) or Scylla.\n  - Read receipts are stored as a per-user watermark.\n- **Flow**:\n  - Send: auth → persist (idempotent by `client_msg_id`) → acknowledge the sender → publish to Kafka/NATS.\n  - The delivery service looks up which gateway node holds the recipient's connection in a Redis presence map, then pushes the message.\n  - Offline recipients get a push notification.\n- **Geo**: WebSocket gateways in several regions near users; one primary region for data, or a multi-region Scylla setup.\n- **Alerting**: delivery latency p99 against the 3 s target, gateway connection counts, Kafka lag, error rates.\n- **Trade-offs**:\n  - At-least-once delivery, with client dedup by id.\n  - Ordering holds within a chat (partition key), not globally.\n  - Gateways are stateful, so reconnect storms after a deploy need jittered backoff.",
+  "level": 3,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-bank-transfers",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design a bank-like service with create-account, balance and transfer APIs where money is never lost.\nConsistency takes priority over availability. Elements to draw: DB, queue, cache, user, service.",
+  "a": "The core is **an ACID ledger in a single strongly consistent DB, idempotent transfers, and no cache in the write path**.\n\n- **Clarify**: single currency? overdraft? expected RPS? are transfers only internal? what's the latency SLO? audit requirements?\n- **API**:\n  - `POST /accounts` returns an id.\n  - `GET /accounts/{id}/balance`.\n  - `POST /transfers {from, to, amount}` with an `Idempotency-Key` header; amounts are integers in minor units, never floats.\n- **Data model** (Postgres):\n  - `accounts(id, balance, version)`.\n  - `ledger_entries(id, transfer_id, account_id, delta, created_at)` as a double-entry, append-only journal.\n  - `transfers(id, idempotency_key UNIQUE, status)`.\n- **Transfer transaction**:\n  - Lock both rows with `SELECT … FOR UPDATE`, **ordered by account id to avoid deadlocks**.\n  - Check the balance, update both rows, insert two ledger entries, commit.\n  - Alternatively, a conditional `UPDATE … SET balance = balance - $1 WHERE id = $2 AND balance >= $1`.\n- **Consistency over availability**: synchronous replication (or quorum commit) to a standby and automatic failover (Patroni). The service refuses writes rather than accepting them on a lagging node.\n- **Reads**: the balance comes from the primary or a synchronous replica. Cache only with care, or not at all.\n- **Queue**: only for side effects (notifications, analytics), through a **transactional outbox**, so events are never lost and never emitted for rolled-back transfers.\n- **Scaling**: shard by account id. Cross-shard transfers then need a saga or 2PC with a pending/hold state.\n- **Failures**:\n  - A client retry after a timeout replays the same idempotency key and gets the stored result.\n  - Periodic reconciliation checks that the sum of the ledger equals the balances.",
+  "level": 3,
+  "asked": [
+   "Lamoda"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-capacity-estimation",
+  "cat": "system-design",
+  "kind": "theory",
+  "q": "How do you estimate how much load a new service can handle before it launches?",
+  "a": "Combine **back-of-the-envelope math, load testing and profiling**, then keep headroom.\n\n1. **Model expected load** from business numbers: DAU × actions per user per day ÷ 86,400 gives the average RPS. Multiply by a peak factor (3-10×) and a growth factor.\n2. **Estimate resources**: per-request CPU time, DB queries per request, payload sizes (which drive network bandwidth), and storage growth per day.\n3. **Load test** in a production-like environment (same instance sizes, realistic data volume, warm caches) with k6, Gatling, vegeta or yandex.tank:\n   - a ramp test to find the saturation point, where latency's \"knee\" appears and errors start;\n   - a soak test for leaks;\n   - a spike test.\n4. **Find the bottleneck** at saturation using pprof, DB metrics, connection pools and GC. Fix it or record it as the limit.\n5. **Derive capacity**: sustainable RPS per instance at the target p99, times the number of instances, while keeping 30-50% headroom and N+1 redundancy.\n6. **Verify after launch** with real metrics and capacity dashboards, and repeat periodically.\n\nGotchas: synthetic traffic that hits only the cache, testing against an empty DB, and the load generator itself becoming the bottleneck.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-courier-tracking",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Critique a 'track your courier on the map' MVP that chains synchronous calls, then redesign it for a 50 ms response SLO.\nThe MVP calls customer-backend → order-service (150 ms) → logistics (350 ms) on every request.",
+  "code": "Courier --> courier-app --> logistics\n                                |\n                                +--> customer-backend <-- customer-app <-- Customer\n                                |\norder-service ------------------+\n\nlogistics:\n  locations: {lat, lon, courier_id}\n  http /{courier_id} -> {lat, lon}\n  RT = 350ms\n\norder-service:\n  orders: {order_id, courier_id, status}\n  http /{order_id} -> {courier_id, status}\n  RT = 150ms\n\ncustomer-app:\n  http get /location/{order_id} -> {lat, lon}\n  NFR RT = 50ms",
+  "a": "**The MVP can't meet the SLO by construction.** The chained calls cost at least 500 ms before any retries. Every map refresh from every customer multiplies load on two core services owned by other teams, and its availability is the product of three services.\n\n**Critique points and metrics to watch:**\n- p95/p99 latency per hop and end to end.\n- The RPS fan-out ratio (customer refreshes → core calls).\n- Error rate and timeouts; saturation of order-service and logistics.\n- There's no caching, even though locations update only every few seconds.\n- Tight coupling: logistics' internal API becomes a public dependency.\n\n**Redesign (event-driven, read model owned by the customer side):**\n- logistics publishes `courier.location.updated {courier_id, lat, lon, ts}` to **Kafka**, partitioned by `courier_id`.\n- order-service publishes `order.assigned/status_changed {order_id, courier_id, status}`.\n- A new **tracking service** consumes both topics and maintains a denormalised read model in **Redis**: `order_id → courier_id` and `courier_id → last position`, with TTLs.\n  - Order state can also be kept in its own DB for recovery.\n- `GET /location/{order_id}` becomes one Redis lookup, a few milliseconds, which meets the 50 ms SLO.\n  - Better still, push updates to the app via WebSocket/SSE instead of polling.\n- **Scaling**: stateless API replicas; consumers scale with partitions; Redis is replicated.\n- **Failure modes and trade-offs**:\n  - Positions can be a few seconds stale. Return a timestamp and show \"updated N s ago\".\n  - Consumer lag is the key alert.\n  - Replay from Kafka rebuilds the read model.\n  - Only active orders need tracking, so bound memory with TTLs.\n  - Each team keeps ownership; the contracts are the event schemas.",
+  "level": 3,
+  "asked": [
+   "Kuper"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-cross-cluster-document-transfer",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design an integration service that transfers documents with attached files between clusters, preserving per-object ordering.\nEach document has metadata, XML content (≤5 MB) and N files (up to 30 MB), and belongs to a construction object (OKS). Order must be preserved per OKS, with at most 10 minutes of publication lag.\nThroughput: 8,000 docs/day, ~2 TB/day over a 100 Mbit link. Describe the sender and receiver algorithms.",
+  "a": "**Check the bandwidth first.** 100 Mbit/s is about 12.5 MB/s, roughly 1.08 TB/day, so 2 TB/day doesn't fit. You need compression or dedup of files already transferred (content hashes), more bandwidth, or a relaxed lag requirement for large files. Raise this before designing.\n\n**Ordering**: order is required only **within an OKS**. Partition the event topic by `oks_id`. The sender processes each OKS sequentially, while different OKS objects run in parallel.\n\n**Sender algorithm**:\n1. Consume `doc-store.document.published` (key = `oks_id`) with manual commits.\n2. Fetch the content and file-id list from doc-store over gRPC.\n3. Transfer files first, idempotently: either push chunks to the receiver (resumable, with checksums), or send the file ids and let the receiver pull from the externally accessible file-store.\n4. Send the document (meta, content, file manifest with hashes) to the receiver, with `doc_id` as the idempotency key and a per-OKS sequence number.\n5. On acknowledgement, commit the offset. On failure, retry with backoff while **blocking only that OKS**. After N attempts, park it in a DLQ and alert, because later documents of the same OKS must wait.\n\n**Receiver algorithm**:\n1. Accept the files, verify the hashes, and store them in internal storage (S3). Deduplicate by hash.\n2. Accept the document, check that all files in the manifest exist, and check the sequence number (drop duplicates, buffer or reject gaps).\n3. In one transaction, save the document plus an **outbox** record.\n4. The relay publishes `doc-store.document.published` internally, with the content and file refs. The document is published only after every file is in place.\n\n**Monitoring**: lag per OKS against the 10-minute target, link utilisation, retry and DLQ counts.",
+  "level": 3,
+  "asked": [
+   "Econ Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-cross-region-data-verification",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Records from one region intermittently go missing in a shared datacenter. How do you quickly build a service to verify the data?\nScenario: Moscow and Novosibirsk services both write purchases into a shared DC. Novosibirsk records sometimes appear and sometimes don't, and there's no time for a full investigation. Build a checker in Moscow.",
+  "a": "Build a **reconciliation service** that compares what the source *claims* it sent with what the store *has*, and alerts on the difference, without touching the broken pipeline yet.\n\n- **Clarify**: can we read Novosibirsk's local data or logs? Is there a unique purchase id? What latency is acceptable before a record counts as missing?\n- **Signal from the source**:\n  - Ask Novosibirsk to also emit a lightweight **count or checksum per time window** (e.g. per minute: count, sum of amounts, hash of ids), or expose a read-only API or export of its local purchase ids.\n  - If you can't change it, sample its logs or queue.\n- **Reconciler (Moscow)**:\n  - Periodically, for each closed window (with a grace delay for replication lag), query the shared DC for the same window and compare counts and checksums.\n  - On mismatch, drill down by id-set diff to find the missing ones.\n  - Store results, emit metrics (`missing_records_total`, lag) and alert.\n- **Why this works quickly**: it's read-only and doesn't change the write path. It detects both loss and duplicates, and it produces the evidence (which ids, which time pattern) needed for the real investigation. Common culprits are retries without idempotency, timeouts treated as success, replication lag, clock skew and time zones in window boundaries.\n- **Follow-up fixes**: idempotent writes with unique ids, an outbox or durable queue between the region and the DC, and end-to-end delivery metrics.",
+  "level": 3,
+  "asked": [
+   "Amtech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-data-aggregation-service",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Take-home: build a concurrent data-aggregation service with M workers, a database, and gRPC plus REST APIs.\nPackets (UUID, timestamp, K random integers) arrive every N ms. Workers find each packet's max and persist it. Queries filter by time range and/or packet id. Expectations: structured logs, tests, Dockerfile, README, production and monitoring notes.",
+  "a": "They're grading **production-readiness and concurrency hygiene** more than the max function.\n\n- **Pipeline**:\n  - A generator goroutine uses a `time.Ticker` (N ms) to push packets into a **bounded channel**.\n  - M workers `range` over it, compute the max (with `slices.Max`), and send results to a writer.\n  - The writer **batch-inserts** (flushing by size or interval) to reduce DB round trips.\n  - Use `errgroup` or a `WaitGroup` (`wg.Go` in Go 1.25) plus a root `context` for shutdown.\n- **Backpressure**: when workers or the DB fall behind, the bounded channel blocks the producer. Decide explicitly whether to block or drop, and expose a queue-depth metric.\n- **Storage**: Postgres `packet_max(id uuid PK, ts timestamptz, max bigint)` with an index on `ts`; or ClickHouse for large volumes. Queries: `WHERE ts BETWEEN $1 AND $2` and/or `id = $3`, with keyset pagination.\n- **API**: define the proto first, e.g. `GetMax(from, to, id)`. Serve REST from the same service layer (grpc-gateway or a thin `net/http` handler), with input validation.\n- **Production concerns**:\n  - Structured logs (`slog`) and config via env.\n  - **Graceful shutdown**: stop the ticker, close the channel, drain workers, flush the writer.\n  - Health and readiness probes, migrations, a Dockerfile (multi-stage, distroless), a README.\n- **Tests**: unit tests for max and filtering, a worker-pool test with `-race`, repository tests with testcontainers.\n- **Monitoring**: packets in/out per second, processing latency, queue depth, DB write latency and errors, goroutine count.",
+  "level": 2,
+  "asked": [
+   "MarketLab"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-distributed-cache-challenges",
+  "cat": "system-design",
+  "kind": "theory",
+  "q": "What are the challenges of building a distributed cache, and how do you overcome them?",
+  "a": "The hard parts are **consistency with the source of truth, hot spots and failure behaviour**, not storing keys.\n\n- **Invalidation and staleness**:\n  - Use cache-aside with TTLs and delete-on-write.\n  - Race: a reader repopulates a stale value after an update. Mitigate with short TTLs, versioned keys, or CDC-driven invalidation (Debezium → invalidate).\n- **Thundering herd / cache stampede**: when a hot key expires, all requests hit the DB. Mitigate with single-flight or a lock per key, stale-while-revalidate, TTL jitter, and early probabilistic refresh.\n- **Hot keys**: add local in-process caching with a short TTL, replicate the key under multiple names, or read from replicas.\n- **Data distribution**: consistent hashing or hash slots, so adding or removing nodes moves only a fraction of keys.\n- **Node failure**: replicas and failover. Treat the cache as disposable, so the DB must survive a cold cache: warm it up gradually and rate-limit misses.\n- **Penetration**: repeated lookups of non-existent keys → cache negative results, or put a Bloom filter in front.\n- **Memory**: eviction policy (LRU/LFU), big values, serialisation cost.\n- **Multi-region**: replication lag and write conflicts; usually local caches per region with invalidation events.\n- **Observability**: hit ratio, latency, evictions, memory.",
+  "level": 3,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-distributed-rate-limit",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "An ad service runs in several data centers. How do you enforce a shared limit of 50k impressions per hour across all instances?",
+  "a": "The choice is between **exact but coordinated** and **approximate but local**. Pick based on how bad an overshoot is.\n\n- **Clarify**:\n  - Is the limit hard (billing, contract) or soft?\n  - Is it global or per campaign?\n  - Is a fixed hour window acceptable, or does it need to be sliding?\n  - What is the latency budget per request? Cross-DC calls add tens of milliseconds.\n- **Option 1, central counter**:\n  - Redis with atomic `INCR` on `impressions:{campaign}:{hour}` with a TTL, or a Lua script that checks and increments.\n  - Exact, but each request pays a cross-DC round trip, and Redis becomes a single point of failure. You must choose what happens when it's unavailable: fail closed means no ads, fail open means overshoot.\n- **Option 2, token leasing (the usual answer)**:\n  - A coordinator hands each instance a **batch of quota** (e.g. 1,000 impressions).\n  - Instances spend the tokens locally, which costs no network per request, and fetch more as they run out.\n  - The coordinator hands out batches with a transactional or atomic decrement.\n  - Overshoot is bounded by the unspent batches, and batch size can shrink near the end of the hour.\n- **Option 3, static split**: 50k/3 per DC, with periodic rebalancing using gossip or a sync job. Simple, but it wastes quota when traffic is skewed.\n- **Counting accuracy**: count actual impressions asynchronously (events → Kafka → aggregator) and reconcile, since a returned link isn't always a displayed ad.\n- **Failure modes and trade-offs**:\n  - A network partition means instances keep spending only the tokens they hold, which gives a bounded overshoot.\n  - Clock skew at the hour boundary: use the coordinator's time.",
+  "level": 3,
+  "asked": [
+   "Data Driven Labs"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-environment-isolation",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design network and access isolation between prod, stage and dev across multiple heterogeneous data centers.\nThe infrastructure mixes Linux, Kubernetes and Windows. Cover automated network policies and access control, plus rollout and monitoring of policy changes.",
+  "a": "**Isolate at several layers, driven from one policy source of truth, with default-deny everywhere.**\n\n- **Clarify**: which flows between environments are legitimate (CI pushing artifacts, prod data anonymised into stage)? What compliance applies? How many teams and services are there?\n- **Network segmentation**:\n  - Separate VLANs/VRFs or VPCs and subnets per environment in each DC, with firewalls between them. Prod has no routes to or from dev.\n  - Kubernetes: separate clusters per environment, at least for prod. Namespace-level isolation isn't enough for prod.\n  - Inside clusters, use default-deny **NetworkPolicies** (Cilium/Calico) with explicit allows.\n  - Windows and bare-metal hosts use host firewalls managed by config management (Ansible/Salt/GPO).\n- **Identity-based access**:\n  - A service mesh or mTLS (SPIFFE/SPIRE identities) so policies are written in terms of services, not IPs.\n  - Separate secrets stores and PKI per environment, so a dev credential is useless in prod.\n  - Human access: SSO and RBAC, just-in-time elevated access to prod, bastion or zero-trust access proxy, full audit logs.\n- **Policy as code**:\n  - Policies live in Git (a service-to-service allow matrix) and are rendered to each enforcement point: firewalls, NetworkPolicy, Calico host endpoints, Windows firewall.\n  - Changes go through review, and CI validates them with OPA/conftest (e.g. \"no dev→prod rule\").\n- **Rollout**:\n  - Apply stage first, then prod gradually: one DC or segment at a time, with an **audit/log-only mode** before enforcing.\n  - Automatic rollback when error rates or denied-flow alerts spike.\n- **Monitoring**: flow logs of denied and allowed traffic (Hubble, firewall logs), drift detection between Git and the actual rules, alerts on unexpected cross-environment traffic, periodic access reviews.\n- **Trade-offs**: stricter isolation raises operational friction. Invest in self-service policy requests, so teams don't open broad rules.",
+  "level": 3,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-game-progress-backend",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design a backend for a mobile game: authentication plus periodic JSON progress saves that must never be lost.\nNumbers: 200k DAU, 1,000 RPS, 30/70 read/write, 18 MB payload.",
+  "a": "Start by **challenging the numbers**. At 700 writes/s × 18 MB the service would ingest about 12.6 GB/s, which is unrealistic for 200k DAU. Ask whether 18 MB is the full save and whether it can be compressed (JSON typically shrinks 5-10×) or sent as diffs.\n\n- **Auth**:\n  - Device/guest login plus platform sign-in (Game Center, Google).\n  - Issues a short-lived JWT access token and a refresh token.\n  - Keep it a separate auth service.\n- **API**:\n  - `PUT /saves/{userId}` carries `If-Match: <version>` for optimistic concurrency, which stops an old device from overwriting newer progress.\n  - `GET /saves/{userId}/latest`.\n- **Storage**:\n  - Put the blob itself in **object storage (S3)**. The client uploads directly via a **presigned URL**, so the API servers never proxy 18 MB bodies.\n  - Metadata goes in Postgres or Cassandra: `(user_id, version, s3_key, checksum, created_at)`.\n  - Keep the last N versions for rollback when a save is corrupt.\n- **Write flow**:\n  1. The client requests an upload URL.\n  2. It uploads the blob.\n  3. It calls commit, sending the checksum.\n  4. The server verifies the checksum and bumps the version in the DB transaction.\n- **Durability**: S3 gives you replication across availability zones. The DB runs with a replica and point-in-time recovery backups. The client keeps a local copy and retries until it gets an acknowledgement.\n- **Scaling**: API nodes are stateless behind a load balancer. The DB shards by `user_id`. Old versions move to cheaper storage via lifecycle rules.\n- **Trade-offs**: last-write-wins vs version conflicts (show a \"choose save\" dialog); save frequency vs cost.",
+  "level": 2,
+  "asked": [
+   "GleraGames"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-high-load-code",
+  "cat": "system-design",
+  "kind": "theory",
+  "q": "How does code written for high load differ from code that isn't under high load?",
+  "a": "Under high load, **small per-request costs and rare edge cases become constant problems**, so the code is written with resource budgets and failure in mind.\n\n- **Allocations and CPU**: avoid needless allocations and reflection in hot paths; preallocate slices and maps; use `sync.Pool` for buffers; prefer streaming over loading whole payloads; profile with pprof instead of guessing. GC pressure grows with allocation rate.\n- **I/O efficiency**: batch DB writes and network calls, reuse connections, size pools, avoid N+1 queries, and use proper indexes with keyset pagination.\n- **Everything has a timeout and a bound**: context deadlines on every call, bounded queues and worker pools, limits on request size and concurrency. Unbounded goroutines or buffers are how a service dies.\n- **Contention**: shard locks, prefer atomics and read-mostly structures, avoid global mutexes on the hot path.\n- **Resilience**: retries with backoff and jitter (and retry budgets), circuit breakers, load shedding, rate limiting, graceful degradation, idempotency.\n- **Caching and async** to smooth spikes, with awareness of stampedes.\n- **Observability**: cheap metrics and sampled traces, because logging every request at debug level costs real CPU.\n\nGotcha: don't micro-optimise everywhere. Optimise measured hot paths and keep the rest simple.",
+  "level": 2,
+  "asked": [
+   "Employcity"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-infinite-product-feed",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Design an infinite product feed and product card for a marketplace, with a supplier admin panel.\n1M users/day, 10k product changes/day, 10M → 50M products, up to 5 photos (≤5 MB) per product, category-specific attributes, eventual consistency OK.",
+  "a": "**Separate the supplier write model from a denormalised, cached read model, and put media on a CDN.**\n\n- **Estimate**:\n  - 1M DAU at ~50 feed pages each, with a 10× daytime peak, gives about 5k RPS for the feed.\n  - 10k writes a day is trivial.\n  - Catalog metadata at 50M × ~2 KB is about 100 GB. Photos are up to 1.25 PB raw, so they must go to object storage, stored compressed and resized.\n- **API**:\n  - `GET /feed?cursor=…&limit=20` returns `[{id, name, price, thumb}]`.\n  - `GET /products/{id}`.\n  - Admin: `POST/PUT/DELETE /admin/products`, plus photo upload via presigned URLs.\n- **Write side (Product Service)**:\n  - Postgres: `products(id, category_id, name, price, description, attrs jsonb, updated_at, version)`.\n  - Category attribute schemas (tire: radius/season, book: author/pages) are validated per category, and a GIN index on `attrs` supports filtering later.\n  - Changes publish `product.changed` through an **outbox → Kafka**.\n- **Media**: upload to S3, then an async worker makes thumbnails and WebP variants, served through a **CDN**. The card only holds URLs.\n- **Read side (Feed/Card Service)**:\n  - Consumes the events into a read store: Redis or Cassandra for cards keyed by id, and a feed index.\n  - Keyset or cursor pagination over a stable order (e.g. `(rank, id)`). Never use `OFFSET` at 50M rows.\n  - Cache hot cards and the first feed pages; version fields make updates idempotent.\n- **Consistency**: eventual, typically seconds behind. Periodic full reconciliation or a rebuild from Postgres catches missed events.\n- **Scaling and fault tolerance**:\n  - Stateless services across multiple AZs; Redis/Cassandra shard by product id.\n  - Replay from Kafka rebuilds the read model; the CDN absorbs image load.\n  - Degrade by serving the cached feed when the read store is slow.",
+  "level": 3,
+  "asked": [
+   "Magnit"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-new-app-from-scratch",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "How would you architect a new application from scratch?\nFollow-up: where would authorization happen?",
+  "a": "Start from requirements, not technology, and **default to a well-structured modular monolith** unless there's a reason to split.\n\n- **Clarify**:\n  - Core use cases and users.\n  - Expected load and data volume.\n  - Consistency needs, SLOs, compliance.\n  - Team size, time to market.\n- **API**:\n  - REST/gRPC with versioning and an OpenAPI/proto contract first.\n  - Pagination, idempotency keys for mutations.\n- **Structure**:\n  - Modules by domain (bounded contexts), each with transport → use cases → repositories.\n  - Clear module interfaces, so a module can later be extracted into a service when scaling, ownership or release cadence demands it.\n- **Storage**:\n  - Postgres by default, Redis for cache/sessions, S3 for files.\n  - A broker (Kafka/RabbitMQ) for async work, using an outbox.\n- **Cross-cutting**:\n  - Config via env, structured logs, metrics, traces, health checks, graceful shutdown.\n  - CI/CD, migrations, feature flags.\n- **Authorization**:\n  - **Authentication** happens at the edge: API gateway/ingress or middleware validates the JWT/session (OIDC provider such as Keycloak/Auth0), and identity is passed downstream in context.\n  - **Coarse authorization** (roles/scopes) can live at the gateway.\n  - **Fine-grained authorization** (\"can user X edit order Y\") must live **in the service that owns the data**, in the use-case layer, because only it knows ownership.\n  - For complex rules, use a policy engine (OPA, Casbin) or ReBAC (SpiceDB/Zanzibar-style).\n- **Trade-offs**: microservices from day one add network failures, distributed transactions and ops cost before you know the domain boundaries.",
+  "level": 2,
+  "asked": [
+   "Velme"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-non-functional-requirements",
+  "cat": "system-design",
+  "kind": "theory",
+  "q": "Which non-functional requirements would you specify for a new service?",
+  "a": "NFRs define **how well** the service must work. Make each one measurable.\n\n- **Load**: RPS (average and peak), read/write ratio, growth over 1-2 years, data volume and retention.\n- **Latency**: p95/p99 targets per endpoint, not averages.\n- **Availability**: SLO (99.9% ≈ 43 min/month downtime), RTO/RPO for disasters.\n- **Consistency**: strong vs eventual, per operation, and tolerance for stale reads.\n- **Durability**: acceptable data loss, backups, replication factor.\n- **Scalability**: horizontal scaling expectations, multi-region or geo needs.\n- **Security and compliance**: authentication and authorization, encryption, PII handling, audit logs, regulations (GDPR, local data residency).\n- **Observability**: required metrics, logs, traces, alerting.\n- **Operability**: deploy frequency, zero-downtime deploys, config and feature flags, on-call.\n- **Cost** constraints, and **dependencies' SLAs**: your SLO can't exceed the product of your synchronous dependencies' availabilities.\n\nGotcha: agree on the NFRs *before* choosing technology, because they drive the design far more than functional requirements do.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-reverse-design",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "Reverse system design: draw a service you worked on and describe its connections to the rest of the system.",
+  "a": "They check whether you understand the **system around your code**: boundaries, data flow, dependencies and failure modes.\n\nOutline to follow:\n- **Purpose**: what business capability the service owns and who calls it (clients, other services, cron jobs).\n- **API**: sync endpoints (REST/gRPC) and async contracts (topics consumed/produced, event schemas).\n- **Data**: its own DB (schema highlights, why that store), caches, object storage; what it is the source of truth for.\n- **Dependencies**: downstream services and external APIs, with timeouts, retries, circuit breakers.\n- **Scale numbers**: RPS, data size, latency SLO, instance count.\n- **Failure modes**: what happens when the DB, the broker or a dependency is down; idempotency; how you'd notice (alerts, dashboards).\n- **Trade-offs and debt**: what you'd redesign today and why.\n\nPitfall: drawing only your service box with arrows to \"DB\" — the interviewer wants to see you know the neighbours and the contracts.",
+  "level": 2,
+  "asked": [
+   "EyesOfWonder"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-scale-monolith-single-server",
+  "cat": "system-design",
+  "kind": "design",
+  "q": "How would you scale an online store whose monolith and database both run on a single server?",
+  "a": "Scale in **cheap-to-expensive steps, measuring before each one**.\n\n1. **Measure**:\n   - Add metrics, tracing and slow-query logs to find the bottleneck: CPU, DB, IO or locks.\n   - Often the fix is indexes, N+1 queries and connection pooling.\n2. **Separate the DB from the app**:\n   - Move Postgres to its own host with backups and a streaming **replica** (hot standby plus read offload).\n   - This also removes the single point of failure.\n3. **Scale the app horizontally**:\n   - Make it stateless: sessions go to Redis/JWT, uploads go to S3.\n   - Run N instances behind a load balancer, using health checks and zero-downtime deploys.\n4. **Caching and CDN**:\n   - Static assets and images go on a CDN.\n   - Cache the catalog and product pages in Redis or HTTP caches; invalidate on update.\n5. **Offload async work**: emails, image processing, analytics and order-export flows go through a queue and workers.\n6. **Read scaling**: route catalog reads to replicas, keep checkout on the primary; beware replication lag (read-your-writes).\n7. **Search**: move full-text and faceted search to Elasticsearch.\n8. **Only then split the domain**:\n   - Extract hot or independent parts (catalog, checkout, payments) into services.\n   - Shard or partition big tables (orders by user or time).\n\nTrade-offs: each step adds operational complexity. Don't jump to microservices while the real bottleneck is one missing index.",
+  "level": 2,
+  "asked": [
+   "Kaspersky"
+  ],
+  "n": 1
+ },
+ {
+  "id": "system-design-survive-until-more-cpu",
+  "cat": "system-design",
+  "kind": "theory",
+  "q": "Infra will give you more CPU, but only in 30 minutes. How does your service avoid falling over until then?",
+  "a": "**Shed and shape load deliberately**, so the service degrades instead of collapsing under queueing and timeouts.\n\n- **Load shedding and admission control**:\n  - Cap in-flight requests (a semaphore or concurrency limiter) and reject the excess fast with 429/503 plus `Retry-After`.\n  - Adaptive limiters based on latency are better. A fast rejection is cheaper than a slow timeout.\n- **Prioritise**: keep critical endpoints (checkout, login) and drop or degrade non-critical ones (recommendations, analytics, exports) with feature flags or kill switches.\n- **Rate limit** per client or tenant at the gateway, which stops one noisy caller from starving others.\n- **Degrade gracefully**: serve cached or stale responses, lower quality (smaller pages, fewer items), turn off expensive features.\n- **Cut wasted work**:\n  - Propagate deadlines via `context`, so abandoned requests stop consuming CPU.\n  - Reduce retries (retry storms multiply load); open circuit breakers.\n  - Pause background jobs, batch jobs and non-urgent consumers (let Kafka lag grow).\n- **Quick capacity wins**:\n  - Check `GOMAXPROCS` matches the CPU quota (automatic since Go 1.25; `automaxprocs` before that).\n  - Scale out onto any existing spare nodes, and lower log verbosity.\n- **Afterwards**: capacity planning, autoscaling and load tests so it doesn't recur.",
+  "level": 3,
+  "asked": [
+   "VK"
+  ],
+  "n": 1
+ }
+]

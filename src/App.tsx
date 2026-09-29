@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { Link, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom'
-import { liveTopics, topics } from './topics/registry'
+import { topics } from './topics/registry'
 import Home from './Home'
 
 const Bank = lazy(() => import('./bank/Page'))
@@ -53,11 +53,9 @@ export default function App() {
             go deep
           </Link>
           <nav className="topnav">
-            {liveTopics.map((t) => (
-              <NavLink key={t.slug} to={'/' + t.slug}>
-                {t.n} {t.title.split(' ')[0]}
-              </NavLink>
-            ))}
+            <NavLink to="/" end>
+              Topics
+            </NavLink>
             <NavLink to="/interview">Q bank</NavLink>
           </nav>
         </div>

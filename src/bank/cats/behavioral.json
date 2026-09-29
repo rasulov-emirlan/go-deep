@@ -1,0 +1,434 @@
+[
+ {
+  "id": "behavioral-tell-me-about-yourself",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Tell me about yourself and your recent experience.\nOften phrased as \"what have you worked on, where, and what interests you\" or \"your experience, processes and achievements\".",
+  "a": "The interviewer is checking whether you can give a **structured, relevant 2-minute pitch** and which threads are worth pulling in the rest of the interview. You set the agenda here.\n\nStructure (present → past → future):\n1. **Now**: role, domain, team, stack in one or two sentences (\"Go backend in a payments team of 6, Postgres, Kafka, k8s\").\n2. **Highlights**: 2-3 concrete achievements with numbers (latency cut from 800ms to 120ms, a service you built from scratch, an incident you owned).\n3. **Why here**: what you want next and how it matches this role.\n\nPitfalls: reciting the resume chronologically, drowning in company-internal names, or spending 10 minutes. Stop after ~2 minutes and let them pick what to dig into — and only mention things you can defend in depth.",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "Crtex",
+   "Plata",
+   "QROQO",
+   "Velme"
+  ],
+  "n": 6
+ },
+ {
+  "id": "behavioral-recent-project-and-stack",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What did you work on at your last job, and what was the tech stack?\nFollow-up: which project stood out to you most, and why?",
+  "a": "They want **context and depth**: what the product did, where your service sat in the system, and whether you understand *why* the stack was chosen, not just its list.\n\nStructure:\n- **Product and your part**: one sentence on the business, one on your service(s) and their neighbours.\n- **Stack with reasons**: \"Go, Postgres for the ledger (transactions), Kafka for events between services, Redis for idempotency keys, k8s + Helm, Prometheus/Grafana\".\n- **Standout project** (STAR): Situation, Task, the Actions *you* took, measurable Result.\n\nPitfalls: listing technologies you only touched (\"we had ClickHouse somewhere\") — every item you name is an invitation for a deep question. Prefer one project told in depth over five told shallowly.",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "Kvando",
+   "Ozon",
+   "Plata",
+   "Sarafan"
+  ],
+  "n": 5
+ },
+ {
+  "id": "behavioral-task-intake-process",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "How did tasks reach you, from idea to development? Who initiated them, who groomed them, and how were they assigned?\nFollow-ups: were analysts involved; did you write task descriptions yourself; who owned a feature?",
+  "a": "They're mapping your **process maturity** and how much you engaged beyond coding.\n\nDescribe the real flow, e.g.: business/product sets goals → product manager or system analyst writes the requirement → grooming/refinement with devs, QA and analyst (clarify, split, estimate) → sprint planning → tasks picked by devs (by expertise or pull-based) → development → review → QA → release. Name who owned a feature end-to-end (often a dev \"feature owner\" paired with the PM).\n\nWhat scores: you asked clarifying questions, pushed back on unclear requirements, wrote technical tasks/design notes yourself, and split large features. Pitfall: \"the lead gave me tickets and I did them\" — it signals you never engaged with the *why*.",
+  "level": 1,
+  "asked": [
+   "LinIT",
+   "Plata",
+   "Tochka Bank",
+   "Velme"
+  ],
+  "n": 5
+ },
+ {
+  "id": "behavioral-architecture-decisions",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Have you made architectural decisions? Which monolith have you broken apart, and how?",
+  "a": "What they check: whether you've owned decisions with real trade-offs (not just implemented tickets), how you evaluate options, and whether you can own the consequences.\n\nStructure (STAR + trade-offs):\n- **Situation**: system, scale, team size, the pain (deploy conflicts, scaling hotspot, reliability).\n- **Task**: what you were responsible for deciding.\n- **Action**: options you considered (e.g., modularize vs extract a service), criteria (team boundaries, data ownership, latency, cost), how you got buy-in (ADR, RFC, prototype), how you migrated (strangler fig, data sync via CDC/outbox, feature flags, rollback path).\n- **Result**: measurable outcome — deploy frequency, latency, incidents — and what you'd do differently.\n\nPitfall: describing a \"we split everything into 20 services\" story with no reasoning, no mention of the costs (distributed transactions, ops overhead), or claiming a team decision as a solo one. Admitting a decision that didn't pay off, with lessons, reads as senior.",
+  "level": 2,
+  "asked": [
+   "Plata",
+   "Velme",
+   "WMX"
+  ],
+  "n": 4
+ },
+ {
+  "id": "behavioral-database-experience",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Tell me about your hands-on database experience.\nWhich databases you used, the most complex queries you wrote, and the indexes, EXPLAIN, views and CTEs you worked with.",
+  "a": "What they're checking: whether your SQL and DB knowledge is **practical and deep**, not just from reading. Did you own schema design, performance and correctness, or only call an ORM? They'll drill into whatever you mention, so only name what you can defend.\n\nStructure (STAR-lite, 2–3 minutes):\n\n- **Landscape**: which stores and why (Postgres as the source of truth, Redis for cache and locks, ClickHouse for analytics, Kafka in between). Include volumes: rows, QPS, data size.\n- **One concrete optimization story**: the symptom (p99 of an endpoint) → how you found it (`pg_stat_statements`, `EXPLAIN (ANALYZE, BUFFERS)`) → the change (a composite or partial index, a rewrite from `OFFSET` to keyset, a CTE or window function replacing N+1) → the measured result.\n- **The most complex query**: what it computed and why SQL beat app code (window functions, recursive CTE, materialized view refresh strategy).\n- **Design and normalization**: a schema you designed, the constraints you enforced in the DB, and a deliberate denormalization.\n- **SQL vs NoSQL use cases**: when you chose each, and the trade-off.\n\nPitfall: listing buzzwords (\"I know all index types, sharding, MVCC\") without a single number or concrete story. The follow-up questions will expose it.",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "LinIT",
+   "Plata"
+  ],
+  "n": 4
+ },
+ {
+  "id": "behavioral-team-and-communication",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What was your team like — size, roles, and how communication worked, including with other teams?",
+  "a": "They're gauging the environment you're used to and how you **collaborate across boundaries**.\n\nCover:\n- **Composition**: e.g. 5 backend, 2 frontend, 2 QA, analyst, PM, team lead.\n- **Rituals**: daily stand-up, planning, grooming, retro; async by default in chat/tickets.\n- **Cross-team work**: how you agreed API contracts (OpenAPI/proto reviews), shared dependencies, who you went to for platform/infra, how often (e.g. weekly with a neighbouring team).\n\nAdd one concrete example of cross-team coordination (a breaking API change negotiated with consumers, a joint incident). Pitfall: only describing your team's internals — at middle/senior level interaction with other teams is a big part of the job.",
+  "level": 1,
+  "asked": [
+   "Kvando",
+   "Plata",
+   "Tochka Bank",
+   "Velme"
+  ],
+  "n": 4
+ },
+ {
+  "id": "behavioral-your-role-and-contribution",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What was your personal role and contribution on your last project? What exactly did you do?\nOften asked as a deep-dive into one specific project from your resume.",
+  "a": "The interviewer is separating **\"I\" from \"we\"**: what you owned, decided and delivered versus what the team did around you. Seniors are expected to show ownership of outcomes, not just tickets.\n\nAnswer with STAR, emphasising the Action part:\n- **Situation/Task**: the problem and why it mattered.\n- **Action**: your design decisions, trade-offs you weighed, what you built, who you had to align with.\n- **Result**: numbers (latency, cost, incidents, delivery time) and what you learned.\n\nBe ready for the drill-down: \"why that DB?\", \"what failed?\", \"what would you do differently?\". Pitfall: saying \"we\" throughout, or claiming the whole system — detailed follow-ups quickly expose a claim you can't back up.",
+  "level": 2,
+  "asked": [
+   "EyesOfWonder",
+   "Kvando",
+   "Tochka Bank",
+   "ViTech"
+  ],
+  "n": 4
+ },
+ {
+  "id": "behavioral-hardest-task",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Tell me about the hardest task you've worked on and how you solved it.",
+  "a": "They're measuring the **ceiling of problems you can handle** and how you think under uncertainty: decomposition, debugging method, trade-offs.\n\nPick something technically meaty (a race condition, a production-only memory leak, a data migration with zero downtime, a performance problem) and use STAR:\n- **Why it was hard** — be specific (non-reproducible, no observability, tight constraints).\n- **Your process** — hypotheses, instrumentation (pprof, traces, logs), experiments, who you pulled in.\n- **Result** — metrics, and what you changed so it doesn't recur.\n\nPitfalls: choosing something hard only for organisational reasons with no technical depth, or a story where the solution was luck. Expect \"what would you do differently now?\" — have an answer.",
+  "level": 2,
+  "asked": [
+   "Amtech",
+   "InDrive",
+   "LinIT"
+  ],
+  "n": 3
+ },
+ {
+  "id": "behavioral-incidents-and-on-call",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "How do you handle critical production situations? Was there on-call, and what bugs have you hit in production?",
+  "a": "They're checking you've actually run services in production and behave well under pressure.\n\nA good answer covers:\n- **On-call setup**: rotation, alerting (Alertmanager/PagerDuty), runbooks, escalation.\n- **Incident flow**: acknowledge → **mitigate first** (rollback, feature flag, scale up, shed load) → communicate status → root-cause later → blameless postmortem with action items.\n- **A concrete incident** via STAR: e.g. goroutine leak causing OOM kills, connection pool exhaustion, a Kafka consumer stuck on a poison message, a bad migration.\n\nPitfall: jumping straight to root-causing a live incident instead of restoring service, or saying \"we never had incidents\" — that suggests you weren't close to production.",
+  "level": 2,
+  "asked": [
+   "Plata",
+   "QROQO"
+  ],
+  "n": 3
+ },
+ {
+  "id": "behavioral-motivation-and-growth",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What motivates you, what challenges are you looking for, and where do you want to grow?\nVariants: \"do you want to be experienced or important?\", \"which area interests you more — X or Y?\"",
+  "a": "They check **fit between your goals and the role**, and whether you'll stay engaged.\n\nBe specific and honest:\n- What drives you (hard technical problems, ownership, product impact, mentoring).\n- The concrete challenges you want next (higher load, distributed systems, owning a domain end-to-end, tech leadership).\n- A growth direction with steps you're already taking (reading, side projects, leading design reviews).\n\nTie it to the role: \"your team runs high-load payments — that's exactly the scale I want to work at\". For either/or questions, pick one and justify it rather than saying \"both\".\n\nPitfall: generic answers (\"I want to grow as a professional\") or goals the role clearly can't offer.",
+  "level": 1,
+  "asked": [
+   "EyesOfWonder",
+   "QROQO",
+   "Sarafan"
+  ],
+  "n": 3
+ },
+ {
+  "id": "behavioral-peak-load-experience",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What load did your services handle at peak, and what were the response times?",
+  "a": "They're calibrating **the scale you've worked at** and whether you actually know your system's numbers.\n\nGive concrete figures with context:\n- RPS average vs peak and over what window (\"~2k RPS normally, 8k during evening peaks, 20k on sale days\").\n- Latency percentiles (p50/p95/p99), not averages.\n- Data volume (rows/day, messages/sec in Kafka) and the infrastructure it ran on (pods, CPU).\n- What the bottleneck was and how you knew (dashboards, load tests).\n\nPitfall: vague answers (\"high load\") or inflated numbers — the follow-up will ask how you scaled to them, and the answer has to make sense for that RPS.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "MaxGroup"
+  ],
+  "n": 3
+ },
+ {
+  "id": "behavioral-database-incidents",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Tell me about a database incident you dealt with. What metrics did you monitor on PostgreSQL, and who did you escalate to?",
+  "a": "What they're checking: production maturity. Do you monitor the DB proactively, stay calm in an incident, communicate, and fix root causes rather than symptoms?\n\nStructure (STAR):\n\n- **Situation**: the impact in business terms (checkout p99 went from 200 ms to 5 s, error rate).\n- **Task**: your role (on-call, owner of the service).\n- **Action**:\n  - Detect: an alert or dashboard.\n  - Mitigate first: kill the runaway query with `pg_terminate_backend`, roll back the deploy, fail over, shed load.\n  - Diagnose: `pg_stat_activity`, locks, `pg_stat_statements`, logs.\n  - Communicate: status updates to the incident channel. Escalate to the DBA/SRE on-call or the team lead early, especially for anything touching data integrity or needing infrastructure access.\n- **Result**: recovery time, the root cause (a missing index after a migration, lock queue from DDL, autovacuum falling behind, pool exhaustion, replication lag), and the **postmortem actions** (`lock_timeout` in migrations, a new alert, a load test).\n\nMetrics worth naming:\n\n- QPS and latency per query (`pg_stat_statements`), active and idle-in-transaction connections vs `max_connections`, pool wait time.\n- Lock waits and deadlocks, replication lag, cache hit ratio.\n- Dead tuples and autovacuum activity, bloat, disk and WAL growth, checkpoint frequency, XID age (wraparound), long-running transactions.\n\nPitfall: a hero story that skips mitigation and communication, or blames others. Show ownership and what changed afterwards.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "RealIT"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-estimation-and-deadlines",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Who estimated tasks on your team, and what do you do if you realise you won't make the deadline?",
+  "a": "They check **estimation habits and communication under risk**.\n\nEstimation: usually the dev who'll do the work (or the team via planning poker / story points), after decomposition into pieces of at most a couple of days, with explicit unknowns and a buffer for review, testing and deploy.\n\nWhen you'll miss it:\n1. **Raise it early** — as soon as you know, not on the due date.\n2. Explain why (new info, underestimated complexity) and give a new estimate.\n3. Offer options: cut scope to an MVP, ship behind a flag, get help, move the date.\n4. Afterwards, feed the lesson back into how you estimate.\n\nPitfall: silently working overtime to hide the slip, or reporting \"90% done\" for a week.",
+  "level": 1,
+  "asked": [
+   "LinIT",
+   "Velme"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-failure-or-mistake",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Tell me about a failure or mistake you made, and how you dealt with it.",
+  "a": "They check **ownership, honesty and learning**. Everyone has failures; the red flag is someone who has none or blames others.\n\nStructure:\n1. What happened (a real mistake: a migration that locked a table, a missed edge case that corrupted data, an underestimated deadline).\n2. Your part in it — own it plainly.\n3. How you mitigated it quickly (rollback, communication, fix).\n4. What you changed systemically: a test, an alert, a checklist, a review rule.\n\nPitfalls: humble-brag failures (\"I worked too hard\"), blaming the team or the process, or a story without a lesson. The systemic fix is the part that scores.",
+  "level": 2,
+  "asked": [
+   "QROQO",
+   "SpaceIT"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-initiative",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What changed in the project on your own initiative? Which decisions did you propose yourself?",
+  "a": "They're checking **proactivity and influence**: do you only execute tickets, or do you notice problems and drive fixes through the team?\n\nGive 1-2 examples with STAR:\n- the problem you noticed (flaky deploys, slow queries, missing alerts, painful onboarding),\n- how you **convinced** others (data, a small prototype, an RFC/ADR),\n- the result in numbers and whether it stuck.\n\nGood examples: introducing contract tests, adding idempotency to a payment flow, cutting CI time, writing a runbook after an incident. Pitfall: examples that are purely personal preference (\"I switched us to my favourite library\") or changes pushed through without consensus — that reads as poor collaboration, not initiative.",
+  "level": 2,
+  "asked": [
+   "Tochka Bank",
+   "Velme"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-overtime-and-workload",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "How do you feel about overtime, and how do you organise your time to get everything done without overworking?",
+  "a": "They check **sustainability and planning**: do you manage your load, or do you rely on heroics?\n\nAnswer honestly:\n- Occasional overtime for real incidents or a hard deadline is normal; **chronic** overtime is a planning problem to raise, not to absorb silently.\n- How you plan: break work into small tasks, estimate with a buffer, prioritise with the lead, protect focus time, flag risks early instead of at the deadline.\n- If there was a crunch: what caused it and what the team changed afterwards.\n\nPitfall: \"I'm happy to work nights and weekends\" sounds like poor planning and burnout risk; \"I never do overtime\" sounds inflexible. Show boundaries plus responsibility.",
+  "level": 1,
+  "asked": [
+   "QROQO",
+   "Tochka Bank"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-project-from-scratch",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Have you built something from scratch? How comfortable are you with greenfield work, initiative and responsibility?",
+  "a": "They want evidence you can work with **ambiguity**: clarify requirements, choose an architecture, set up the skeleton (CI, observability, config) and deliver without a pre-existing path.\n\nStructure the story:\n1. What was needed and what was unclear.\n2. How you clarified scope and non-functional requirements.\n3. Key decisions (storage, sync vs async, boundaries) and alternatives you rejected.\n4. How you shipped incrementally (MVP first) and what happened in production.\n\nMention the unglamorous parts — logging, metrics, migrations, tests, docs — because that's what distinguishes production-grade greenfield work. Pitfall: describing only the fun coding part, or claiming you'd happily do everything alone with no mention of aligning with stakeholders.",
+  "level": 2,
+  "asked": [
+   "InDrive",
+   "QROQO"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-review-and-qa-handoff",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "How were completed tasks reviewed and handed off to QA? Where does QA get a task to test?",
+  "a": "They want to see you understand the **quality pipeline**, not just \"I pushed and it went somewhere\".\n\nA typical mature flow:\n- PR with a description and linked ticket; CI runs lint, unit and integration tests.\n- **Code review** by 1-2 peers (correctness, readability, tests, backwards compatibility of APIs/migrations).\n- Merge deploys to a test/stage environment (or a per-branch preview); the ticket moves to \"Ready for QA\" with **testing notes**: what changed, how to verify, edge cases, needed flags or test data.\n- QA tests against the acceptance criteria from the ticket; bugs go back to the dev; then release (often with a feature flag and monitoring after deploy).\n\nPitfall: treating QA as a safety net for untested code — the dev owns quality, QA verifies it.",
+  "level": 1,
+  "asked": [
+   "Plata",
+   "Velme"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-tools-and-books",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Which technical books or resources would you recommend? Have you read Clean Code?",
+  "a": "They're checking **how you learn** and whether you think critically about what you read.\n\nName a few you've actually read and what you took from each, e.g.:\n- *Designing Data-Intensive Applications* — replication, consistency, stream processing trade-offs.\n- *The Go Programming Language* and *100 Go Mistakes and How to Avoid Them* — idiomatic Go and common pitfalls.\n- *Site Reliability Engineering* — SLOs, on-call, postmortems.\n- *Clean Code* — useful on naming and small functions, but some advice (very short functions, heavy abstraction) conflicts with idiomatic Go's preference for clarity and explicitness.\n\nMentioning Go blog posts, release notes, conference talks and community channels is fine. Pitfall: naming books you can't discuss.",
+  "level": 1,
+  "asked": [
+   "Velme",
+   "X5 Tech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-years-of-experience",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "How many years of commercial experience do you have, and how long with Go specifically?",
+  "a": "A screening question: they map you to a grade band and check the resume adds up. Answer with exact numbers and split them: \"6 years commercial backend, 4 of them with Go in production; before that PHP/Python.\"\n\nAdd one sentence of what that Go time consisted of (services built, scale, ownership), because \"4 years\" of CRUD handlers and \"4 years\" of owning high-load services are very different signals.\n\nPitfalls: rounding up aggressively (it gets checked against the resume and dates), or counting pet projects and university as commercial experience without saying so. Questions about age are not job-relevant; you can answer briefly or redirect to experience.",
+  "level": 1,
+  "asked": [
+   "EyesOfWonder",
+   "SeniorSoft"
+  ],
+  "n": 2
+ },
+ {
+  "id": "behavioral-ai-tools",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Did you use AI tools during development? How?",
+  "a": "They want to know if you use modern tooling **productively and responsibly**.\n\nGood answer: yes, for specific things — boilerplate and test scaffolding, exploring unfamiliar APIs, drafting migrations or regexes, explaining legacy code, summarising logs, review assistance — with you still owning correctness: you review every diff, run the tests, and don't paste secrets or proprietary code into tools the company hasn't approved.\n\nMention limits you've hit: plausible-looking but wrong code, outdated APIs, subtle concurrency bugs. Pitfall: either \"never, it's useless\" (looks out of date) or \"it writes most of my code\" without any mention of verification.",
+  "level": 1,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-changing-requirements",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "How often did the business suddenly change requirements or force you to switch tasks (e.g. due to new legislation)? How do you handle it?",
+  "a": "They check **adaptability** and whether you can protect delivery while priorities shift — common in banks and fintech where regulation drives urgent changes.\n\nGood answer:\n- Acknowledge it's normal and give a real example.\n- How you handle it: clarify the new priority and deadline with the PM/lead, make the cost of switching visible (\"pausing X delays it by a week\"), park the current work cleanly (commit, notes, feature flag), and avoid half-merged states.\n- How you reduce the pain: small increments, feature flags, configurable rules instead of hardcode, good test coverage so changes are cheap.\n\nPitfall: complaining about the business, or saying you just drop everything silently without communicating the trade-off.",
+  "level": 1,
+  "asked": [
+   "Tochka Bank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-conflict",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Give an example of a dispute or conflict at work: what was it about, what did you do, and what helped or didn't?",
+  "a": "They test **collaboration and maturity**: can you disagree productively and commit to a decision?\n\nUse STAR and keep it about a work issue (design choice, priorities, code review):\n- **Situation**: the disagreement and the stakes.\n- **Action**: you listened to the other side's constraints, moved the argument to data (benchmarks, incidents, cost), proposed options or a time-boxed experiment, escalated to a lead only if needed.\n- **Result**: the decision, how you committed to it even if it wasn't yours (\"disagree and commit\"), and the relationship afterwards.\n\nPitfalls: a story where you were simply right and the other person was an idiot, a personal/emotional conflict, or claiming you never have conflicts.",
+  "level": 2,
+  "asked": [
+   "Tochka Bank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-lead-role-fit",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "For a lead role: have you managed a team (5+ people), what responsibilities do you see in the role, and which of your qualities fit it?\nFollow-up: do you understand that the management track is a different job from engineering?",
+  "a": "They check whether you understand that **leading is a different job**: your output becomes the team's output, measured through delivery, people and decisions, not your own code.\n\nCover:\n- **Experience**: team size, what you actually did (planning, 1:1s, hiring, onboarding, performance feedback, stakeholder communication).\n- **Responsibilities you see**: delivery and priorities, team health and growth, technical direction (with a tech lead or yourself), interfacing with product and other teams.\n- **Qualities** with evidence: communication, taking decisions with incomplete information, delegating, handling conflict.\n\nAcknowledge the trade-off explicitly: less hands-on coding, more context switching, success measured differently. Pitfall: treating the role as \"the strongest coder who also assigns tickets\".",
+  "level": 2,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-measuring-impact",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "How did you know you'd done 'the right thing' — through metrics, business outcomes, or feedback from your lead?",
+  "a": "They're checking whether you connect engineering work to **outcomes**, a key senior signal.\n\nAnswer with layered evidence:\n- **Technical metrics**: p95/p99 latency, error rate, resource cost, incident count, deploy frequency — before and after.\n- **Business metrics**: conversion, processed payments, time-to-onboard a partner, support tickets.\n- **Feedback**: from product, the lead, consumers of your API.\n\nExample: \"After moving the report generation to an async worker, p99 of the API dropped from 4s to 200ms and timeouts in support tickets went to zero.\" Say how you set up the measurement (dashboards, A/B, logs). Pitfall: \"the lead said it was fine\" as the only signal.",
+  "level": 2,
+  "asked": [
+   "EyesOfWonder"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-other-languages",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What other languages have you used (e.g. PHP), and what did you build with them?",
+  "a": "They check **breadth** and whether you can work in a mixed codebase (many Go teams migrate from PHP/Python or still maintain it).\n\nBe concrete about level and context: \"3 years of PHP (Symfony) — monolith for an e-commerce site; I led the extraction of the checkout into a Go service.\" Compare usefully: what Go gave you (static typing, concurrency, single binary, predictable performance) and what you miss.\n\nPitfall: dismissing the other language, or overstating your level in something you'd be expected to maintain.",
+  "level": 1,
+  "asked": [
+   "Tutu"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-process-improvement",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What did you like and dislike about your team's processes? Did you try to change the inconvenient parts?",
+  "a": "They check **reflection and constructive attitude**: can you critique a process without whining, and do you act on it?\n\nStructure:\n- One or two things that worked and why (short feedback loops, good review culture, trunk-based deploys).\n- One real pain point (long release trains, unclear requirements, flaky tests).\n- What you did: raised it at a retro with data, proposed an experiment, the outcome — even if it only partly worked.\n\nPitfalls: trashing your previous employer (a red flag regardless of justification), or \"everything was perfect\" (no reflection). Frame criticisms as problems and what you'd do about them.",
+  "level": 1,
+  "asked": [
+   "Tochka Bank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-questions-for-the-interviewer",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "What should you ask the interviewer about the team and the role?\nE.g. hiring plans, what's expected of a newcomer, long-term roadmap, the stack and product, what the final stage looks like.",
+  "a": "Your questions show **what you care about** and help you avoid a bad fit. Interviewers notice whether you ask any.\n\nGood ones:\n- **Role**: why the position is open, what a newcomer should achieve in 3/6 months, how many are being hired.\n- **Product and roadmap**: what the product does, how long-running the project is, the plan for the next year.\n- **Tech**: architecture and stack, biggest technical debt, how deploys/on-call work.\n- **Process**: how tasks arrive, who decides on architecture, how often requirements change.\n- **Hiring process**: remaining stages and timeline.\n\nPitfall: asking only about perks and salary at a technical round, or asking things answered on the careers page.",
+  "level": 1,
+  "asked": [
+   "Tochka Bank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-resume-claims",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Have you actually worked with everything listed on your resume?",
+  "a": "A direct honesty check — usually because the resume lists many technologies. The interviewer will probe whichever one looks weakest.\n\nAnswer precisely: separate **production experience** (\"Postgres, Kafka, k8s — daily for 3 years\") from **familiarity** (\"ClickHouse — wrote some queries and one ingestion job\", \"AWS — pet projects only\"). Offer depth where you have it.\n\nPitfall: saying \"yes, everything\" and then failing a basic question on one of them — that damages credibility for the whole interview. A resume should list what you can discuss for 10 minutes.",
+  "level": 1,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-task-decomposition",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "A large task comes in, estimated at 200 hours. How would you decompose it?",
+  "a": "What they check: planning skills, risk management, and ability to deliver incrementally rather than disappear for five weeks.\n\nStructure:\n1. **Clarify** the goal, acceptance criteria, deadlines, non-functional requirements; cut scope with the product owner (what's the MVP?).\n2. **Spike** the unknowns first (time-boxed research/prototype) — they drive the estimate's error bars.\n3. **Split vertically** into shippable slices delivering user value end-to-end, not horizontally into \"DB layer, then API, then UI\". Each slice ideally ≤ 1–3 days, reviewable PR, behind a feature flag if needed.\n4. Identify **dependencies** and what can go in parallel across people; order by risk and value.\n5. Re-estimate the pieces (the sum is usually larger than 200h — say so), add buffer for integration/testing/rollout.\n6. Track progress, demo early, re-plan when reality diverges.\n\nPitfall: answering with a single technical breakdown and no clarification, no risk-first ordering, and no plan for incremental delivery or feedback.",
+  "level": 2,
+  "asked": [
+   "Velme"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-task-preferences",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Which tasks do you enjoy most, and which do you dislike?\nFollow-up: what were the most interesting technical tasks?",
+  "a": "They're checking **fit with the actual work** and self-awareness.\n\nFor \"enjoy\": name concrete kinds of work with an example — performance tuning, designing service boundaries, debugging concurrency, building reliable integrations.\n\nFor \"dislike\": be honest but professional, and show you still do it well: \"repetitive manual work — so I usually automate it (codegen, scripts)\", or \"tasks with unclear requirements — so I push for clarification before starting\".\n\nPitfall: saying you dislike something core to the role (writing tests, code review, on-call when they have it), or claiming you like everything equally.",
+  "level": 1,
+  "asked": [
+   "QROQO"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-team-lead-vs-tech-lead",
+  "cat": "behavioral",
+  "kind": "theory",
+  "q": "What's the difference between a team lead and a tech lead?",
+  "a": "**A team lead is responsible for people and delivery; a tech lead is responsible for the technical direction and quality.** In small teams one person often does both.\n\n- **Team lead**: hiring, 1:1s, performance reviews and growth plans, processes, capacity and planning, communication with the business, team health and conflicts.\n- **Tech lead**: architecture and technical decisions, design and code review standards, technical debt strategy, mentoring on engineering, representing the team in cross-team technical discussions; usually still codes a meaningful share.\n\nThe gotcha: responsibilities vary by company (some have an engineering manager + tech lead split, others a \"team lead\" who does both), so in an interview clarify what the company means before answering which you want to be.",
+  "level": 2,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ },
+ {
+  "id": "behavioral-why-leaving",
+  "cat": "behavioral",
+  "kind": "behavioral",
+  "q": "Why did you decide to leave your previous job?",
+  "a": "They're screening for **red flags** (conflicts, performance issues) and whether the same reason will make you leave them.\n\nFrame it as moving *towards* something: bigger scale, a different domain, more ownership, a stack you want to grow in, a project that ended. Keep it short and factual (\"the product went into maintenance mode; I want to build new systems under load\").\n\nPitfalls: badmouthing the former employer or manager, making it only about money (fine to mention, but not as the whole story), or a reason that obviously applies to this company too.",
+  "level": 1,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ }
+]

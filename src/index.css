@@ -276,3 +276,4 @@ details.sandbox > .sandbox-body { padding: 0 1rem 1rem; }
 .bank-cta:hover { border-color: var(--red); color: inherit; }
 .bank-cta:hover b { color: var(--red); }
 .bank-link { margin-top: 1.2rem; font: 500 .8rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.tgroup { margin-top: 1.6rem; } .tgroup > .kicker { display: block; margin-bottom: .5rem; }

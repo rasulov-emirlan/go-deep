@@ -1,0 +1,479 @@
+[
+ {
+  "id": "algorithms-big-o",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What is Big-O notation, and why do we use asymptotic complexity?\nFollow-ups: what does it measure? Can you estimate best and worst case?",
+  "a": "Big-O gives an **asymptotic upper bound** on how a resource (time or memory) grows as input size `n` grows, ignoring constants and lower-order terms: `3n² + 10n + 5` is `O(n²)`. Formally, f(n) = O(g(n)) if f(n) ≤ c·g(n) for all n ≥ n₀.\n\nWhy use it: it compares algorithms independently of hardware, language and constants, and it predicts **scalability**. An O(n²) solution that's fine at 1k elements dies at 1M, while O(n log n) doesn't.\n\nWhat we measure: **time** (number of basic operations) and **space** (extra memory). Related notation: Ω is the lower bound, Θ the tight bound. People usually say \"O\" when they mean Θ.\n\nCases:\n- **Best/average/worst**: linear search is O(1) best, O(n) worst. Quicksort is O(n log n) average, O(n²) worst.\n- **Amortized**: `append` is O(1) amortized though an occasional grow is O(n).\n\nCommon classes: O(1) < O(log n) < O(n) < O(n log n) < O(n²) < O(2ⁿ) < O(n!).\n\nGotcha: constants matter in practice. A cache-friendly O(n) slice scan often beats an O(log n) pointer-chasing tree for small n, so benchmark real sizes.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "Plata",
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 4
+ },
+ {
+  "id": "algorithms-search-complexity",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What's the complexity of searching in an unsorted vs a sorted array? What's the complexity of binary search?\nFollow-up: how would you find an element by ID in an unsorted in-memory collection of 1 million elements?",
+  "a": "- **Unsorted array**: O(n), linear scan (best O(1), worst/average O(n)).\n- **Sorted array**: O(log n) with **binary search**, which halves the range every step. 1M elements take at most ~20 comparisons.\n\n```go\nfunc binarySearch(a []int, x int) int {\n\tlo, hi := 0, len(a)\n\tfor lo < hi {\n\t\tmid := int(uint(lo+hi) >> 1)\n\t\tif a[mid] < x {\n\t\t\tlo = mid + 1\n\t\t} else {\n\t\t\thi = mid\n\t\t}\n\t}\n\tif lo < len(a) && a[lo] == x {\n\t\treturn lo\n\t}\n\treturn -1\n}\n```\n\nIn practice use `slices.BinarySearch` / `sort.Search`. The `uint` shift avoids `lo+hi` overflow.\n\n**1M unsorted elements, lookup by ID:** it depends on how many lookups you do.\n- One lookup: just scan, O(n). Sorting first is O(n log n) and costs more than it saves.\n- Many lookups: build an index once. `map[ID]*Item` gives O(n) build and **O(1) average** per lookup, at the cost of extra memory. Alternatively sort by ID once (O(n log n)) and binary-search, which uses less memory and also supports range queries.\n- Collection changing constantly: keep the map updated on insert/delete, or use a B-tree/skip list if you need ordered iteration.\n- Very large or hot scans can be split across goroutines, but that only cuts the constant, not the complexity.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "SpaceIT",
+   "VK"
+  ],
+  "n": 4
+ },
+ {
+  "id": "algorithms-b-tree",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What is a B-tree, how does it work, and where is it used? How does it differ from a binary tree?\nFollow-up: what is the time complexity of a lookup in a B-tree?",
+  "a": "A B-tree is a **self-balancing search tree with high fan-out**. Each node holds many sorted keys (tens to hundreds) and has keys+1 children, and all leaves are at the same depth. Nodes are sized to a **disk/page block** (e.g. 8 KB in PostgreSQL, 16 KB in InnoDB).\n\nHow it works: search does a binary search inside a node, then descends. Insert goes into a leaf; if the leaf overflows it **splits**, pushing the median key up, so the tree grows from the root and stays perfectly balanced. Delete merges or borrows from siblings when a node underflows.\n\n**Complexity**: lookup/insert/delete are **O(log n)**. More precisely the height is O(log_m n) for fan-out m, with O(log m) work per node. With m ≈ 500, a billion keys fit in ~3-4 levels, so ~3-4 page reads, and the top levels are usually cached.\n\nVersus a binary tree/BST: 2 children per node give height ~log₂ n (≈30 for a billion keys), which means 30 random pointer chases or disk reads. A plain BST can also degenerate to O(n). A B-tree trades more comparisons per node for far fewer I/Os and good cache locality.\n\n**B+tree** (what databases actually use): values/row pointers only in leaves, and leaves linked into a list, so **range scans** and `ORDER BY` are sequential reads. Used in PostgreSQL/MySQL indexes, file systems (NTFS, ext4 htree, Btrfs), and BoltDB/bbolt.",
+  "level": 2,
+  "asked": [
+   "Avito"
+  ],
+  "n": 3
+ },
+ {
+  "id": "algorithms-hash-table",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What is a hash table, how is the bucket index determined, and what is its main limitation?",
+  "a": "A hash table maps keys to values with **O(1) average** insert, lookup and delete. It hashes the key to an integer, then maps the hash to a **bucket/slot index**, usually `hash & (numBuckets-1)` when the bucket count is a power of two (a cheap modulo), otherwise `hash % n`.\n\nGo specifics: the runtime uses a per-map random seed with AES-based hashing, which blocks hash-flooding and is one reason iteration order is randomized. Since **Go 1.24 maps are Swiss tables**: groups of 8 slots with a control word of 7-bit hash fragments (H2) probed in parallel, while the upper bits (H1) choose the group. Maps split into independent tables that grow incrementally.\n\nMain limitations:\n- **No ordering**: no sorted iteration, no range queries (use a tree or a sorted slice for those).\n- **Worst case O(n)** when many keys collide (a bad hash or an adversarial input).\n- **Resizing** costs O(n) (amortized away), plus memory overhead from the load factor.\n- Keys must be hashable and comparable (in Go no slices, maps or funcs as keys).\n- Poor cache locality compared with arrays for small sizes.\n\nAlso: a Go map isn't safe for concurrent writes (fatal error), so use `sync.Mutex` or `sync.Map`.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "VK"
+  ],
+  "n": 3
+ },
+ {
+  "id": "algorithms-priority-queue",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What is a priority queue, what are its properties, and how is it implemented?\nFollow-up: what are the time complexities of its operations (heap vs ordered list)?",
+  "a": "A priority queue is an abstract data type where each element has a priority and you always remove the **highest-priority (min or max) element first**, regardless of insertion order. Operations: `Push`, `Pop` (extract min/max), `Peek`, sometimes `Update/DecreaseKey`.\n\nImplementations:\n- **Binary heap** (standard choice): Push O(log n), Pop O(log n), Peek O(1), build from n items O(n). It's array-backed and cache-friendly.\n- **Sorted array/list**: Peek/Pop O(1), but Push O(n). Good only if inserts are rare.\n- **Unsorted list**: Push O(1), Pop O(n).\n- **Balanced BST / skip list**: O(log n) for everything plus ordered iteration and arbitrary deletion.\n- Fibonacci/pairing heaps: O(1) amortized decrease-key (theory, for Dijkstra).\n\nIt isn't stable: equal priorities come out in arbitrary order unless you add a sequence number to the key.\n\nIn Go, `container/heap` over your type:\n\n```go\ntype Item struct {\n\tValue    string\n\tPriority int\n}\n\ntype PQ []Item\n\nfunc (q PQ) Len() int           { return len(q) }\nfunc (q PQ) Less(i, j int) bool { return q[i].Priority < q[j].Priority }\nfunc (q PQ) Swap(i, j int)      { q[i], q[j] = q[j], q[i] }\nfunc (q *PQ) Push(x any)        { *q = append(*q, x.(Item)) }\nfunc (q *PQ) Pop() any {\n\told := *q\n\tit := old[len(old)-1]\n\t*q = old[:len(old)-1]\n\treturn it\n}\n```\n\nUses: task schedulers, timers (the Go runtime keeps per-P timer heaps), Dijkstra/A*, top-K, merging k sorted streams, rate limiting and retry queues.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 3
+ },
+ {
+  "id": "algorithms-balanced-trees-associative-arrays",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What is a self-balancing tree, and when should you use one instead of a hash map as an associative array?\nFollow-ups: which trees suit this best? Which balanced trees do you know?",
+  "a": "A self-balancing BST automatically keeps its height at **O(log n)** after inserts/deletes (via rotations, recoloring or splits), so search/insert/delete are O(log n) **in the worst case**. A plain BST fed sorted input degenerates into an O(n) list.\n\nKnown kinds:\n- **Red-black tree**: loose balance with cheap updates (≤2 rotations per insert). Used in C++ `std::map`, Java `TreeMap`, and the Linux kernel.\n- **AVL**: stricter balance, so faster lookups but more rotations on writes.\n- **B-tree/B+tree**: high fan-out, disk/cache-friendly, used for DB indexes.\n- Also treaps, splay trees, and skip lists (a probabilistic alternative, used by Redis ZSET).\n\nUse a tree instead of a hash map when you need:\n- **Ordered iteration**, min/max, floor/ceiling, **range queries** (\"all keys between A and B\"), prefix scans.\n- **Guaranteed worst-case** O(log n) with no rehash spikes or hash-flooding risk.\n- Keys that are orderable but hard to hash.\n\nHash map wins for pure point lookups: O(1) average.\n\nIn Go there's no built-in ordered map. Options are a sorted slice plus `slices.BinarySearch` (great when reads dominate), `github.com/google/btree` or `tidwall/btree`, or a skip list.",
+  "level": 2,
+  "asked": [
+   "Astra",
+   "DCloud"
+  ],
+  "n": 2
+ },
+ {
+  "id": "algorithms-category-tree-path",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Given a tree of product categories, find a subcategory by name and return the path from the root to it (or an empty path).\nFollow-ups: time/space complexity? What data structures and sorting algorithms do you know?",
+  "code": "type Category struct {\n\tName     string\n\tChildren []*Category\n}\n\nfunc FindPath(root *Category, target string) []string",
+  "a": "DFS with backtracking: push the node's name onto `path`, return true if it matches or if any child finds it, otherwise pop and return false.\n\n```go\ntype Category struct {\n\tName     string\n\tChildren []*Category\n}\n\nfunc FindPath(root *Category, target string) []string {\n\tvar path []string\n\tvar dfs func(c *Category) bool\n\tdfs = func(c *Category) bool {\n\t\tpath = append(path, c.Name)\n\t\tif c.Name == target {\n\t\t\treturn true\n\t\t}\n\t\tfor _, ch := range c.Children {\n\t\t\tif dfs(ch) {\n\t\t\t\treturn true\n\t\t\t}\n\t\t}\n\t\tpath = path[:len(path)-1]\n\t\treturn false\n\t}\n\tif root == nil {\n\t\treturn nil\n\t}\n\tfor _, ch := range root.Children {\n\t\tif dfs(ch) {\n\t\t\treturn path\n\t\t}\n\t}\n\treturn nil\n}\n```\n\nVerified output for `\"OLED\"`:\n```text\nБытовая техника > Телевизоры > OLED\n```\n\n**Complexity**: O(N) time (each node visited at most once). O(H) extra space for the recursion stack and path, where H is the tree height.\n\nNotes:\n- The root itself is excluded from the path to match the expected output. Clarify this with the interviewer.\n- For very deep trees use an explicit stack with parent pointers instead of recursion.\n- If lookups are frequent, precompute a `map[name]*node` plus parent links. Then a path is O(H) per query after an O(N) build.\n- BFS would also work and finds the shallowest match, but it needs a parent map to rebuild the path.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "algorithms-dynamic-array",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What is a dynamic array, what is it used for, and what is its main limitation?",
+  "a": "A dynamic array is a contiguous array that **grows automatically**. When capacity runs out it allocates a bigger block (typically ×1.5-2) and copies the elements over. In Go that's a **slice**: a header `{ptr, len, cap}` over a backing array, grown by `append`.\n\nComplexities: index read/write O(1); append **O(1) amortized** (an occasional O(n) copy, amortized by geometric growth); insert/delete in the middle O(n) (shifting); search O(n), or O(log n) if sorted.\n\nWhy it's the default structure: contiguous memory gives excellent **cache locality** and prefetching, low per-element overhead, and cheap iteration. It usually beats linked lists in practice, even for inserts at moderate sizes.\n\nLimitations:\n- Insert/delete anywhere except the end is O(n).\n- A reallocation **copies everything** and briefly needs old + new memory. Pointers into the old array (in Go, other slices sharing it) no longer see new appends.\n- Capacity overhead: up to ~2x unused memory, and it doesn't shrink automatically.\n\nGo growth: roughly doubling below 256 elements, then smoothly towards ×1.25, rounded up to allocator size classes. Preallocate with `make([]T, 0, n)` when you know the size.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "algorithms-find-duplicates-in-range",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Given nums of length n with each value in [1, n] appearing once or twice, return the values that appear twice.\nExample: [4,3,2,7,8,2,3,1] → [2,3]; [2,2,1] → [2].",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tnums := []int{2, 1, 4, 8, 1, 7, 6, 4}\n\tduplicates := findDuplicates(nums)\n\tfmt.Println(duplicates)\n}\n\nfunc findDuplicates(nums []int) []int {\n\t// TODO: implement\n\treturn nil\n}",
+  "a": "Simple approach: a `map[int]int` or a `[]bool` of size n+1 for \"seen\". O(n) time, O(n) space.\n\nOptimal approach (O(1) extra space): values are in `[1, n]`, so each value `v` can **mark index `v-1`** by negating it. If the slot is already negative when we arrive, `v` is a duplicate.\n\n```go\nfunc findDuplicates(nums []int) []int {\n\tvar res []int\n\tfor _, v := range nums {\n\t\ti := abs(v) - 1\n\t\tif nums[i] < 0 {\n\t\t\tres = append(res, abs(v))\n\t\t} else {\n\t\t\tnums[i] = -nums[i]\n\t\t}\n\t}\n\treturn res\n}\n\nfunc abs(x int) int {\n\tif x < 0 {\n\t\treturn -x\n\t}\n\treturn x\n}\n```\n\nVerified:\n```text\n[2 1 4 8 1 7 6 4] -> [1 4]\n[4 3 2 7 8 2 3 1] -> [2 3]\n[2 2 1]           -> [2]\n```\n\n**Complexity**: O(n) time, O(1) extra space. Gotcha: it **mutates the input**. Mention it, and restore signs afterwards (`nums[i] = abs(nums[i])`) if the caller needs the slice back. Another O(1)-space option is cyclic sort (place each value at index `v-1` by swapping).",
+  "level": 2,
+  "asked": [
+   "Plata"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "algorithms-hash-collisions-hash-function",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What are hash collisions, how are they resolved, and what properties should a good hash function have?",
+  "a": "A **collision** is when two different keys land in the same bucket. It's unavoidable (pigeonhole principle), so tables must handle it.\n\nResolution methods:\n- **Separate chaining**: each bucket holds a list (or tree) of entries. It's simple and degrades gracefully. Java 8+ turns long chains into red-black trees. Go's pre-1.24 map was a variant: buckets of 8 slots plus overflow buckets.\n- **Open addressing**: store entries in the array itself and probe for another slot. Variants are **linear probing** (cache-friendly, but suffers primary clustering), **quadratic probing**, **double hashing**, and **Robin Hood hashing**. **Swiss tables** (Go 1.24+, Abseil, Rust's hashbrown) are open addressing with SIMD-style group probing. Deletion needs tombstones.\n- **Resize/rehash** when the load factor exceeds a threshold (Go's Swiss map uses about 7/8) to keep chains and probes short.\n\nA good hash function is:\n- **Deterministic**: the same key always gives the same hash.\n- **Uniform**: spreads keys evenly and uses all bits. Small input changes flip about half the output bits (avalanche).\n- **Fast**, since it's on every operation.\n- **Seeded/unpredictable** when keys come from users, to resist hash-flooding DoS. Go seeds each map randomly.\n- Consistent with equality: `a == b` ⇒ `hash(a) == hash(b)`.\n\nCryptographic strength (SHA-256) isn't required and is too slow for tables.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit",
+   "Tehzor"
+  ],
+  "n": 2
+ },
+ {
+  "id": "algorithms-heap",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What is a heap as a data structure, and where is it used?\nFollow-up: how does a heap differ from other trees (e.g. a binary search tree)?",
+  "a": "A (binary) heap is a **complete binary tree** satisfying the **heap property**: every parent ≤ its children (min-heap) or ≥ (max-heap). Because it's complete, it's stored in a plain array with no pointers. For index `i`, the children are `2i+1` and `2i+2` and the parent is `(i-1)/2`.\n\nOperations: peek min O(1); push = append + sift-up, O(log n); pop = swap root with last + sift-down, O(log n); heapify an array O(n).\n\nDifference from a BST:\n- A heap orders only **vertically** (parent vs child). There's no left < right rule, so you **can't search** in it (O(n)) or iterate in sorted order without popping.\n- A BST orders horizontally too (left < node < right), giving O(log n) search and in-order traversal when balanced, but it needs pointers and rebalancing.\n- A heap is always balanced by construction (complete tree), so its worst case is guaranteed O(log n).\n\nUses: priority queues, heapsort (O(n log n), in place, not stable), top-K (a min-heap of size K gives O(n log K)), k-way merge, median of a stream (two heaps), Dijkstra, and timers/schedulers. In Go: `container/heap`.\n\nDon't confuse it with \"the heap\" in memory management; the two are unrelated.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "algorithms-palindrome-sentence",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Check whether a string is a palindrome, considering only letters (Latin and Cyrillic), case-insensitive.\nVariant: skip spaces only, without third-party libraries. Follow-up: time and space complexity?",
+  "code": "Input: \"isPalindrome\"\nOutput: false\n\nInput: \"А роза упала на лапу Азора\"\nOutput: true\n\nInput: \"Is_s_d_s_si\"\nOutput: true",
+  "a": "Two pointers moving towards each other over **runes** (not bytes, since Cyrillic letters are 2 bytes in UTF-8). Skip non-letters and compare with `unicode.ToLower`.\n\n```go\nfunc isPalindrome(s string) bool {\n\tr := []rune(s)\n\ti, j := 0, len(r)-1\n\tfor i < j {\n\t\tif !unicode.IsLetter(r[i]) {\n\t\t\ti++\n\t\t\tcontinue\n\t\t}\n\t\tif !unicode.IsLetter(r[j]) {\n\t\t\tj--\n\t\t\tcontinue\n\t\t}\n\t\tif unicode.ToLower(r[i]) != unicode.ToLower(r[j]) {\n\t\t\treturn false\n\t\t}\n\t\ti++\n\t\tj--\n\t}\n\treturn true\n}\n```\n\nVerified results:\n```text\n\" fly me to the moon \"          false\n\" сел в   озере   березов лес\"  true\n\"isPalindrome\"                  false\n\"А роза упала на лапу Азора\"    true\n\"Is_s_d_s_si\"                   true\n```\n\n**Complexity**: O(n) time. O(n) extra space for the `[]rune` conversion. For O(1) space, walk the string from both ends with `utf8.DecodeRuneInString` / `utf8.DecodeLastRuneInString`.\n\nGotchas: indexing a Go string (`s[i]`) gives bytes, which breaks on Cyrillic. For the \"skip only spaces\" variant replace `unicode.IsLetter` with `r != ' '` (or `!unicode.IsSpace(r)`). Note that the original notes listed `\"Is_s_d_s_ssi\"` → true, but under these rules its letters `issdsssi` are **not** a palindrome. `\"Is_s_d_s_si\"` is the correct example.",
+  "level": 1,
+  "asked": [
+   "Kvando",
+   "VK"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "algorithms-stable-vs-unstable-sort",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What's the difference between a stable and an unstable sort?",
+  "a": "A **stable** sort keeps elements with **equal keys in their original relative order**. An **unstable** sort may reorder them.\n\nWhy it matters: multi-key sorting and user-visible order. If you sort orders by date and then *stably* by status, orders within each status stay sorted by date. With an unstable sort that secondary order is lost. It also matters for deterministic output (tests, pagination).\n\n- Stable: merge sort, insertion sort, bubble sort, TimSort, counting/radix sort.\n- Unstable: quicksort, heapsort, selection sort, pdqsort.\n\nIn Go:\n- `sort.Slice`, `sort.Sort`, `slices.Sort`, `slices.SortFunc` are **not stable** (pdqsort).\n- `sort.SliceStable`, `sort.Stable`, `slices.SortStableFunc` are stable, slightly slower, and in place (O(n log² n) worst-case compares via symmerge, no extra allocation).\n\nAlternative to stability: make the comparator total, e.g. break ties by a secondary key or by the original index. Then any sort algorithm gives a deterministic result.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "algorithms-anagram-check",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Check whether two strings are anagrams of each other (strings contain Latin and Cyrillic letters).\nExample: \"anagram\", \"nagaram\" → true; \"Кит\", \"Ток\" → false.",
+  "a": "Count rune frequencies of `s`, decrement for `t`, fail on any negative count or leftover non-zero count.\n\n```go\nfunc isAnagram(s, t string) bool {\n\tfreq := make(map[rune]int)\n\tfor _, r := range s {\n\t\tfreq[unicode.ToLower(r)]++\n\t}\n\tfor _, r := range t {\n\t\tr = unicode.ToLower(r)\n\t\tfreq[r]--\n\t\tif freq[r] < 0 {\n\t\t\treturn false\n\t\t}\n\t}\n\tfor _, c := range freq {\n\t\tif c != 0 {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n```\n\nVerified: `(\"anagram\",\"nagaram\")` → true, `(\"Кит\",\"Ток\")` → false, `(\"Кот\",\"ток\")` → true (case-insensitive), `(\"ab\",\"a\")` → false.\n\n**Complexity**: O(n + m) time. O(k) space for k distinct letters.\n\nNotes:\n- Iterate with `range` over the string to get **runes**. Byte-level `[256]int` counting only works for ASCII.\n- Case sensitivity is a question to ask. Here it's case-insensitive.\n- A cheap early exit is `utf8.RuneCountInString(s) != utf8.RuneCountInString(t)`, which is cheaper than `len([]rune(s))` because it doesn't allocate.\n- An alternative is sorting both rune slices and comparing: O(n log n), simpler but slower.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-can-build-string",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Implement CanBuildString(source, target string) bool: can target be built from the letters of source?\nEach letter of source may be used at most once.",
+  "a": "This is the \"ransom note\" problem. Count rune frequencies in `source`, then consume them while iterating `target`. If any count goes negative, `source` doesn't have enough of that letter.\n\n```go\nfunc CanBuildString(source, target string) bool {\n\tcounter := make(map[rune]int)\n\tfor _, r := range source {\n\t\tcounter[r]++\n\t}\n\tfor _, r := range target {\n\t\tcounter[r]--\n\t\tif counter[r] < 0 {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n```\n\nVerified: `(\"aabbc\",\"abca\")` → true, `(\"abc\",\"aa\")` → false, `(\"привет\",\"вет\")` → true, `(\"\",\"\")` → true.\n\n**Complexity**: O(|source| + |target|) time, O(k) space for k distinct runes.\n\nOptimizations: if `len(target) > len(source)` return false immediately. For ASCII-only input use a `[128]int` array instead of a map, which gives no hashing or allocation and is noticeably faster. Unlike the anagram check, leftover letters in `source` are fine, so there's no final \"all zero\" pass.",
+  "level": 1,
+  "n": 1,
+  "verified": true,
+  "asked": []
+ },
+ {
+  "id": "algorithms-count-errors-per-server",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Given a list of server names representing errors, return the error count per server as a map. What are the time and space complexity?\nExample: [\"srv1\",\"srv2\",\"srv1\",\"srv3\",\"srv1\",\"srv2\"] → {srv1:3, srv2:2, srv3:1}",
+  "a": "Do one pass and increment a counter in a map.\n\n```go\nfunc countErrors(servers []string) map[string]int {\n\tres := make(map[string]int)\n\tfor _, s := range servers {\n\t\tres[s]++\n\t}\n\treturn res\n}\n```\n\nVerified output: `map[srv1:3 srv2:2 srv3:1]`. `fmt` prints maps with sorted keys. Real map iteration order is random.\n\n**Complexity**: O(n) time (n appends into the hash map, O(1) average each). O(k) space, where k is the number of distinct servers.\n\nThe zero value makes `res[s]++` work without an existence check. Follow-ups:\n- Top-N servers: sort the k entries (O(k log k)) or use a min-heap of size N (O(k log N)).\n- Huge or streaming input: count in batches, or shard across goroutines with per-goroutine maps merged at the end (not one shared map with a mutex). Or use approximate counting (Count-Min Sketch).\n- Pre-size with `make(map[string]int, hint)` if k is roughly known.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-count-outsold-sellers",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "For each seller, return how many other sellers they outsold (strictly fewer sales). Target O(N log N).\nExample: [8,1,2,2,3] → [4,0,1,1,3]; [5,5,5,5] → [0,0,0,0].",
+  "a": "\"How many sellers have strictly fewer sales than me\" is the **index of my value's first occurrence in the sorted array**. Sort a copy, then binary-search each value (lower bound).\n\n```go\nfunc outsold(sales []int) []int {\n\tsorted := slices.Clone(sales)\n\tslices.Sort(sorted)\n\tres := make([]int, len(sales))\n\tfor i, v := range sales {\n\t\tres[i] = sort.SearchInts(sorted, v) // number of elements < v\n\t}\n\treturn res\n}\n```\n\nVerified: `[8 1 2 2 3]` → `[4 0 1 1 3]`, `[5 5 5 5]` → `[0 0 0 0]`.\n\n**Complexity**: O(N log N) for the sort plus N binary searches. O(N) space.\n\nAlternatives: sort indices by sales and assign ranks while walking, giving ties the rank of the first in their group (also O(N log N)). If sales are bounded small integers, use counting sort + prefix sums for O(N + maxSales). Gotcha: ties must not count as outsold, so use lower bound (`sort.SearchInts`), not upper bound.",
+  "level": 2,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-data-structures-overview",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What data structures do you know, and what are the complexities of their main operations?",
+  "a": "The interviewer wants breadth plus complexities, ideally with Go equivalents:\n\n- **Array / dynamic array** (Go slice): access O(1), append O(1) amortized, insert/delete in the middle O(n), search O(n) or O(log n) if sorted.\n- **Linked list** (singly, doubly, circular; `container/list`): insert/delete at a known node O(1), search/index O(n).\n- **Stack / queue / deque**: push/pop O(1). In Go use a slice for a stack and a ring buffer or two slices for a queue/deque.\n- **Hash table** (Go `map`): insert/lookup/delete O(1) average, O(n) worst, unordered.\n- **Binary search tree**: O(log n) if balanced (AVL, red-black), O(n) degenerate. Gives ordered iteration and range queries.\n- **B-tree / B+tree**: O(log n) with a huge fan-out. Database and file-system indexes.\n- **Heap / priority queue** (`container/heap`): peek O(1), push/pop O(log n).\n- **Trie**: O(len(key)) prefix lookups (autocomplete, routers).\n- **Graph** (adjacency list or matrix): BFS/DFS O(V+E). Models routes and dependencies.\n- **Skip list**: O(log n) probabilistic ordered map (Redis sorted sets).\n- Probabilistic structures: **Bloom filter** (membership with false positives), HyperLogLog (distinct counts).\n\nMention the trade-off axis: ordering vs speed, memory overhead, and cache locality.",
+  "level": 1,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "algorithms-deque",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "How does a deque (double-ended queue) work, and where is it useful?",
+  "a": "A deque supports **push and pop at both ends in O(1)**. It generalizes both a stack and a queue.\n\nImplementations:\n- **Ring buffer** (circular array): a slice plus `head` and `len`, with indices taken `% cap`. It grows by copying into a bigger buffer. It's cache-friendly, gives O(1) amortized operations, and even allows O(1) random access.\n- **Doubly linked list** (`container/list` in Go): true O(1) at both ends, but an allocation per node and poor locality.\n- **Block list** (C++ `std::deque`): a list of fixed-size arrays.\n\nA naive Go slice queue (`q = q[1:]`) is O(1) but never releases the consumed prefix until reallocation, and `append` to the front is O(n). That's why a ring buffer is better for long-lived queues.\n\nWhere it's useful:\n- **Sliding window maximum/minimum**: a monotonic deque of indices gives O(n) total.\n- **0-1 BFS**: push weight-0 edges to the front and weight-1 edges to the back.\n- **Work stealing**: the Go scheduler's per-P run queue is a ring buffer the owner uses from one end while other Ps steal half from the other.\n- Undo/redo history with a size cap, palindrome checks, and LRU-like buffers that drop from one end.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "algorithms-filter-sellers-by-cities",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Filter a seller → cities map to sellers in any requested city, keeping only the matching cities.\nTarget: O(M + N·K) for M requested cities, N sellers, K cities per seller.",
+  "a": "Put the requested cities in a **set** (O(M)), then scan each seller's cities with O(1) membership checks (O(N·K)). Only add sellers with at least one hit.\n\n```go\nfunc filterSellers(sellers map[int][]string, cities []string) map[int][]string {\n\twant := make(map[string]struct{}, len(cities))\n\tfor _, c := range cities {\n\t\twant[c] = struct{}{}\n\t}\n\tres := make(map[int][]string)\n\tfor id, list := range sellers {\n\t\tvar hit []string\n\t\tfor _, c := range list {\n\t\t\tif _, ok := want[c]; ok {\n\t\t\t\thit = append(hit, c)\n\t\t\t}\n\t\t}\n\t\tif len(hit) > 0 {\n\t\t\tres[id] = hit\n\t\t}\n\t}\n\treturn res\n}\n```\n\nVerified output: `map[1:[Moscow] 2:[Moscow Kazan] 4:[Moscow Kazan Tula]]`. Seller 3 is dropped.\n\n**Complexity**: O(M + N·K) time. O(M) for the set plus the output size.\n\nNotes: `map[string]struct{}` is the idiomatic zero-byte set. City order within each seller is preserved. Don't use `slices.Contains` over the requested list per city: that's O(N·K·M), which is exactly what the complexity target rules out. Clarify with the interviewer whether city names need normalization (case, whitespace).",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-group-servers-by-stability",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Given per-server stability readings, group server IDs by their stability value.\nExample: [{1,99},{2,97},{3,34},{4,97},{5,97.1}] → {34:[3], 97:[2,4], 99:[1], 97.1:[5]}",
+  "a": "It's a single-pass group-by into `map[value][]serverID`.\n\n```go\ntype Stat struct {\n\tServer    int\n\tStability float64\n}\n\nfunc groupByStability(stats []Stat) map[float64][]int {\n\tres := make(map[float64][]int)\n\tfor _, s := range stats {\n\t\tres[s.Stability] = append(res[s.Stability], s.Server)\n\t}\n\treturn res\n}\n```\n\nVerified output: `map[34:[3] 97:[2 4] 97.1:[5] 99:[1]]`.\n\n**Complexity**: O(n) time, O(n) space. Server order within a group follows input order.\n\nDiscussion points the interviewer is fishing for:\n- **Float keys are fragile**: `0.1+0.2 != 0.3`, and `NaN != NaN` (every NaN key becomes a separate, unreachable entry). The statement mentions a baseline of 9999. Store stability as an **integer in basis points** (e.g. 97.1% → 9710 out of 10000) and use `map[int][]int`.\n- If the output must be ordered, sort the keys (O(k log k)) since map iteration is random.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-isomorphic-strings",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Isomorphic strings: can you replace characters in A to get B with a consistent one-to-one mapping?\nEvery occurrence of a character maps to the same character; no two characters map to the same one. Examples: \"egg\",\"add\" → true; \"foo\",\"bar\" → false; \"paper\",\"title\" → true; \"ab\",\"aa\" → false. Time/space complexity?",
+  "code": "A = \"egg\",    B = \"add\"    -> true\nA = \"foo\",    B = \"bar\"    -> false\nA = \"paper\",  B = \"title\"  -> true\nA = \"ab\",     B = \"aa\"     -> false\nA = \"coffee\", B = \"dollar\" -> ?",
+  "a": "Keep **two maps**: `A→B` enforces \"each occurrence maps to the same character\", and `B→A` enforces \"no two characters map to the same one\". On each position, either both are unset (record the pair) or both must agree.\n\n```go\nfunc canMap(a, b string) bool {\n\tif len(a) != len(b) {\n\t\treturn false\n\t}\n\tvar fwd, back [256]byte\n\tfor i := 0; i < len(a); i++ {\n\t\tx, y := a[i], b[i]\n\t\tif fwd[x] == 0 && back[y] == 0 {\n\t\t\tfwd[x], back[y] = y, x\n\t\t\tcontinue\n\t\t}\n\t\tif fwd[x] != y || back[y] != x {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n```\n\nVerified:\n```text\ncoffee dollar false\negg add true\nfoo bar false\npaper title true\nab aa false\n```\n\n**Complexity**: O(n) time. O(1) space: two fixed 256-entry arrays, or O(k) with maps for Unicode.\n\nSurprise: the original task listed `\"coffee\" → \"dollar\"` as **true**, but it's false under the stated rules. `e` would have to map to both `a` and `r`, and the patterns differ (`abccdd` vs `abccde`). Worth pointing out politely in an interview.\n\nGotchas: check the lengths first, and remember the reverse map. With only `A→B`, `\"ab\"→\"aa\"` would wrongly pass.",
+  "level": 2,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-linked-list-vs-hash-table",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What's the main downside of a linked list compared to a hash table?",
+  "a": "**Lookup by key/value is O(n)** in a linked list: you have to walk node by node. A hash table finds a key in **O(1) average**. There's no random access either, so reaching the i-th element is O(n) too.\n\nOther downsides:\n- Poor cache locality. Nodes are scattered in memory, so every step is a potential cache miss, which makes list traversal slow even for its O(n).\n- Per-node pointer overhead (8-16 bytes) and one allocation per node, which means extra GC pressure in Go.\n\nWhat a linked list is good at: O(1) insert/delete **when you already hold the node** (no shifting), stable node addresses, and O(1) splicing and moving of nodes.\n\nThat's why the classic **LRU cache** combines both: a hash map `key → *node` for O(1) lookup, plus a doubly linked list for O(1) move-to-front and eviction (`container/list` in Go). The hash table's own downsides in return: no ordering, and rehashing on growth.",
+  "level": 1,
+  "asked": [
+   "Tehzor"
+  ],
+  "n": 1
+ },
+ {
+  "id": "algorithms-monotonic-slice",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Check whether a slice of ints is monotonic (entirely non-decreasing or non-increasing).\nFollow-up: how do you make it optimal in time and memory?",
+  "a": "Single pass with two flags. Any increase rules out \"non-increasing\", any decrease rules out \"non-decreasing\". Stop early once both are ruled out.\n\n```go\nfunc isMonotonic(nums []int) bool {\n\tinc, dec := true, true\n\tfor i := 1; i < len(nums); i++ {\n\t\tif nums[i] > nums[i-1] {\n\t\t\tdec = false\n\t\t} else if nums[i] < nums[i-1] {\n\t\t\tinc = false\n\t\t}\n\t\tif !inc && !dec {\n\t\t\treturn false\n\t\t}\n\t}\n\treturn true\n}\n```\n\nVerified: `nil` → true, `[1 2 2 3]` → true, `[3 3 1]` → true, `[1 3 2]` → false.\n\n**Complexity**: O(n) time with an early exit, O(1) space. That's optimal: you must look at every element to prove monotonicity.\n\nEdge cases to mention: empty and single-element slices are monotonic, and equal neighbours don't break either direction. An alternative is to determine the direction from the first unequal pair and then verify, which is also O(n) but with more branches.",
+  "level": 1,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-move-target-to-front",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Move all items of a given type to the front of the shelf, in place (no extra memory).\nExample: [\"knife\",\"fork\",\"spoon\",\"fork\",\"cup\",\"knife\"], target \"fork\" → [\"fork\",\"fork\",\"spoon\",\"knife\",\"cup\",\"knife\"]. Time/space complexity?",
+  "a": "This is a partition with a **write pointer**: scan left to right, and whenever the item is the target, swap it into position `w` and advance `w`.\n\n```go\nfunc moveToFront(goods []string, target string) {\n\tw := 0\n\tfor i, g := range goods {\n\t\tif g == target {\n\t\t\tgoods[w], goods[i] = goods[i], goods[w]\n\t\t\tw++\n\t\t}\n\t}\n}\n```\n\nVerified output:\n```text\n[\"fork\" \"fork\" \"spoon\" \"knife\" \"cup\" \"knife\"]\n```\n\nwhich exactly matches the expected order.\n\n**Complexity**: O(n) time with a single pass, O(1) extra space.\n\nNote: this doesn't preserve the relative order of the *non-target* items (knife moved behind spoon), and the expected output shows that's acceptable. If a stable order were required in place, you'd need an O(n²) shifting approach or O(n) extra memory. Related classic: the Dutch national flag (three-way partition).",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-power-of-two",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Check whether a number is a power of two.\nFollow-ups: how and why does the bitwise check work? Can you do it without bitwise operations?",
+  "a": "`n > 0 && n&(n-1) == 0`: an O(1) bit trick.\n\n```go\nfunc isPowerOfTwo(n int) bool {\n\treturn n > 0 && n&(n-1) == 0\n}\n\nfunc isPowerOfTwoLoop(n int) bool {\n\tif n <= 0 {\n\t\treturn false\n\t}\n\tfor n%2 == 0 {\n\t\tn /= 2\n\t}\n\treturn n == 1\n}\n```\n\n**Why `n & (n-1) == 0` works**: a power of two has exactly **one set bit** (`8 = 1000₂`). Subtracting 1 flips that bit to 0 and all lower bits to 1 (`7 = 0111₂`), so the AND is 0. Any other positive number has at least two set bits. `n-1` only clears the *lowest* one, the higher bit survives, and the AND is non-zero. `n > 0` is required because `0 & -1 == 0`, and negative numbers in two's complement aren't powers of two.\n\nVerified: 1, 2, 8, 1024 → true. 0, -8, 3, 6, 1023 → false. Both implementations agree.\n\n**Complexity**: bitwise version O(1). The loop version divides by 2 until the number is odd, O(log n).\n\nAlternatives: `bits.OnesCount(uint(n)) == 1` (a POPCNT instruction), or `n & -n == n` (isolates the lowest set bit).",
+  "level": 1,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-product-except-self",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Return a slice where position i holds the product of all elements except in[i].\nExample: [1, 2, 3] → [6, 3, 2].",
+  "code": "func MultOther(in []int) []int {\n}",
+  "a": "Each `out[i]` is **prefix product × suffix product**. The first pass writes the prefix products, and the second pass walks from the right, multiplying by a running suffix. No division is needed.\n\n```go\nfunc MultOther(in []int) []int {\n\tout := make([]int, len(in))\n\tprefix := 1\n\tfor i, v := range in {\n\t\tout[i] = prefix\n\t\tprefix *= v\n\t}\n\tsuffix := 1\n\tfor i := len(in) - 1; i >= 0; i-- {\n\t\tout[i] *= suffix\n\t\tsuffix *= in[i]\n\t}\n\treturn out\n}\n```\n\nVerified: `[1 2 3]` → `[6 3 2]`, `[2 0 4]` → `[0 8 0]`, `[0 0 5]` → `[0 0 0]`, `[7]` → `[1]`.\n\n**Complexity**: O(n) time, O(1) extra space (the output doesn't count).\n\nWhy not \"total product / in[i]\"? It **breaks on zeros** (division by zero, and one vs several zeros need different handling), and it's usually disallowed. Also mention **overflow**: products of large ints silently wrap in Go. If that's a concern use `math/big` or check bounds.",
+  "level": 2,
+  "asked": [
+   "Lamoda"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-recursion-limits",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What limitations does recursion have, and how can you work around them?",
+  "a": "Main limitations:\n- **Stack depth**: each call adds a stack frame. In most languages a deep recursion overflows a fixed stack. Go goroutine stacks are growable (they start at a few KB and are copied as they grow), but capped at **1 GB on 64-bit** (`debug.SetMaxStack`). Past that the program dies with `fatal error: stack overflow` (\"goroutine stack exceeds 1000000000-byte limit\"), and this **can't be recovered** with `recover`.\n- **Overhead**: call cost, and stack growth copying in Go. It's usually slower than a loop.\n- **Repeated work**: naive recursion (e.g. Fibonacci) recomputes subproblems, giving exponential time.\n- **No tail-call optimization in Go**, so even tail recursion consumes stack.\n\nWorkarounds:\n1. **Convert to iteration**: a loop, or an **explicit stack/queue** on the heap (`stack := []*Node{root}`) for DFS/BFS. The depth is then bounded by memory, not the stack.\n2. **Memoization / dynamic programming** (top-down with a cache, or bottom-up tables) to remove repeated work.\n3. **Limit depth** on untrusted input (JSON nesting, tree depth) and return an error instead of crashing.\n4. Tail recursion → loop by hand, or a trampoline in languages without TCO.\n5. Divide-and-conquer to keep depth O(log n), e.g. quicksort recursing into the smaller half.",
+  "level": 2,
+  "asked": [
+   "SpaceIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "algorithms-sort-ints-without-builtin",
+  "cat": "algorithms",
+  "kind": "code",
+  "q": "Implement an ascending sort for a slice of ints without using built-in sort functions.\nThe provided harness checks the result with testing/quick.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"slices\"\n\t\"testing/quick\"\n)\n\nfunc SortInts(a []int) {\n\t// TODO: implement the sort\n}\n\nfunc check(input []int) bool {\n\tgot := slices.Clone(input)\n\tSortInts(got)\n\tif !slices.IsSorted(got) {\n\t\treturn false\n\t}\n\twant := slices.Clone(input)\n\tslices.Sort(want)\n\treturn slices.Equal(got, want)\n}\n\nfunc main() {\n\tif err := quick.Check(check, nil); err != nil {\n\t\tfmt.Println(\"Property check failed:\", err)\n\t\treturn\n\t}\n\tfmt.Println(\"All checks passed\")\n}",
+  "a": "Any correct algorithm is accepted. A good answer names its trade-offs. Here's an in-place **quicksort** (Hoare partition, middle pivot), recursing into the smaller half so stack depth stays O(log n):\n\n```go\n// SortInts is an in-place quicksort with a middle pivot (Hoare partition),\n// recursing into the smaller half to keep the stack O(log n).\nfunc SortInts(a []int) {\n\tfor len(a) > 1 {\n\t\tp := a[len(a)/2]\n\t\ti, j := 0, len(a)-1\n\t\tfor i <= j {\n\t\t\tfor a[i] < p {\n\t\t\t\ti++\n\t\t\t}\n\t\t\tfor a[j] > p {\n\t\t\t\tj--\n\t\t\t}\n\t\t\tif i <= j {\n\t\t\t\ta[i], a[j] = a[j], a[i]\n\t\t\t\ti++\n\t\t\t\tj--\n\t\t\t}\n\t\t}\n\t\tif j+1 < len(a)-i {\n\t\t\tSortInts(a[:j+1])\n\t\t\ta = a[i:]\n\t\t} else {\n\t\t\tSortInts(a[i:])\n\t\t\ta = a[:j+1]\n\t\t}\n\t}\n}\n```\n\nVerified with the harness (5000 random `quick.Check` cases):\n```text\n[1 1 2 3 4 5 5 5 6 9]\nAll checks passed\n```\n\n**Complexity**: O(n log n) average, O(n²) worst case (adversarial pivots), O(log n) stack, not stable.\n\nAlternatives to mention: **merge sort** (O(n log n) guaranteed and stable, but O(n) extra memory), **heapsort** (O(n log n) worst case, in place), **insertion sort** for tiny inputs, and **counting sort** if the value range is small. Go's own `slices.Sort` is pdqsort, which adds a heapsort fallback for guaranteed O(n log n). Gotcha: a first-element pivot makes sorted input O(n²).",
+  "level": 2,
+  "asked": [
+   "InfoWatch"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-sort-sellers-by-likes",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Given parallel arrays of seller names and their like counts, return names ordered by likes descending, ties alphabetically.\nExample: names=[Seller1,Seller2,Seller3], likes=[18,15,17] → [Seller1,Seller3,Seller2].",
+  "a": "Sort an **index permutation** (so the two parallel arrays stay in sync) with a comparator: likes descending, then name ascending. Then map the indices to names.\n\n```go\nfunc SellerLikes(names []string, likes []int) []string {\n\tif len(names) != len(likes) {\n\t\treturn nil\n\t}\n\tidx := make([]int, len(names))\n\tfor i := range idx {\n\t\tidx[i] = i\n\t}\n\tslices.SortFunc(idx, func(a, b int) int {\n\t\tif c := cmp.Compare(likes[b], likes[a]); c != 0 {\n\t\t\treturn c\n\t\t}\n\t\treturn cmp.Compare(names[a], names[b])\n\t})\n\tres := make([]string, len(idx))\n\tfor i, id := range idx {\n\t\tres[i] = names[id]\n\t}\n\treturn res\n}\n```\n\nVerified: the example gives `[Seller1 Seller3 Seller2]`, and a tie case `names=[b a c], likes=[5 5 9]` gives `[c a b]`.\n\n**Complexity**: O(n log n) time, O(n) extra space.\n\nNotes: `slices.SortFunc` with `cmp.Compare` (Go 1.21+) is the modern API. Because the comparator is a **total order** (ties broken by name), the unstable pdqsort still gives a deterministic result. An alternative is zipping into `[]struct{name string; likes int}` and sorting that. Validate that the lengths match and decide what to return if they don't (nil or an error).",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-sorted-arrays-difference",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Given two sorted arrays, return the elements of the first array that do not appear in the second.",
+  "a": "Both arrays are sorted, so use **two pointers**: advance `j` in `b` while `b[j] < x`. If `b[j] == x`, drop `x`, otherwise keep it. Each pointer only moves forward.\n\n```go\nfunc difference(a, b []int) []int {\n\tres := make([]int, 0, len(a))\n\tj := 0\n\tfor _, x := range a {\n\t\tfor j < len(b) && b[j] < x {\n\t\t\tj++\n\t\t}\n\t\tif j < len(b) && b[j] == x {\n\t\t\tcontinue\n\t\t}\n\t\tres = append(res, x)\n\t}\n\treturn res\n}\n```\n\nFor `a=[1,2,2,3,5,7,9]`, `b=[2,3,4,9]` this gives `[1 5 7]`, and duplicates in `a` are handled.\n\n**Complexity**: O(n + m) time, O(1) extra space (besides the output).\n\nAlternative: put `b` into a `map[int]struct{}` and filter `a`. That's also O(n + m), but it uses O(m) memory and ignores the sortedness. Mention it as the \"unsorted input\" version. Binary-searching `b` for each element of `a` is O(n log m), which is better only when `a` is tiny compared with `b`.",
+  "level": 1,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-sorted-squares",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Given a sorted array that may contain negative numbers, return a sorted array of the squares. Use two pointers.",
+  "a": "The largest square is at one of the **two ends** (the most negative or the most positive number). Compare `|nums[l]|` and `|nums[r]|`, write the larger square at the **end** of the result, and move that pointer inward.\n\n```go\nfunc sortedSquares(nums []int) []int {\n\tres := make([]int, len(nums))\n\tl, r := 0, len(nums)-1\n\tfor k := len(nums) - 1; k >= 0; k-- {\n\t\tif abs(nums[l]) > abs(nums[r]) {\n\t\t\tres[k] = nums[l] * nums[l]\n\t\t\tl++\n\t\t} else {\n\t\t\tres[k] = nums[r] * nums[r]\n\t\t\tr--\n\t\t}\n\t}\n\treturn res\n}\n\nfunc abs(x int) int {\n\tif x < 0 {\n\t\treturn -x\n\t}\n\treturn x\n}\n```\n\nVerified: `[0 1 1 6 12 20]` → `[0 1 1 36 144 400]`, `[-7 -3 0 2 5]` → `[0 4 9 25 49]`, empty → `[]`.\n\n**Complexity**: O(n) time, O(n) for the output (O(1) extra).\n\nThe naive \"square then `slices.Sort`\" is O(n log n). Gotcha: filling from the front doesn't work, because the smallest square is somewhere in the middle, not at an end.",
+  "level": 1,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-sorting-algorithms",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "What sorting algorithms do you know, and what are their complexities?",
+  "a": "- **Bubble sort**: O(n²) average/worst, O(n) best with an early exit. Stable, in place. Teaching only.\n- **Selection sort**: O(n²) always. Not stable, but does a minimal number of swaps.\n- **Insertion sort**: O(n²) worst, **O(n) on nearly sorted data**. Stable, in place. The fastest option for tiny arrays (≤ ~12-16), so hybrids use it for small partitions.\n- **Merge sort**: O(n log n) in every case. **Stable**, but needs O(n) extra memory. Good for linked lists and external sorting of huge files.\n- **Quicksort**: O(n log n) average, **O(n²) worst** with bad pivots (e.g. first-element pivot on sorted input). In place, O(log n) stack, not stable. Very fast in practice.\n- **Heapsort**: O(n log n) worst case, in place, not stable, poorer cache behaviour.\n- **Counting / radix / bucket sort**: O(n + k) or O(d·n). They don't use comparisons, so they beat n log n for bounded integer keys.\n\nThe comparison-sort lower bound is Ω(n log n).\n\nWhat Go uses: `slices.Sort` / `sort.Sort` use **pdqsort** (pattern-defeating quicksort, since Go 1.19). It's a quicksort hybrid with insertion sort for small slices and a heapsort fallback, which guarantees O(n log n) worst case and gives O(n) on already sorted or reversed input. It isn't stable. `slices.SortStableFunc` / `sort.Stable` use insertion sort on blocks plus in-place symmerge.",
+  "level": 1,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "algorithms-strings-appearing-more-than-once",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Given a slice of strings, return the strings that appear more than once.\nExample: [\"a\",\"bb\",\"bb\",\"b\",\"a\",\"a\"] → [\"a\",\"bb\"].",
+  "a": "Count with a map, then walk the input again to emit each repeated string once, **in order of first appearance** (that's what the expected output shows). Zeroing the count after emitting prevents duplicates in the result.\n\n```go\nfunc repeated(in []string) []string {\n\tcount := make(map[string]int, len(in))\n\tfor _, s := range in {\n\t\tcount[s]++\n\t}\n\tvar res []string\n\tfor _, s := range in {\n\t\tif count[s] > 1 {\n\t\t\tres = append(res, s)\n\t\t\tcount[s] = 0\n\t\t}\n\t}\n\treturn res\n}\n```\n\nVerified output: `[\"a\" \"bb\"]`.\n\n**Complexity**: O(n) time (times the average string length for hashing), O(k) space.\n\nPitfall: iterating the **map** to build the result gives a random order, so the test would pass or fail at random. An alternative single pass appends when `count[s] == 2`, but that yields `[\"bb\" \"a\"]`, which is order of the *second* appearance.",
+  "level": 1,
+  "asked": [
+   "VseInstrumenty"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-tree-vs-graph",
+  "cat": "algorithms",
+  "kind": "theory",
+  "q": "How does a tree differ from a graph?",
+  "a": "A **tree is a special kind of graph**: a **connected, acyclic** (undirected) graph. From that follow its properties:\n\n- Exactly **n-1 edges** for n nodes.\n- Exactly **one path** between any two nodes.\n- Usually **rooted**, so there's a hierarchy: each node except the root has exactly one parent. Hence the terms parent/child/leaf/depth.\n\nA general **graph** has none of these constraints. It can have **cycles**, be **disconnected**, be **directed or undirected**, have **weighted** edges, and a node can have many \"parents\". It has no root or hierarchy.\n\nPractical consequences:\n- Traversal: in a tree, DFS/BFS from the root needs no \"visited\" set. In a graph you **must track visited nodes** or you loop forever on cycles.\n- Representation: trees usually use child pointers (`Children []*Node`). Graphs use an adjacency list (`map[Node][]Node`) or an adjacency matrix.\n- Typical tasks: trees are for hierarchies (categories, file systems, DOM, indexes). Graphs are for networks, routes (Dijkstra), dependencies (topological sort on a DAG), and social relations.\n\nA DAG (directed acyclic graph) sits in between: no cycles, but a node can have several parents.",
+  "level": 1,
+  "asked": [
+   "SpaceIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "algorithms-two-sum",
+  "cat": "algorithms",
+  "kind": "algo",
+  "q": "Two Sum: given nums and a target, return the indices of two numbers that add up to the target.",
+  "a": "Brute force checks all pairs: O(n²). Optimal is **one pass with a hash map** from value to index. For each `v`, check whether `target - v` was already seen.\n\n```go\nfunc twoSum(nums []int, target int) []int {\n\tseen := make(map[int]int, len(nums))\n\tfor i, v := range nums {\n\t\tif j, ok := seen[target-v]; ok {\n\t\t\treturn []int{j, i}\n\t\t}\n\t\tseen[v] = i\n\t}\n\treturn nil\n}\n```\n\nTrace for `[2 7 11 15]`, target 9: i=0, v=2, need 7, not seen, store 2→0. i=1, v=7, need 2, seen at 0, return `[0 1]`.\n\nVerified: `([2 7 11 15], 9)` → `[0 1]`, `([3 2 4], 6)` → `[1 2]`, `([3 3], 6)` → `[0 1]`, no solution → `[]`.\n\n**Complexity**: O(n) time, O(n) space.\n\nDetails: check *before* inserting so an element isn't paired with itself (`[3 2 4]`, target 6 must not return `[0 0]`), and duplicates still work (`[3 3]`). If the array is **sorted**, use two pointers from both ends for O(1) space. If only values are needed, sorting + two pointers gives O(n log n) time and O(1) space.",
+  "level": 1,
+  "asked": [
+   "VK"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "algorithms-zip-slices",
+  "cat": "algorithms",
+  "kind": "code",
+  "q": "Implement a zip function that combines two int slices element-wise into pairs, stopping at the shorter slice.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\ts1, s2 := []int{1, 2, 3}, []int{4, 5, 6, 7, 8}\n\tfmt.Println(zip(s1, s2))\n}\n\nfunc zip(s1 []int, s2 []int) [][]int {\n\t// ...\n}",
+  "a": "Allocate `min(len(s1), len(s2))` pairs up front and fill them.\n\n```go\nfunc zip(s1, s2 []int) [][]int {\n\tn := min(len(s1), len(s2))\n\tres := make([][]int, n)\n\tfor i := range n {\n\t\tres[i] = []int{s1[i], s2[i]}\n\t}\n\treturn res\n}\n```\n\nVerified: `zip([1 2 3], [4 5 6 7 8])` → `[[1 4] [2 5] [3 6]]`. With a nil slice it returns `[]`.\n\nO(min(n, m)) time and space. Uses the `min` builtin (Go 1.21) and range-over-int (Go 1.22).\n\nDiscussion points:\n- Returning `[][2]int` (fixed arrays) instead of `[][]int` avoids one allocation per pair.\n- A generic version is `func Zip[A, B any](a []A, b []B) []Pair[A, B]`.\n- With Go 1.23 iterators you can make it lazy: `func Zip[A, B any](a []A, b []B) iter.Seq2[A, B]`, so no intermediate slice is built.",
+  "level": 1,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1,
+  "verified": true
+ }
+]

@@ -1,0 +1,30 @@
+[
+ {
+  "id": "generics-generics-vs-any",
+  "cat": "generics",
+  "kind": "theory",
+  "q": "What are generics in Go, and how do they differ from using the empty interface (`any`)?",
+  "a": "Generics (Go 1.18+) are **type parameters** on functions and types, constrained by interfaces:\n\n```go\nfunc Max[T cmp.Ordered](a, b T) T {\n    if a > b {\n        return a\n    }\n    return b\n}\n```\n\nMain advantage over `any`: **compile-time type safety** with one implementation. With `any` you lose type information — callers need type assertions, mistakes surface as runtime panics, and you can't use operators like `<` or `+`. Values stored in `any` are boxed (possible allocations); generic code keeps concrete types.\n\nDetails:\n- Constraints: interfaces with methods and/or type sets (`~int | ~float64`), `comparable`, `cmp.Ordered`; `~T` includes named types with underlying `T`.\n- Implementation: **GC-shape stenciling** with dictionaries — one instantiation per shape (all pointers share one), so generic method calls through constraints can be slower than hand-written code.\n- Limits: no type parameters on methods, no specialization.\n- Standard library: `slices`, `maps`, `cmp`, `sync`-style wrappers, range-over-func iterators (`iter.Seq`, 1.23).\n\nUse generics for containers and algorithms; use interfaces when you need behavior polymorphism.",
+  "level": 1,
+  "asked": [
+   "InDrive",
+   "RSHB",
+   "SpaceIT"
+  ],
+  "n": 3
+ },
+ {
+  "id": "generics-map-function",
+  "cat": "generics",
+  "kind": "code",
+  "q": "Write a Map function that applies a function to every slice element, then make it generic.\nFollow-up: have you used generics in real work, and how?",
+  "code": "func Map[T any, R any](arr []T, f func(T) R) []R {\n    result := make([]R, len(arr))\n    for i, v := range arr {\n        result[i] = f(v)\n    }\n    return result\n}",
+  "a": "Non-generic version, then generic:\n\n```go\nfunc MapInts(arr []int, f func(int) int) []int {\n    res := make([]int, len(arr))\n    for i, v := range arr {\n        res[i] = f(v)\n    }\n    return res\n}\n\nfunc Map[S ~[]T, T, R any](arr S, f func(T) R) []R {\n    res := make([]R, len(arr))\n    for i, v := range arr {\n        res[i] = f(v)\n    }\n    return res\n}\n\n// Map([]int{1, 2, 3}, strconv.Itoa) → [\"1\" \"2\" \"3\"]\n```\n\n`S ~[]T` accepts named slice types too; the output type `R` can differ from the input. Preallocating with `make(len)` avoids regrowth. With Go 1.23 iterators you could also write a lazy `func Map[T, R any](seq iter.Seq[T], f func(T) R) iter.Seq[R]`.\n\nReal-work answer ideas: generic helpers (`slices.Collect`, dedup, chunking for batch inserts), typed cache/LRU `Cache[K comparable, V any]`, `Result[T]`/pagination wrappers, typed worker pools, typed `sync.Pool`/atomic wrappers, test helpers. Mention you avoid generics where an interface or plain code is clearer.",
+  "level": 1,
+  "asked": [
+   "Digital Habits",
+   "X5 Tech"
+  ],
+  "n": 2
+ }
+]

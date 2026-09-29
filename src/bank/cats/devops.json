@@ -1,0 +1,439 @@
+[
+ {
+  "id": "devops-top-and-load-average",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What does `top` show, and what is load average? What do its three numbers mean, and what's a normal load for 10 cores?",
+  "a": "`top` shows uptime, **load average**, task counts by state, CPU breakdown (`us` user, `sy` system, `ni`, `id` idle, `wa` iowait, `st` steal), memory/swap, and a per-process table (PID, user, `%CPU`, `%MEM`, RES, state, command). Alternatives: `htop`, `vmstat 1`, `iostat -x`, `free -h`, `uptime`, `pidstat`, `sar`.\n\n**Load average:** exponentially-damped average number of tasks that are **running or runnable** (waiting for CPU) — on Linux **plus tasks in uninterruptible sleep (D)**, usually disk/NFS I/O — over **1, 5 and 15 minutes**. Comparing them shows the trend (1m > 15m → load rising).\n\nInterpretation relative to cores: on 10 cores, LA ≈ 10 means fully utilized; < 10 has headroom (≈ 7 is healthy); consistently > 10 means tasks are queueing → latency grows. Check `nproc`.\n\nGotcha: high LA with low CPU usage points to I/O waits (D-state tasks), not CPU shortage — check `wa`, `iostat`, and `ps` for `D` processes.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "FrogStudio",
+   "VK"
+  ],
+  "n": 6
+ },
+ {
+  "id": "devops-monitoring-and-logging",
+  "cat": "devops",
+  "kind": "behavioral",
+  "q": "What monitoring did you have? Which logs and metrics did you collect, and how were logs aggregated (Loki, ELK)?",
+  "a": "Describe the **three pillars** and how they were used:\n- **Metrics** (Prometheus + Grafana, VictoriaMetrics): RED metrics per endpoint (rate, errors, duration histograms → p95/p99), USE for resources, Go runtime (goroutines, heap, GC pauses), business metrics (orders/min), dependency metrics (DB pool usage, Kafka consumer lag). Alerts on SLO burn rate via Alertmanager.\n- **Logs**: structured JSON (`log/slog`, zap) with `trace_id`/`request_id`, shipped by Promtail/Fluent Bit/Vector to **Loki** (cheap, label-indexed) or **ELK/OpenSearch** (full-text index, heavier).\n- **Traces**: OpenTelemetry → Jaeger/Tempo, to follow a request across services.\n\nGotchas: high-cardinality labels (user IDs) blow up Prometheus; log levels and sampling control cost; never log secrets or PII.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "FrogStudio",
+   "Plata"
+  ],
+  "n": 5
+ },
+ {
+  "id": "devops-process-vs-thread",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What's the difference between a process and a thread?",
+  "a": "- **Process:** an instance of a program with its **own address space**, file descriptor table, credentials, and resources. Isolated — one process can't touch another's memory without IPC. Creation and context switches are more expensive (page tables, TLB flush).\n- **Thread:** a unit of execution **inside a process**: own stack, registers, program counter, thread-local storage — but **shares** the heap, globals, and fds with other threads of the process. Cheaper to create and switch; communication through shared memory, hence the need for synchronization.\n\nOn Linux both are `task_struct`s created by `clone()` with different sharing flags; the scheduler schedules threads.\n\nConsequences: a crash (segfault) in one thread kills the whole process; processes give fault isolation (e.g. nginx workers, Chrome tabs).\n\nGo angle: goroutines are a third level — user-space tasks (~2 KB initial growable stack) multiplexed by the runtime onto OS threads (M) via Ps (GOMAXPROCS, container-aware since Go 1.25). Much cheaper than threads, but still share memory.",
+  "level": 1,
+  "asked": [
+   "Avito",
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 5
+ },
+ {
+  "id": "devops-cpu-over-100-percent",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "Why can `top` show a process using more than 100% CPU (e.g. 146%)? Is it bad? Can a Go service report >100%?",
+  "a": "In `top`'s default (Irix mode), a process's `%CPU` is relative to **one core**. A multithreaded process running on several cores can exceed 100%: 146% ≈ 1.46 cores busy on average during the sample. The maximum is `100% × number of cores` (press `Shift+I` for Solaris mode, which divides by core count).\n\nIs it bad? Not by itself — it means the program uses parallelism. It's a problem only if it's unexpected, saturates the machine (check total idle and load average), or hits a container CPU limit → **CFS throttling** and latency spikes.\n\nGo: yes, easily. The runtime runs goroutines on up to **GOMAXPROCS** threads in parallel, plus the GC uses ~25% of GOMAXPROCS in background workers. Since Go 1.25 GOMAXPROCS respects the cgroup CPU limit (e.g. limit 2 → GOMAXPROCS 2, updated if the limit changes), which reduces throttling; before that it was the host's core count unless you used `automaxprocs`. A Go service's own metrics (`process_cpu_seconds_total` rate) will likewise read > 1 core.",
+  "level": 1,
+  "asked": [
+   "FrogStudio",
+   "Ozon",
+   "VK"
+  ],
+  "n": 3
+ },
+ {
+  "id": "devops-distributed-tracing",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What role does distributed tracing play in modern architectures? Have you worked with traces?",
+  "a": "A **trace** is the tree of **spans** (timed operations with attributes, events, status) for one request as it crosses services, queues and databases. Context (`trace_id`, `span_id`, flags) is propagated in headers (W3C `traceparent`) or message headers.\n\nWhat it gives you:\n- Where latency is spent in a call chain (critical path, fan-out, N+1 queries, retries).\n- Which service actually failed behind a generic 500.\n- Service dependency maps; correlation with logs (trace_id in every log line) and metrics (exemplars).\n\nImplementation in Go: OpenTelemetry SDK, `otelhttp`/`otelgrpc` middleware, DB instrumentations (otelsql/pgx tracer), manual spans for key operations, and inject/extract into Kafka headers; export via OTLP to a collector → Jaeger/Tempo.\n\nTrade-offs: overhead and storage → **sampling** (head-based ratio, or tail-based in the collector to keep errors/slow traces); incomplete propagation (async hops, third-party services) breaks traces.\n\nBehavioral part: if you haven't used traces, say so honestly and explain how you debugged instead (correlated logs with request ids, metrics) and what you'd gain from tracing — \"never needed it\" is a weak answer in microservices.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "InDrive",
+   "WMX"
+  ],
+  "n": 3
+ },
+ {
+  "id": "devops-file-descriptor",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What is a file descriptor, and what is it used for?",
+  "a": "A file descriptor is a small non-negative **integer handle** a process uses to refer to an open kernel resource — an index into the process's fd table, pointing to a kernel \"open file description\" (offset, flags) → inode/socket.\n\n\"Everything is a file\": regular files, directories, **sockets**, pipes, terminals, devices, eventfd, epoll instances, timerfd. By convention 0 = stdin, 1 = stdout, 2 = stderr. Syscalls like `read`, `write`, `close`, `dup2`, `fcntl`, `poll/epoll` operate on fds.\n\nPractical points:\n- Limits: per-process `ulimit -n` (soft/hard, `RLIMIT_NOFILE`) and system-wide `fs.file-max`. A server with many connections hits \"too many open files\". Go raises the soft limit to the hard limit automatically since Go 1.19.\n- **Leaks:** forgetting `resp.Body.Close()`, `rows.Close()`, `file.Close()` leaks fds. Inspect with `ls -l /proc/<pid>/fd | wc -l` or `lsof -p <pid>`.\n- fds are inherited across `fork`/`exec` unless `O_CLOEXEC` (Go sets it by default).",
+  "level": 1,
+  "asked": [
+   "Avito",
+   "Digital Spirit"
+  ],
+  "n": 3
+ },
+ {
+  "id": "devops-fork",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What does `fork` do in Linux?",
+  "a": "`fork()` creates a new process that is a **copy of the caller**. It returns twice: the child's PID in the parent and `0` in the child (−1 on error).\n\nThe child gets a copy of the address space, open file descriptors (sharing the same file offsets), signal handlers, environment, cwd. Different: PID/PPID, pending signals, locks, timers; only the **calling thread** is duplicated.\n\nMemory isn't really copied: **copy-on-write** — pages are shared read-only and duplicated on first write, so fork is fast. Usually followed by `exec*()` which replaces the image with a new program (that's how a shell runs commands); `posix_spawn`/`vfork`/`clone` are optimized variants. Parent reaps the child with `wait()`, otherwise it becomes a **zombie**; if the parent dies first the child is re-parented to init (PID 1) — important in containers, where your app may be PID 1.\n\nGo angle: Go programs can't safely `fork()` without `exec` (multithreaded runtime); `os/exec` and `syscall.ForkExec` do fork+exec together. Redis uses fork + COW for snapshots.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit",
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 3
+ },
+ {
+  "id": "devops-kubernetes-objects",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "Which Kubernetes objects do you know? Have you configured HPA? What is `kubectl port-forward`?",
+  "a": "Core objects:\n- **Pod** — smallest unit, one or more containers sharing network/volumes.\n- **Deployment** → **ReplicaSet** → Pods: stateless apps, rolling updates. **StatefulSet** — stable identities/volumes (databases). **DaemonSet** — one pod per node (log agents). **Job/CronJob** — batch.\n- **Service** (ClusterIP/NodePort/LoadBalancer) — stable virtual IP + DNS load-balancing to pods by label selector. **Ingress** / **Gateway API** — L7 HTTP routing from outside.\n- **ConfigMap**, **Secret**; **PersistentVolume/PVC**, StorageClass.\n- **Namespace**, ServiceAccount, RBAC Role/RoleBinding, NetworkPolicy, ResourceQuota/LimitRange.\n- **HPA** — scales replicas on metrics; **PDB** — limits voluntary disruptions.\n\n**HPA:** targets a Deployment, scales between `minReplicas`/`maxReplicas` on CPU/memory utilization **relative to requests** (so requests must be set) or custom/external metrics (RPS, Kafka lag via KEDA/Prometheus adapter); `behavior` tunes scale-up/down stabilization.\n\n**Port-forward:** `kubectl port-forward svc/postgres 5432:5432` tunnels a local port through the API server to a pod — for debugging/admin access without exposing a Service publicly. Not for production traffic.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "RSHB"
+  ],
+  "n": 3
+ },
+ {
+  "id": "devops-linux-process-lookup",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "How do you view running processes on Linux and find a process's PID?",
+  "a": "- `ps aux` (all processes, BSD style) or `ps -ef`; filter: `ps aux | grep myapp` (or `ps -C myapp`).\n- `pgrep myapp` / `pgrep -f \"myapp --port 8080\"` (match full command line) — prints PIDs directly; `pidof myapp`.\n- `top` / `htop` — interactive, sorted by CPU/memory.\n- By port: `ss -ltnp | grep :8080` or `lsof -i :8080`.\n- `/proc/<pid>/` — everything about a process (`cmdline`, `status`, `fd/`, `limits`); `$$` is the current shell's PID, `$!` the last background job.\n- `pstree -p` for parent/child relationships; `systemctl status myapp` shows the main PID of a service.\n\nIn containers: the app is often PID 1 inside its PID namespace, with a different PID on the host; `docker top`, `kubectl exec … -- ps` or `crictl` help.",
+  "level": 1,
+  "asked": [
+   "Avito",
+   "Digital Spirit",
+   "Ozon"
+  ],
+  "n": 3
+ },
+ {
+  "id": "devops-observability-overview",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What is observability, why do you need it, and how do you build it for microservices? What are the three pillars (the \"golden trio\")?",
+  "a": "Observability is the ability to understand a system's internal state from its outputs — to answer **new** questions about production (\"why are p99 checkouts slow for Android users in one region?\") without shipping new code. Monitoring tells you *that* something is wrong; observability helps find *why*.\n\nThree pillars:\n- **Metrics** — cheap numeric time series (RED: rate, errors, duration; USE: utilization, saturation, errors). Prometheus/VictoriaMetrics + Grafana; alerting via Alertmanager.\n- **Logs** — detailed events; structured JSON (`log/slog`), with `trace_id`; Loki, ELK/OpenSearch.\n- **Traces** — a request's path across services as spans; Jaeger, Tempo, Zipkin.\n(Often a fourth: continuous **profiling** — Pyroscope/Parca, pprof.)\n\nHow to build it: instrument with **OpenTelemetry** SDKs (one API for traces/metrics/logs), propagate context (W3C `traceparent`) across HTTP/gRPC/Kafka, export through the OTel Collector, correlate via trace ids and exemplars, define **SLOs** and alert on symptoms (error-budget burn) rather than causes.\n\nGotchas: high-cardinality labels (user_id) blow up Prometheus; log volume costs; sample traces (tail-based sampling keeps errors/slow ones).",
+  "level": 2,
+  "asked": [
+   "InDrive",
+   "SpaceIT",
+   "WMX"
+  ],
+  "n": 3
+ },
+ {
+  "id": "devops-context-switch",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What is a context switch, and why is it expensive?",
+  "a": "A context switch is the CPU switching from one thread/process to another: the kernel **saves** the current task's state (registers, program counter, stack pointer, FPU/SIMD state) and **restores** another's.\n\nTriggers: time slice expiry (preemption), blocking syscalls (I/O, locks, sleep), interrupts, higher-priority task becoming runnable.\n\nCost: direct cost ~1–5 µs including the user→kernel transition, but indirect costs dominate — **cache and TLB pollution** (switching processes changes the address space; PCID mitigates TLB flushes), branch predictor state, and scheduler overhead. Thread switches within a process are cheaper than process switches.\n\nWhy it matters: thread-per-connection servers with thousands of threads spend lots of CPU switching. **Goroutine switches** happen in user space in ~100–200 ns: only a few registers saved, no kernel involvement, and the netpoller parks goroutines instead of blocking OS threads. Observe with `vmstat 1` (`cs` column), `pidstat -w`, `perf`.",
+  "level": 2,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-cooperative-vs-preemptive-multitasking",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "How does cooperative multitasking differ from preemptive, and where is each used?",
+  "a": "- **Cooperative:** a task runs until it **voluntarily yields** (blocking call, explicit yield, `await`). Simple and cheap switches, no surprises mid-operation, but one misbehaving task (tight loop) starves everyone. Used by: Windows 3.x/classic Mac OS, JavaScript/Node event loop, Python asyncio, Kotlin/Rust async tasks, early Go.\n- **Preemptive:** the scheduler **forcibly interrupts** tasks (timer interrupt, time slices) and switches. Fair and robust against hogs, but switches can happen anywhere → need synchronization. Used by: all modern OS kernels for threads/processes.\n\nGo specifically: goroutines were cooperative-ish (switch points at function calls, channel ops, syscalls, allocation) until **Go 1.14 added asynchronous preemption** — sysmon detects a goroutine running > ~10 ms and sends a signal (SIGURG) to preempt it even in a tight loop without function calls. So today the Go scheduler is effectively preemptive, while most switches still happen cooperatively at blocking points.",
+  "level": 2,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-deploy-tooling-and-strategies",
+  "cat": "devops",
+  "kind": "behavioral",
+  "q": "Which deploy tooling have you used (Docker, Kubernetes, Helm, CI/CD, cloud), who owned deployment, and which rollout strategies do you know?\nFollow-up: did you set up Ingress (Nginx/HAProxy)?",
+  "a": "Describe the pipeline end to end: **CI** (GitLab CI/GitHub Actions: lint, tests, build) → Docker image tagged with the commit → pushed to a registry → **CD** via Helm charts or GitOps (Argo CD/Flux) into Kubernetes; Ingress (nginx/Traefik/HAProxy) handles routing and TLS. Say who owned what: devs own the chart/values, platform owns the cluster.\n\nRollout strategies:\n- **Rolling update** (k8s default; `maxSurge`/`maxUnavailable`, gated by readiness probes).\n- **Blue-green**: two environments, switch traffic at once, instant rollback.\n- **Canary**: a small percentage of traffic first, watch metrics, then promote (Argo Rollouts/Flagger).\n- **Feature flags** decouple deploy from release.\n\nFailure handling: readiness/liveness probes, graceful shutdown on SIGTERM, `helm rollback`, backwards-compatible DB migrations (expand/contract). Pitfall: not being able to say what happens to in-flight requests during a deploy.",
+  "level": 2,
+  "asked": [
+   "Velme"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-docker-multistage-go",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "How do you build Docker images for Go services? What is a multi-stage build?",
+  "a": "A **multi-stage build** uses several `FROM` stages in one Dockerfile: a fat builder stage with the toolchain compiles the binary; the final stage copies only the artifact into a minimal base. Result: tiny images (10–20 MB), smaller attack surface, no compilers or sources in production.\n\n```text\nFROM golang:1.26 AS build\nWORKDIR /src\nCOPY go.mod go.sum ./\nRUN go mod download\nCOPY . .\nRUN CGO_ENABLED=0 go build -trimpath -ldflags=\"-s -w\" -o /out/app ./cmd/app\n\nFROM gcr.io/distroless/static-debian12:nonroot\nCOPY --from=build /out/app /app\nUSER nonroot:nonroot\nENTRYPOINT [\"/app\"]\n```\n\nPractices:\n- Copy `go.mod`/`go.sum` first so the dependency layer is cached; use BuildKit cache mounts (`--mount=type=cache,target=/root/.cache/go-build`).\n- `CGO_ENABLED=0` for a static binary → `scratch` or distroless; with scratch, remember CA certificates and tzdata (or `import _ \"time/tzdata\"`).\n- Run as non-root, pin base image versions/digests, `.dockerignore`.\n- Cross-compile via `--platform=$BUILDPLATFORM` + `GOOS/GOARCH` instead of emulation.",
+  "level": 1,
+  "n": 2,
+  "asked": []
+ },
+ {
+  "id": "devops-dockerfile-vs-compose",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What's the difference between a Dockerfile and docker-compose? Which command starts a container?",
+  "a": "- **Dockerfile:** instructions to **build one image** (`FROM`, `COPY`, `RUN`, `ENV`, `EXPOSE`, `USER`, `ENTRYPOINT`/`CMD`). Built with `docker build -t app:1.0 .`.\n- **docker-compose (`compose.yaml`):** declares a **multi-container application** — services (images or builds), networks, volumes, env, ports, dependencies, healthchecks — and runs it with `docker compose up -d`. Used for local dev/test stacks (app + Postgres + Kafka), not usually for production orchestration (that's Kubernetes).\n\nStarting a container:\n- `docker run -d --name api -p 8080:8080 -e ENV=dev app:1.0` — create **and** start from an image.\n- `docker start <container>` — start an existing stopped container.\n- `docker compose up` — for compose services.\n\nGotcha: `depends_on` only orders startup; to wait until Postgres is actually ready use `depends_on: condition: service_healthy` with a healthcheck.",
+  "level": 1,
+  "asked": [
+   "Kvando",
+   "SpaceIT"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-ipc-mechanisms",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What are the basic kinds of IPC (inter-process communication)?",
+  "a": "- **Pipes:** anonymous (`|`, parent–child, unidirectional byte stream) and **named pipes/FIFOs** (filesystem entry).\n- **Unix domain sockets:** bidirectional, stream or datagram, local only; can pass file descriptors and credentials. Fast; used by Docker, Postgres, systemd.\n- **Network sockets** (TCP/UDP on loopback or across machines).\n- **Shared memory** (`shm_open`/`mmap`, System V shm): fastest — no copying — but needs synchronization (semaphores, futexes).\n- **Message queues** (POSIX `mq_*`, System V).\n- **Signals:** asynchronous notifications (SIGTERM, SIGHUP), carry almost no data.\n- **Semaphores** for synchronization between processes.\n- **Memory-mapped files** and plain files/locks (`flock`).\n- Higher level: D-Bus, gRPC/HTTP over sockets, message brokers between services.\n\nGo: `os.Pipe`, `net.Listen(\"unix\", …)`, `os/signal`, `syscall.Mmap`, `exec.Cmd` stdin/stdout pipes.\n\nTrade-off: shared memory is fastest but hardest to get right; sockets are universal and composable.",
+  "level": 2,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-latency-regression-investigation",
+  "cat": "devops",
+  "kind": "design",
+  "q": "Latency percentiles of a Go API have grown, or an endpoint periodically starts lagging. How do you investigate?",
+  "a": "1. **Scope it with metrics:** which endpoints, instances, percentiles (p99 only → tail/queueing; all → systemic), since when — correlate with deploys, traffic, config changes, cron jobs. Periodic spikes hint at **scheduled work**: cron/batch jobs, cache TTL expiry stampedes, log rotation, backups, compaction/autovacuum.\n2. **Traces:** find slow requests and which span dominates — DB query, downstream call, lock wait, or time inside the service.\n3. **Resources:** CPU and **CFS throttling** in containers (`container_cpu_cfs_throttled_periods_total`), memory/GC, network, DB connection pool wait (`sql.DBStats.WaitDuration`), Kafka lag, noisy neighbors.\n4. **Go runtime:** GC frequency/pause & CPU (GOGC/GOMEMLIMIT tuning; GC spikes from allocation-heavy paths), goroutine counts (leaks), scheduler latency (`/sched/latencies:seconds` in `runtime/metrics`).\n5. **Profile in prod:** `net/http/pprof` CPU, heap/allocs, mutex, block profiles; `go tool trace` for scheduler/GC stalls; continuous profiling to compare before/after.\n6. **Database:** slow query log, `EXPLAIN ANALYZE`, lock contention, plan changes, missing indexes, table bloat.\n7. **Fix and verify** with the same metrics; add an alert and a regression benchmark.\n\nGotcha: averages hide it — always look at percentiles and per-instance breakdowns; one bad pod can drive the p99.",
+  "level": 2,
+  "asked": [
+   "Crtex"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-linux-kill-process",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "How do you terminate a process in Linux? Can you kill by name? What if the process won't die?",
+  "a": "- `kill <PID>` sends **SIGTERM (15)** by default — a polite request; the process can catch it and shut down gracefully (Go: `signal.NotifyContext(ctx, syscall.SIGTERM, os.Interrupt)`, then `server.Shutdown`).\n- By name: `kill` itself takes PIDs (or job specs), but `pkill myapp`, `pkill -f \"pattern\"`, and `killall myapp` match by name; or `kill $(pgrep myapp)`.\n- Won't die: `kill -9 <PID>` = **SIGKILL** — cannot be caught or ignored; the kernel kills it immediately (no cleanup, no flushing, open transactions dropped). Use only after SIGTERM + a grace period (that's what Kubernetes does: SIGTERM, `terminationGracePeriodSeconds`, then SIGKILL).\n- Still alive after SIGKILL? It's either a **zombie** (`Z` state — already dead, waiting for its parent to `wait()`; kill/fix the parent) or in **uninterruptible sleep** (`D` state, stuck in kernel I/O, e.g. hung NFS) — only resolving the I/O or a reboot helps.\n- Other signals: `SIGINT` (Ctrl-C), `SIGHUP` (often reload config), `SIGQUIT` (Go dumps goroutine stacks).",
+  "level": 1,
+  "asked": [
+   "FrogStudio",
+   "Ozon"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-prometheus-metric-types",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What metric types exist in Prometheus (counter, gauge, histogram, summary)? Which of them only ever grow?",
+  "a": "- **Counter:** monotonically increasing value, reset to 0 on restart (requests_total, errors_total). Never use its raw value — query `rate()`/`increase()`, which handle resets.\n- **Gauge:** goes up and down (goroutines, memory in use, queue depth, temperature).\n- **Histogram:** observations counted into configurable **buckets** (`_bucket{le=\"0.1\"}`, plus `_sum` and `_count` — all counters). Quantiles computed server-side with `histogram_quantile()` and are **aggregatable** across instances. Native histograms (exponential buckets) remove manual bucket tuning.\n- **Summary:** client-side quantiles (`{quantile=\"0.99\"}`) + `_sum`/`_count`; precise per instance but **cannot be aggregated** across instances.\n\nSo the \"always-growing\" ones are counters and the `_count`/`_sum`/`_bucket` series of histograms and summaries — you analyze their growth rate, not their value.\n\nRule: prefer histograms for latency (aggregatable, SLO-friendly); summaries only for single-instance precise quantiles.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-promql-error-spike-alert",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "How would you write a PromQL alert for a sharp spike in errors?\nFollow-ups: what do you filter/aggregate metrics by, and how do you keep alert noise down?",
+  "a": "Alert on the **error ratio**, not raw counts, over a window:\n\n```text\nsum by (service) (rate(http_requests_total{status=~\"5..\"}[5m]))\n  /\nsum by (service) (rate(http_requests_total[5m]))\n  > 0.05\n```\n\nwith `for: 5m`, labels (`severity`), and annotations (summary, runbook link). For \"sharp spike\" relative to normal, compare to a baseline, e.g. current ratio > 3× the ratio `offset 1d`, or use SLO **multi-window burn-rate** alerts (e.g. 1h and 5m windows both burning 14.4× the error budget).\n\nFiltering: by **labels** — `service`/`job`, `instance`, `method`, `route` (template), `status`/`code`, `env`, `namespace`; with matchers `=`, `!=`, `=~`, `!~`, then aggregate with `sum by (…)`/`without (…)`.\n\nReducing noise:\n- Alert on user-facing symptoms (SLOs), not every cause (CPU 80%).\n- `for:` durations, minimum-traffic guards (`and sum(rate(...)) > 1`), hysteresis.\n- Alertmanager grouping, inhibition (don't page for downstream effects of a known outage), silences, routing by severity.\n- Delete alerts nobody acts on; every page needs a runbook.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "WMX"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-service-metrics-red-use",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What basic metrics should you collect for a service (e.g. each service in an orders/aggregator system)?",
+  "a": "Start with methodologies, not a random list:\n\n- **RED** for request-driven services (per endpoint/method): **Rate** (RPS), **Errors** (5xx/failed RPCs rate), **Duration** (latency histogram → p50/p95/p99).\n- **USE** for resources: **Utilization**, **Saturation**, **Errors** — CPU (and CPU throttling in k8s), memory, disk, network, **connection pools** (DB pool in-use/wait time), queue depth.\n- Google's **four golden signals:** latency, traffic, errors, saturation.\n\nService-specific:\n- Dependencies: latency/errors per downstream call (DB queries, external APIs, cache hit ratio), circuit-breaker state, retries.\n- Messaging: produce rate/errors, **consumer lag**, processing time, DLQ size.\n- Go runtime: goroutines, heap in-use, GC pause/CPU, GOMAXPROCS (`runtime/metrics`, `collectors.NewGoCollector`).\n- Business metrics: orders created, aggregator completeness (partial responses), payment success rate.\n\nGotchas: use histograms (not averages) for latency; keep label cardinality bounded (route template, not raw URL; never user_id).",
+  "level": 2,
+  "asked": [
+   "Tutu"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-syscalls",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What is a syscall, and what kinds of syscalls can you name?",
+  "a": "A system call is the controlled entry point from **user mode into the kernel** to request privileged operations — the process can't touch hardware, other processes' memory, or kernel structures directly. Mechanism on x86-64: the `syscall` instruction with the number in `rax`, args in registers; the CPU switches to kernel mode, runs the handler, returns. Costs ~100 ns+ (more with mitigations), hence batching and vDSO for things like `clock_gettime`.\n\nCategories:\n- **Process control:** `fork`/`clone`, `execve`, `exit`, `wait4`, `kill`.\n- **Files:** `open(at)`, `read`, `write`, `close`, `lseek`, `stat`, `fsync`, `mmap`.\n- **Networking:** `socket`, `bind`, `listen`, `accept4`, `connect`, `sendto`/`recvfrom`, `setsockopt`.\n- **I/O multiplexing:** `epoll_create/ctl/wait`, `poll`, `select`, `io_uring_*`.\n- **Memory:** `mmap`, `munmap`, `brk`, `madvise`.\n- **Synchronization/time/signals:** `futex`, `nanosleep`, `clock_gettime`, `rt_sigaction`.\n- **Info/control:** `getpid`, `ioctl`, `prctl`.\n\nObserve with `strace -f -c`. Go: the runtime wraps blocking syscalls — the M detaches from its P (handoff) so other goroutines keep running.",
+  "level": 2,
+  "asked": [
+   "CloudX",
+   "Digital Spirit"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-virtualization-vs-containers",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What's the difference between virtualization and containerization?",
+  "a": "- **Virtual machines:** a hypervisor (KVM, VMware, Hyper-V) emulates hardware; each VM runs its **own full kernel** and OS. Strong isolation, any OS, but heavier: GBs of image, seconds–minutes to boot, memory overhead per kernel.\n- **Containers:** processes on the **shared host kernel**, isolated by Linux **namespaces** (pid, net, mnt, uts, ipc, user, cgroup) and resource-limited by **cgroups**; plus capabilities, seccomp, and a layered filesystem (overlayfs) image. Start in milliseconds, MBs in size, high density.\n\nTrade-offs: containers' isolation is weaker — a kernel exploit escapes to the host, and you can't run a different kernel (Linux containers on macOS/Windows run inside a VM). VMs are the security boundary in multi-tenant clouds; sandboxes like gVisor, Kata Containers and Firecracker microVMs blend both.\n\nGo angle: static Go binaries make tiny `scratch`/distroless images; since Go 1.25 the runtime sets GOMAXPROCS from the container's cgroup CPU limit.",
+  "level": 1,
+  "asked": [
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 2
+ },
+ {
+  "id": "devops-behavioral-failure-handling",
+  "cat": "devops",
+  "kind": "behavioral",
+  "q": "How does your system behave during internal failures, e.g. when the event-ingestion service is unavailable?\nFollow-up: how do clients/devices react, and did you plan for it?",
+  "a": "What they're checking: whether you design for failure — timeouts, retries, buffering, degradation — and whether you actually thought about it before production did.\n\nStructure:\n1. **Map the failure:** which component fails, blast radius, what upstream/downstream sees.\n2. **Client/device side:** local buffering (disk queue on the device), retries with exponential backoff **and jitter** (avoid a thundering herd on recovery), idempotency keys so retries don't duplicate, max buffer and what is dropped first.\n3. **Server side:** multiple replicas behind an LB, health checks, a durable queue (Kafka) in front of processing so ingestion can accept writes even if processing is down, circuit breakers, rate limiting / load shedding (429 + `Retry-After`) during recovery, graceful degradation.\n4. **Detection and recovery:** alerts, runbooks, chaos/failure tests you ran.\n5. Concrete incident (STAR) and what you changed afterwards.\n\nPitfall: \"Kubernetes restarts it\" — that covers crashes, not overload, dependency failures or data loss during the outage.",
+  "level": 2,
+  "asked": [
+   "WMX"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-behavioral-load-testing-and-cloud",
+  "cat": "devops",
+  "kind": "behavioral",
+  "q": "Which cloud/hosting did you use, and have you done load testing or built a pipeline for it?",
+  "a": "What they're checking: operational maturity — whether you know where your code runs and how you proved it handles the expected load, not just unit tests.\n\nStructure:\n1. **Infra context:** cloud/hosting (AWS/GCP/Yandex Cloud/on-prem k8s), what you touched yourself (Terraform, Helm charts, managed DBs) vs what platform teams owned.\n2. **Load testing story (STAR):** goal (e.g. \"confirm 3k RPS at p99 < 200 ms before Black Friday\"), tool (k6, Gatling, vegeta, ghz for gRPC, Yandex Tank), environment (prod-like data volume), scenario (ramp-up, soak, spike), what you measured, the **bottleneck found** (DB pool size, missing index, GC pressure) and the fix, and whether it ran in CI (nightly job, threshold-based pass/fail).\n3. Lessons: test against realistic data, watch for coordinated omission, isolate from shared environments.\n\nPitfall: claiming load testing that was just `ab` against localhost with no conclusions — the value is in the bottleneck you found and fixed.",
+  "level": 1,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-behavioral-production-debugging",
+  "cat": "devops",
+  "kind": "behavioral",
+  "q": "How did you debug bugs in production?",
+  "a": "What they're checking: a systematic approach under pressure and familiarity with real tooling — not \"I added prints and redeployed\".\n\nStructure (use one real incident, STAR):\n1. **Stabilize first:** assess impact, roll back or feature-flag off if a recent deploy is suspect; mitigation before root cause.\n2. **Narrow down:** dashboards (RED, saturation) → traces for failing/slow requests → structured logs filtered by trace_id/request_id → error tracker (Sentry).\n3. **Reproduce:** capture the failing input, reproduce locally or in staging, write a failing test.\n4. **Deep tools when needed:** `pprof` (CPU/heap/goroutine dumps for leaks and deadlocks), `SIGQUIT` stack dump, `go tool trace`, DB `EXPLAIN ANALYZE`, `tcpdump`/`strace` for network/syscall issues.\n5. **Fix + regression test + postmortem** (blameless): what alert would have caught it earlier.\n\nPitfall: attaching a debugger to production or making ad-hoc changes on live pods without a record; also blaming \"the network\" without evidence.",
+  "level": 1,
+  "asked": [
+   "WMX"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-cicd-pipeline",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What happens in the stages of a CI/CD pipeline (e.g. GitLab CI)?",
+  "a": "Typical `.gitlab-ci.yml` stages, triggered on push/MR:\n\n1. **Lint/static checks:** `gofmt`, `go vet`, `golangci-lint`, `govulncheck`, secret scanning.\n2. **Test:** `go test -race -cover ./...`, integration tests with services (Postgres/Kafka via `services:` or testcontainers), coverage report as an artifact.\n3. **Build:** compile, build the Docker image (multi-stage, BuildKit cache), tag with commit SHA, push to the registry; SBOM/image scanning (Trivy).\n4. **Deploy to staging/review environments** automatically (Helm/Kustomize, `kubectl`, or GitOps by bumping an image tag in a manifests repo watched by Argo CD).\n5. **Post-deploy checks:** smoke/e2e tests, migrations (as a separate job, backward compatible).\n6. **Production deploy:** manual gate (`when: manual`) or automatic on tag/main, canary/rolling with automated rollback on metrics.\n\nMechanics: jobs run in runners (Docker/k8s executors), stages run sequentially and jobs in a stage in parallel (`needs:` for a DAG), caches (Go module/build cache) vs artifacts, protected variables for secrets, rules for branches/MRs.",
+  "level": 1,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-docker-volumes",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What are Docker volumes for, and have you used them?",
+  "a": "A container's writable layer is ephemeral — removed with the container — and slow (copy-on-write). **Volumes** persist data outside the container lifecycle.\n\nTypes:\n- **Named volumes** (`-v pgdata:/var/lib/postgresql/data`) — managed by Docker, the right choice for databases in dev/test.\n- **Bind mounts** (`-v $(pwd):/app`) — map a host path; used for live code reload, config files.\n- **tmpfs** mounts — in-memory, for secrets/scratch that must not hit disk.\n\nUses: database data, sharing files between containers, caches (e.g. Go module/build cache in CI), mounting config.\n\nGotchas: file ownership/UID mismatches with bind mounts (esp. non-root containers); `docker compose down -v` deletes named volumes; bind mounts on macOS are slow. In Kubernetes the equivalents are `emptyDir`, `ConfigMap`/`Secret` volumes, and PersistentVolumeClaims.\n\nBehavioral tip: give one concrete case (\"named volume for Postgres in our compose stack so local data survived restarts\").",
+  "level": 1,
+  "asked": [
+   "Kvando"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-dockerfile-add-vs-copy",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What's the difference between ADD and COPY in a Dockerfile? Which do you prefer?",
+  "a": "- `COPY` copies files/directories from the build context (or another stage with `--from`) into the image. Nothing more.\n- `ADD` does the same **plus**: auto-extracts local tar archives (gzip/bzip2/xz) into the destination, and can fetch **remote URLs** (and git repos in newer BuildKit), with `--checksum` support.\n\nPrefer **COPY**: it's explicit and predictable. `ADD`'s implicit behaviors surprise people (a `.tar.gz` you wanted to copy gets unpacked), and remote downloads bypass layer caching logic and integrity checks unless you pin a checksum. Use `ADD` only when you actually want local tar extraction or a checksummed remote fetch; otherwise `RUN curl … && sha256sum -c` or a dedicated stage is clearer. This matches Docker's own best-practices guide.",
+  "level": 1,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "devops-epoll",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What does the `epoll` syscall do?",
+  "a": "`epoll` is Linux's scalable **I/O readiness notification** mechanism: one thread can watch thousands of file descriptors (sockets) and learn which are ready to read/write.\n\nAPI:\n- `epoll_create1` → an epoll instance (itself an fd).\n- `epoll_ctl(ADD/MOD/DEL, fd, events)` registers interest (`EPOLLIN`, `EPOLLOUT`, `EPOLLET` edge-triggered, `EPOLLONESHOT`).\n- `epoll_wait` blocks until some registered fds are ready and returns **only the ready ones**.\n\nWhy it beats `select`/`poll`: those pass and scan the whole fd set every call — O(n); epoll keeps the interest set in the kernel and returns ready events in O(ready). No 1024-fd limit like `select`.\n\nLevel-triggered (default) reports while data remains; edge-triggered only on transitions — you must read until `EAGAIN`.\n\nGo: the runtime's **netpoller** is built on epoll (kqueue on BSD/macOS, IOCP on Windows). Sockets are non-blocking; when a goroutine's `Read` would block, it's parked and the fd registered; the scheduler/sysmon calls `epoll_wait` and wakes goroutines whose fds became ready. That's why goroutine-per-connection scales. nginx, Redis and Node use epoll directly; io_uring is the newer completion-based alternative.",
+  "level": 3,
+  "asked": [
+   "Digital Spirit"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-k8s-deployment-strategies",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What deployment strategies exist with Kubernetes, and how do you decide which environment/version gets the traffic?",
+  "a": "- **Recreate:** kill all old pods, start new ones — downtime; used when versions can't coexist.\n- **Rolling update** (Deployment default): replace pods gradually per `maxSurge`/`maxUnavailable`, gated by **readiness probes**. Both versions serve during rollout.\n- **Blue/green:** run the full new version alongside the old, switch the Service selector / LB in one step; instant rollback, double resources.\n- **Canary:** send a small share (1% → 10% → 100%) to the new version, watch metrics, promote or roll back — Argo Rollouts / Flagger automate this with analysis.\n- **A/B / shadow (mirroring):** route by user attributes or copy traffic to the new version without returning its responses.\n\nHow traffic is routed: plain Services balance by pod count (replicas ratio = crude canary). Precise splitting needs L7: Ingress controller annotations (nginx canary by weight/header/cookie), Gateway API `HTTPRoute` weights, or a service mesh (Istio `VirtualService`). Rules can use weights, headers (`X-Canary: true`), cookies, or user segments.\n\nGotchas: DB schema changes must be backward compatible (expand/contract) because old and new code run together; watch session stickiness and long-lived connections during switches.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "devops-k8s-readiness-liveness",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What are readiness and liveness probes in Kubernetes?",
+  "a": "- **Liveness probe:** \"is the process healthy or stuck?\" If it fails `failureThreshold` times, kubelet **restarts the container**. For deadlocks/unrecoverable states.\n- **Readiness probe:** \"can it serve traffic right now?\" If it fails, the pod is **removed from Service endpoints** (no restart). Used during startup warm-up, when a critical dependency is down, or during graceful shutdown.\n- **Startup probe:** disables liveness/readiness until the app has started — for slow starters, so liveness doesn't kill them mid-boot.\n\nProbe types: HTTP GET, TCP socket, exec, gRPC.\n\nGotchas:\n- **Don't check dependencies in liveness** (e.g. DB ping): a DB outage then restarts every pod in a loop, making things worse. Liveness should check only the process itself.\n- Be careful even in readiness: if all pods fail readiness because of a shared dependency, you have zero endpoints; sometimes degraded serving is better.\n- On shutdown: handle SIGTERM, fail readiness, keep serving in-flight requests, then `http.Server.Shutdown` (a `preStop` sleep covers endpoint propagation delay).",
+  "level": 1,
+  "asked": [
+   "MascotGames"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-linux-grep",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "Which Linux command finds a string inside a file?",
+  "a": "`grep`:\n\n```text\ngrep \"timeout\" app.log            # lines containing the string\ngrep -n -i \"error\" app.log        # with line numbers, case-insensitive\ngrep -r \"TODO\" ./internal         # recursive over a directory\ngrep -v \"healthz\" access.log      # invert: lines NOT matching\ngrep -E \"5[0-9]{2} \" access.log   # extended regex\ngrep -C 3 \"panic\" app.log         # 3 lines of context around matches\ngrep -c \"error\" app.log           # count matches\nzgrep \"error\" app.log.gz          # compressed files\n```\n\nAlso useful: `ripgrep` (`rg`) — much faster, respects `.gitignore`; `less` + `/pattern` for interactive search; `tail -f app.log | grep error` for live logs; `awk`/`sed` for extracting fields once found.",
+  "level": 1,
+  "asked": [
+   "SpaceIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-os-sync-primitives",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What OS-level synchronization primitives do you know?",
+  "a": "- **Mutex** — mutual exclusion, one owner; Linux implements it on top of **futex** (fast userspace mutex: uncontended path is a single atomic op, the syscall only happens on contention).\n- **Semaphore** — counter of permits (counting/binary); POSIX `sem_*`, can work across processes.\n- **Read-write lock** — many readers or one writer.\n- **Condition variable** — wait for a predicate with a mutex, signal/broadcast.\n- **Spinlock** — busy-wait; for very short critical sections in kernels.\n- **Barrier** — wait until N threads arrive.\n- **Atomic operations** (CAS, fetch-add) and memory barriers — the foundation of everything above and lock-free structures.\n- Inter-process: file locks (`flock`, `fcntl`), shared-memory semaphores, eventfd.\n\nGo equivalents: `sync.Mutex`/`RWMutex` (userspace spin + runtime semaphores parking goroutines, not threads), `sync.Cond`, `sync.WaitGroup`, `sync.Once`, `sync/atomic`, buffered channels as semaphores, `golang.org/x/sync/semaphore`. Pitfalls across all of them: deadlocks (lock ordering), priority inversion, contention.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit"
+  ],
+  "n": 1
+ },
+ {
+  "id": "devops-sidecar-container",
+  "cat": "devops",
+  "kind": "theory",
+  "q": "What is a sidecar container, and what is it for?",
+  "a": "A **sidecar** is a helper container running in the **same Pod** as the main application container, sharing its network namespace (localhost), volumes and lifecycle, to add functionality without changing the app.\n\nTypical uses:\n- **Service mesh proxy** (Envoy in Istio, Linkerd proxy): mTLS, retries, traffic splitting, telemetry.\n- Log shipping (Fluent Bit tailing a shared volume), metrics exporters, OTel Collector agent.\n- Secret/config fetchers and refreshers (Vault agent), auth proxies (oauth2-proxy), Cloud SQL proxy.\n\nSince Kubernetes 1.29+ (stable in 1.33) there are **native sidecars**: an `initContainer` with `restartPolicy: Always` — starts before the app, stays running, and is stopped after it, fixing old ordering problems (e.g. Jobs never finishing because the sidecar kept running, app starting before the proxy was ready).\n\nTrade-offs: extra CPU/memory per pod, added latency hop, more complex debugging; eBPF-based / ambient meshes reduce the need for per-pod proxies.",
+  "level": 1,
+  "asked": [
+   "SpaceIT"
+  ],
+  "n": 1
+ }
+]

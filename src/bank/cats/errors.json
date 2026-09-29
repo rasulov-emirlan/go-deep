@@ -1,0 +1,64 @@
+[
+ {
+  "id": "errors-error-handling-basics",
+  "cat": "errors",
+  "kind": "theory",
+  "q": "How do errors work in Go, and what's the idiomatic way to handle them?",
+  "a": "`error` is a built-in interface `interface{ Error() string }`. Errors are **values returned explicitly**, conventionally as the last result; there are no exceptions for expected failures.\n\nIdioms:\n- Check immediately: `if err != nil { return ..., fmt.Errorf(\"load config %s: %w\", path, err) }`. Handle or return — don't do both (log once, at the top).\n- **Wrap with context** using `%w`, then inspect with `errors.Is` (sentinel match through the chain) and `errors.As` (typed error extraction). `errors.Join` / multiple `%w` combine errors (Go 1.20+).\n- **Sentinel errors** (`var ErrNotFound = errors.New(\"not found\")`) for conditions callers branch on; **custom types** when you need data (`*ValidationError{Field}`).\n- Error strings: lowercase, no trailing punctuation.\n- Return a plain `nil`, never a typed nil pointer, as `error`.\n- `panic` only for programmer bugs / impossible states; `recover` at goroutine or request boundaries (HTTP servers do this).\n- Don't ignore errors silently (`errcheck` linter); if you intentionally ignore, `_ =` with a reason.\n\nGotcha: comparing with `==` breaks once someone wraps the error — use `errors.Is`.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Sovkombank"
+  ],
+  "n": 2
+ },
+ {
+  "id": "errors-custom-error-no-packages",
+  "cat": "errors",
+  "kind": "code",
+  "q": "Write `handle() error` that returns a custom error without importing any packages.",
+  "code": "package main\n\nfunc main() {\n\tprintln(handle())\n}\n\nfunc handle() error {\n\t// implement\n}",
+  "a": "Any type with an `Error() string` method satisfies the built-in `error` interface, so no `errors`/`fmt` import is needed:\n\n```go\npackage main\n\ntype myError string\n\nfunc (e myError) Error() string { return string(e) }\n\nfunc main() {\n\tprintln(handle().Error())\n}\n\nfunc handle() error {\n\treturn myError(\"went wrong\")\n}\n```\n\nNotes:\n- A string-based type also allows compile-time constants: `const ErrBad = myError(\"bad\")`.\n- The built-in `println(handle())` (as in the original stub) prints the **interface's two words** like `(0x4a1b20,0x4c3f10)`, not the message — call `.Error()`.\n- A struct type (`type myErr struct{ code int }`) works the same way when you need extra fields.",
+  "level": 1,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "errors-custom-errors",
+  "cat": "errors",
+  "kind": "theory",
+  "q": "What are all the ways to create your own custom errors?",
+  "a": "- `errors.New(\"msg\")` — simple sentinel values: `var ErrNotFound = errors.New(\"not found\")`.\n- `fmt.Errorf(\"...: %v\", x)` — formatted message; with **`%w`** it wraps another error (several `%w` allowed since 1.20).\n- **Custom type** implementing `Error() string`, carrying data:\n```go\ntype ValidationError struct {\n    Field string\n    Err   error\n}\nfunc (e *ValidationError) Error() string { return e.Field + \": \" + e.Err.Error() }\nfunc (e *ValidationError) Unwrap() error { return e.Err }\n```\n  Callers use `errors.As(err, &ve)`.\n- A **string-based type**: `type constErr string; func (e constErr) Error() string { return string(e) }` — allows true `const` sentinels.\n- `errors.Join(errs...)` — combine several errors.\n- Optional methods to customize behavior: `Unwrap() error` / `Unwrap() []error`, `Is(target error) bool`, `As(any) bool`.\n- Third-party helpers (`pkg/errors` stack traces — largely superseded by stdlib wrapping).\n\nGotcha: return the custom type as `error`, not `*ValidationError`, to avoid the typed-nil trap.",
+  "level": 1,
+  "asked": [
+   "Sovkombank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "errors-review-cache-service",
+  "cat": "errors",
+  "kind": "code",
+  "q": "Review this Service that fetches products cache-first. What issues do you spot?",
+  "a": "Issues:\n- **Doesn't compile**: `product, err := s.db.GetProduct(...)` redeclares both variables in the same scope (`no new variables on left side of :=`); use `=`.\n- **Any cache error, including a miss, returns an error** — the DB fallback is unreachable when the cache reports a miss via error. A cache outage takes the whole endpoint down. Check `errors.Is(err, cache.ErrMiss)`; log other cache errors and fall through to the DB.\n- Result from DB is **never put back into the cache**.\n- Context ignored: parameter named `_`, then `context.Background()` for the DB call — no cancellation/deadline propagation. Use the caller's `ctx` everywhere (also for the cache).\n- `CreateProduct` has a **value receiver** while the others use pointer receivers — inconsistent (copies the struct, method set differs); use `*Service`.\n- Doc comment says \"Update\" for `CreateProduct`; comments must start with the name and be accurate.\n- `if err != nil { return err }; return nil` → just `return err`; created ID is discarded.\n- Cache should be invalidated/updated on create/update; consider `singleflight` for hot misses.\n\nFixed `GetProduct`:\n```go\nfunc (s *Service) GetProduct(ctx context.Context, id int64) (*Product, error) {\n    p, err := s.cache.GetProduct(ctx, id)\n    switch {\n    case err == nil && p != nil:\n        return p, nil\n    case err != nil && !errors.Is(err, ErrCacheMiss):\n        s.logger.WarnContext(ctx, \"cache get failed\", \"id\", id, \"err\", err)\n    }\n\n    p, err = s.db.GetProduct(ctx, id)\n    if err != nil {\n        return nil, err\n    }\n    if err := s.cache.SetProduct(ctx, p); err != nil {\n        s.logger.WarnContext(ctx, \"cache set failed\", \"id\", id, \"err\", err)\n    }\n    return p, nil\n}\n```",
+  "level": 2,
+  "asked": [
+   "ViTech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "errors-wrapping",
+  "cat": "errors",
+  "kind": "theory",
+  "q": "A function returns an error — how do you wrap or enrich it?",
+  "a": "Wrap with `fmt.Errorf` and the **`%w`** verb, adding context about what you were doing:\n\n```go\nu, err := repo.GetUser(ctx, id)\nif err != nil {\n    return nil, fmt.Errorf(\"get user %d: %w\", id, err)\n}\n```\n\nThe result keeps the original in its chain, so callers can still check it:\n```go\nif errors.Is(err, sql.ErrNoRows) { ... }        // sentinel anywhere in the chain\nvar pgErr *pgconn.PgError\nif errors.As(err, &pgErr) { ... }               // typed error in the chain\n```\n\nOther options:\n- A custom error type with an `Unwrap() error` method to attach structured data (codes, fields).\n- Multiple causes: `fmt.Errorf(\"%w; %w\", a, b)` or `errors.Join` (1.20+).\n- `%v` instead of `%w` when you intentionally **hide** the cause from callers (don't leak implementation details like DB errors across an API boundary).\n\nStyle: short lowercase context, no \"failed to\" chains everywhere, don't duplicate info already in the inner error.",
+  "level": 1,
+  "asked": [
+   "RSHB"
+  ],
+  "n": 1
+ }
+]

@@ -1,0 +1,224 @@
+[
+ {
+  "id": "maps-internals",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "How is a map implemented in Go, and how is it stored in memory?\nFollow-ups: how does it differ from a slice and what is it used for? Why isn't it concurrency-safe?",
+  "a": "A map is a **hash table** of key→value pairs, used for O(1) average lookup by key: indexes, caches, sets (`map[T]struct{}`), grouping and counting. Unlike a slice (an ordered, index-addressed sequence), a map is unordered and addressed by any comparable key. A map value is a **pointer** to a runtime structure, so passing a map is cheap and the callee's changes are visible to the caller.\n\n**Go 1.24+ (Swiss tables):** the map holds a *directory* of tables (up to 1024 slots each). Each table is an array of **groups** of 8 slots plus an 8-byte **control word** (one byte per slot: empty, deleted, or the 7-bit H2 part of the hash). Lookup uses the hash's upper bits (H1) to pick the table and starting group, compares H2 against all 8 control bytes at once (bit tricks/SIMD), then checks the full key. Collisions use **open addressing** with quadratic probing across groups. Max load is 7/8. Tables grow and split independently, so no single write copies the whole map. Small maps (≤ 8 entries) are a single group.\n\n**Before 1.24 (`hmap`):** `2^B` buckets of 8 key/value pairs with a `tophash` array, **overflow buckets** chained on collision, load factor 6.5, and incremental evacuation when growing.\n\nBoth use a per-map random hash seed (hardware AES-based hashing where available), which protects against hash-flooding.\n\n**Not concurrency-safe** by design: locking every access would slow the common single-goroutine case. The runtime detects concurrent writes on a best-effort basis and aborts with a fatal error. Use a mutex or `sync.Map`.",
+  "level": 2,
+  "asked": [
+   "Crtex",
+   "Plata",
+   "RSHB",
+   "RealIT",
+   "Sovkombank",
+   "VseInstrumenty",
+   "WMX",
+   "X5 Group"
+  ],
+  "n": 9
+ },
+ {
+  "id": "maps-complexity",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "What's the time complexity of map access, why is it considered O(1), and when could it degrade to O(n)?",
+  "a": "**Average O(1)** for lookup, insert and delete. **Worst case O(n)** in theory (every key in one probe chain), but practically unreachable in Go.\n\nWhy O(1):\n- the hash of the key directly determines where to look (bucket/group index = bits of the hash), so there's no search over all elements;\n- the table grows when the load factor is exceeded (6.5 per bucket in old maps, 7/8 of slots in Swiss tables), so the expected number of probes stays constant;\n- inside a bucket/group, a 1-byte hash fragment (tophash / H2) filters candidates before comparing full keys.\n\nWhy it almost never becomes O(n):\n- a **random per-map seed** plus a strong hash (AES-based where available) means an attacker can't craft colliding keys (hash flooding);\n- the load factor is bounded, so chains/probe sequences stay short;\n- Swiss tables split tables at 1024 slots.\n\nReal costs: hashing is O(len(key)) for strings, and a single insert that triggers growth is more expensive (amortized O(1)). The minimum is one hash plus one probe; the maximum is a long probe sequence, bounded by table size.",
+  "level": 2,
+  "asked": [
+   "EyesOfWonder",
+   "Plata"
+  ],
+  "n": 4
+ },
+ {
+  "id": "maps-concurrent-access",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "Is a map thread-safe? What happens if several goroutines access it concurrently, and how do you fix it?",
+  "a": "**No.** Concurrent reads are fine, but a write concurrent with any other read or write is a data race.\n\nWhat happens: the map sets a \"writing\" flag during writes. If another goroutine sees it, the runtime aborts the whole process with `fatal error: concurrent map writes` (or `concurrent map read and map write`). This is a **fatal error**, not a panic, so `recover` can't catch it. The detection is best-effort; undetected races can corrupt the map silently. `go test -race` finds them reliably.\n\n**Why no built-in locking:** most maps are used by one goroutine; a mutex on every access would slow everyone down, and callers often need to lock over a larger operation anyway (check-then-set).\n\nFixes:\n- **`sync.RWMutex` + map** (or `Mutex`): the default choice, simple and fast, and supports compound operations;\n- **`sync.Map`**: for read-mostly keys written once, or goroutines touching disjoint keys. Since Go 1.24 it's backed by a concurrent hash-trie and scales better. It's untyped (`any`), so wrap it generically;\n- **sharding**: N maps each with its own mutex, keyed by hash, to reduce contention;\n- **ownership**: one goroutine owns the map, and others talk to it via channels.\n\nGotcha: `RLock` isn't enough for check-then-insert; take the write lock or use `LoadOrStore`.",
+  "level": 2,
+  "asked": [
+   "Plata",
+   "Sovkombank",
+   "VseInstrumenty",
+   "WMX"
+  ],
+  "n": 4
+ },
+ {
+  "id": "maps-collisions",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "When does a hash collision happen in a Go map and how is it resolved?\nFollow-ups: what is an overflow bucket? How does probing work?",
+  "a": "A **collision** is when different keys land in the same bucket/group. That happens constantly by design (the bucket index uses only a few bits of the hash), not just when full hashes are equal.\n\n**Old implementation (≤1.23): chaining within buckets**\n- each bucket has 8 slots, and colliding keys fill the free slots of the same bucket;\n- when all 8 are taken, a new **overflow bucket** is allocated and linked from the bucket's `overflow` pointer, forming a chain;\n- a lookup scans `tophash` bytes in the bucket, then follows the chain. Long chains trigger a same-size grow to repack.\n\n**Go 1.24+ Swiss tables: open addressing with probing**\n- a key's H1 hash picks a home **group** of 8 slots; if the key isn't in that group and the group has no empty slot, the lookup **probes** the next group in a **quadratic** sequence (1, 3, 6, 10… groups away), which covers the whole power-of-two table;\n- the probe stops at the first group containing an **empty** slot, meaning the key is absent;\n- deletions leave **tombstones** (\"deleted\" markers) when needed so probe chains aren't broken; they're cleaned up by rehash.\n\nIn both schemes the 7–8 bit hash fragment (tophash/H2) filters most non-matching slots before an expensive full key comparison.\n\nIteration: the map iterator starts at a random group and slot offset and walks tables and groups in order, which is where the random order comes from.",
+  "level": 2,
+  "asked": [
+   "Plata",
+   "Tehzor",
+   "WMX"
+  ],
+  "n": 3
+ },
+ {
+  "id": "maps-key-lookup-steps",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "How do you check whether a key exists in a map, and step by step, what happens inside during the lookup?\nFollow-up: how is the bucket for a key found?",
+  "a": "**In code:** the comma-ok form, since a plain `m[k]` returns the zero value for missing keys:\n```go\nv, ok := m[k]\nif !ok { /* absent */ }\n```\n\n**Inside (Go 1.24+ Swiss tables):**\n1. Compute `hash(key, seed)` with the type's hash function and the map's random seed.\n2. The top bits select the **table** from the directory; H1 (upper 57 bits) selects the starting **group** in that table.\n3. Compare H2 (lower 7 bits) against the group's 8 control bytes in parallel, giving a bitmask of candidate slots.\n4. For each candidate, compare the full key with `==`. On a match, return the value.\n5. If the group has an **empty** slot, the key doesn't exist: stop and return the zero value with `ok=false`. Otherwise probe the next group (quadratic sequence) and repeat.\n\n**Old implementation (≤1.23):**\n1. Hash the key; the low `B` bits give the bucket index (`hash & (2^B-1)`), and the top 8 bits give `tophash`.\n2. If the map is growing and that old bucket isn't evacuated yet, look in the old bucket.\n3. Scan the bucket's 8 `tophash` bytes; on a match, compare the full key.\n4. Follow the overflow bucket chain until found or the chain ends.\n\nGotcha: a missing key in a nil map also returns zero with `ok=false`. Reading is safe; only writing panics.",
+  "level": 3,
+  "asked": [
+   "EyesOfWonder",
+   "RSHB"
+  ],
+  "n": 3
+ },
+ {
+  "id": "maps-key-types",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "What types can be map keys? Can a struct be a key? What if you use a non-comparable key like a slice?",
+  "a": "Keys must be **comparable** (support `==`):\n- booleans, all numeric types, strings, pointers, channels;\n- interfaces (compared by dynamic type and value);\n- **arrays** of comparable types;\n- **structs** whose fields are all comparable. So yes, a struct is a great composite key: `map[struct{ UserID int64; Day string }]int`.\n\n**Not allowed:** slices, maps, functions, and structs/arrays containing them. Declaring `map[[]int]string` is a **compile error**: `invalid map key type []int`.\n\nRuntime trap: with interface keys (`map[any]V`), putting a non-comparable dynamic value in the map **panics** at runtime: `runtime error: hash of unhashable type []int`.\n\nOther gotchas:\n- `NaN` float keys: `NaN != NaN`, so every insert creates a new entry you can never look up (only `clear` or iteration reaches them);\n- `+0.0` and `-0.0` are the same key;\n- pointer keys compare by address, not by the pointed-to content;\n- for a slice-like key, use an array (`[16]byte`) or build a string (`strings.Join`, `fmt.Sprint`).\n\nGenerics: the constraint for map keys is `comparable`.",
+  "level": 1,
+  "asked": [
+   "Plata",
+   "Sarafan"
+  ],
+  "n": 3
+ },
+ {
+  "id": "maps-fmt-print-sorted",
+  "cat": "maps",
+  "kind": "output",
+  "q": "What does printing a map with `fmt.Println` output? Is the order guaranteed?",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tm := make(map[string]string)\n\tm[\"name\"] = \"Alice\"\n\tfmt.Println(m)\n\n\tn := map[string]int{\"c\": 3, \"a\": 1, \"b\": 2}\n\tfmt.Println(n)\n}\n",
+  "a": "```text\nmap[name:Alice]\nmap[a:1 b:2 c:3]\n```\n`fmt` prints maps as `map[key:value ...]`, and since **Go 1.12 it sorts the keys** (via `internal/fmtsort`), so printing is deterministic even though map iteration isn't. Numbers sort numerically, strings lexicographically, and interface keys first by type, then by value. NaN keys come first.\n\nThat's why `fmt.Println(m)` looks ordered while `for k, v := range m` in the same program prints in random order. The map itself is unordered; `fmt` does the sorting. It also makes map output stable in tests and logs.\n\nGotcha: `encoding/json` also sorts map keys when marshaling, but other encoders and your own `range` loops don't.",
+  "level": 1,
+  "asked": [
+   "Basis"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "maps-group-by-key",
+  "cat": "maps",
+  "kind": "code",
+  "q": "Group items by a key into a `map[K][]V`.\nE.g. group product reviews by star rating, or group sales (`Good`, `City`) into city → list of goods.",
+  "a": "One pass: `append` to the slice under the key. Appending to a missing key works, because `m[k]` returns a nil slice and `append` allocates.\n\n```go\ntype Review struct {\n\tText   string\n\tRating int\n}\n\nfunc GroupReviews(reviews []Review) map[int][]string {\n\tout := make(map[int][]string, 5)\n\tfor _, r := range reviews {\n\t\tout[r.Rating] = append(out[r.Rating], r.Text)\n\t}\n\treturn out\n}\n\ntype Sale struct {\n\tGood string\n\tCity string\n}\n\nfunc GroupBy[T any, K comparable, V any](items []T, key func(T) K, val func(T) V) map[K][]V {\n\tout := make(map[K][]V)\n\tfor _, it := range items {\n\t\tk := key(it)\n\t\tout[k] = append(out[k], val(it))\n\t}\n\treturn out\n}\n\nfunc GroupSales(sales []Sale) map[string][]string {\n\treturn GroupBy(sales,\n\t\tfunc(s Sale) string { return s.City },\n\t\tfunc(s Sale) string { return s.Good })\n}\n```\nOutput: `map[1:[Bad Disliked] 3:[Meh] 4:[Good] 5:[Great As described]]`, `map[Kazan:[Item2] Moscow:[Item1 Item3]]`.\n\nComplexity: O(n) time, O(n) memory. Order *within* each group follows the input order; the order of keys when ranging is random.\n\nFollow-ups:\n- the reference snippet did `return cities` from `main`, which doesn't compile. Put the logic in a function;\n- need ordered output (ratings 5 to 1)? Iterate `slices.Sorted(maps.Keys(m))`, or since the rating domain is 1..5, use `[6][]string` instead of a map;\n- missing ratings (2 here) are simply absent keys.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "maps-iteration-order",
+  "cat": "maps",
+  "kind": "output",
+  "q": "What does a loop that ranges over a map and prints its elements output? Is the order guaranteed?",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tm := map[string]int{\"a\": 1, \"b\": 2, \"c\": 3, \"d\": 4, \"e\": 5}\n\tfor k, v := range m {\n\t\tfmt.Print(k, \"=\", v, \" \")\n\t}\n\tfmt.Println()\n}\n",
+  "a": "**Not deterministic.** Five runs of the same binary (Go 1.26):\n```text\na=1 b=2 c=3 d=4 e=5\nb=2 c=3 d=4 e=5 a=1\nd=4 e=5 a=1 b=2 c=3\na=1 b=2 c=3 d=4 e=5\ne=5 a=1 b=2 c=3 d=4\n```\nThe spec says map iteration order is unspecified. The runtime deliberately **randomizes** the starting point of every `range` (random table/group/slot offset), so programs can't come to depend on an order that would change across Go versions or map sizes.\n\nNotice that for this small map (≤ 8 entries, a single Swiss-table group) the output is a **rotation** of the same sequence; for larger maps the order is much more scrambled. Don't rely on either.\n\nNeed an order? Collect and sort the keys:\n```go\nfor _, k := range slices.Sorted(maps.Keys(m)) { // Go 1.23+\n\tfmt.Println(k, m[k])\n}\n```\nOr keep a separate slice for insertion order.\n\nAlso: `fmt.Println(m)` *does* print in sorted key order, since `fmt` sorts keys for printing (Go 1.12+). That doesn't mean the map is ordered. Deleting or adding during `range` is allowed, but whether newly added entries are visited is unspecified.",
+  "level": 1,
+  "asked": [
+   "Astra"
+  ],
+  "n": 2
+ },
+ {
+  "id": "maps-nil-map",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "What happens if you read from, write to, or range over a nil (uninitialized) map? Can you access an empty map?",
+  "a": "`var m map[string]int` is **nil**.\n\n- **Read** `m[\"k\"]` is fine and returns the zero value (`ok == false` with comma-ok);\n- `len(m)` is 0, `range m` does zero iterations, `delete(m, k)` and `clear(m)` do nothing;\n- **write** `m[\"k\"] = 1` **panics**: `assignment to entry in nil map`.\n\nAn **empty** map created with `make(map[string]int)` or `map[string]int{}` is fully usable for reads and writes.\n\nWhy: a nil map has no allocated table to store entries in, while reads can safely return zero.\n\nTypical bugs:\n- a struct with a map field used without a constructor: `type Cache struct{ m map[string]T }`, then `c.m[k] = v` panics. Initialize in `NewCache` or lazily (`if c.m == nil { c.m = make(...) }`);\n- `json.Unmarshal` into a struct allocates maps for you, but zero-value structs don't have them.\n\nNil maps are handy as read-only empty defaults and in tests.",
+  "level": 1,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "maps-delete-memory",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "A map holds 1 million entries and you `delete` all of them. Is the memory freed?",
+  "a": "**No.** Go maps **never shrink**. `delete` marks slots as empty or deleted and clears the key/value (so objects referenced *from* them can be collected), but the bucket/group arrays stay allocated with the same capacity. `len(m)` is 0, yet the map still holds tens of MB. `clear(m)` (Go 1.21) behaves the same way: it empties the map but keeps its storage.\n\nThis is true for both the old bucket map and the Go 1.24 Swiss tables.\n\nHow to actually free it:\n- let the map become unreachable, e.g. `m = make(map[K]V)` (or `m = nil`), and the GC reclaims the old one;\n- periodically **rebuild**: copy live entries into a fresh map sized for them, useful for long-lived caches with churn;\n- store pointers or small values instead of large inline values, so deleted entries cost less;\n- for caches, use a bounded structure (LRU with eviction) instead of an ever-growing map.\n\nGotcha: this shows up as a slow \"memory leak\" in long-running services where a map once spiked (a burst of sessions) and later shrank logically but not physically. Check `inuse_space` in a heap profile.",
+  "level": 2,
+  "asked": [
+   "InDrive"
+  ],
+  "n": 1
+ },
+ {
+  "id": "maps-growth-evacuation",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "When does a map grow, and what is bucket evacuation?",
+  "a": "**Old implementation (≤ Go 1.23)** had two triggers on insert:\n1. **Load factor > 6.5** (average entries per bucket): double the buckets (`B+1`).\n2. **Too many overflow buckets** (≈ as many as regular buckets, typically after lots of deletes): a **same-size grow** that repacks entries to remove overflow chains.\n\nGrowth is **incremental**: a new bucket array is allocated, the old one is kept, and each subsequent write or delete **evacuates** 1–2 old buckets into the new array (each entry goes to bucket `i` or `i + 2^B` depending on the next hash bit). Lookups during growth check the old bucket if it isn't evacuated yet, and iterators handle the mixed state. This spreads the O(n) rehash cost across operations to avoid latency spikes.\n\n**Go 1.24+ (Swiss tables):** there are no overflow buckets and no evacuation in that sense. When a table exceeds its load factor (7/8, counting tombstones), it either **rehashes into a table twice as large** (up to 1024 slots) or, at max size, **splits into two tables** and the directory doubles. Only one table (≤1024 slots) is copied at a time, which bounds the per-insert cost. Tables full of tombstones may be rehashed in place.\n\nMaps never shrink in either implementation.",
+  "level": 3,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1
+ },
+ {
+  "id": "maps-make-and-buckets",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "What does `make` do when creating a map, and how many buckets are created?",
+  "a": "`make(map[K]V, hint)` allocates the runtime map header and, depending on `hint`, the storage. The hint is a size estimate for preallocation, not a limit.\n\n**Go 1.24+ (Swiss tables):**\n- no hint or `hint ≤ 8`: a **small map**, one group of 8 slots, allocated lazily on the first insert when there's no hint;\n- larger hint: enough capacity so `hint` elements fit under the 7/8 load factor, rounded up to a power of two, split into tables of at most 1024 slots, with the directory sized to match.\n\n**Before 1.24:**\n- `hint ≤ 8` gives **`B = 0`, 1 bucket** (8 slots), and with `make(map)` without a hint the bucket is allocated lazily on the first write;\n- otherwise the smallest `B` such that `hint ≤ 6.5 × 2^B`. E.g. `make(map[int]int, 100)` gives B = 4, **16 buckets** (6.5 × 16 = 104 ≥ 100). For large B, some overflow buckets are preallocated too.\n\nWhy pass a hint: it avoids repeated growth and rehashing while filling a map whose size you know (e.g. building an index from a slice: `make(map[K]V, len(items))`).\n\nGotcha: unlike slices, `len(m)` starts at 0 regardless of the hint, and there's no `cap()` for maps.",
+  "level": 3,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "maps-mixed-type-keys",
+  "cat": "maps",
+  "kind": "output",
+  "q": "Python's `d = {1: 1, True: 2, 1.0: 3}; print(d)` prints `{1: 3}`. What does the Go equivalent with `map[any]int` print?",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tm := map[any]int{1: 1, true: 2, 1.0: 3}\n\tfmt.Println(len(m), m)\n\n\tf := map[float64]int{}\n\tf[1] = 1\n\tf[1.0] = 3\n\tfmt.Println(len(f), f)\n}\n",
+  "a": "```text\n3 map[1:1 1:3 true:2]\n1 map[1:3]\n```\n**Python** (checked with python3): `{1: 3}`. `1`, `True` and `1.0` are **equal and hash the same** (`bool` is a subclass of `int`, and `1 == 1.0`), so they're one key. The dict keeps the **first key object** (`1`) and the **last value** (`3`).\n\n**Go** is stricter. An `any` key compares the **dynamic type and value**: `int(1)`, `bool(true)` and `float64(1)` are different types, so they're three distinct keys, and `len == 3`. (`fmt` prints interface keys grouped by type, so the two `1` keys appear side by side.) There's no implicit numeric equality across types, and `bool` isn't a number.\n\nWith a concrete key type the untyped constants convert to it: in `map[float64]int`, `1` and `1.0` are the same `float64` key, so the second write overwrites the first. In a *literal*, `map[float64]int{1: 1, 1.0: 3}` is even a **compile error** (`duplicate key 1 in map literal`).\n\nTakeaway: map keys are equal only when `==` says so, and for interfaces that includes the type.",
+  "level": 3,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "maps-real-world-usage",
+  "cat": "maps",
+  "kind": "behavioral",
+  "q": "Where have you used maps in your own code?",
+  "a": "They check practical fluency, then usually pivot into map internals and concurrency.\n\nTypical uses: lookup/index by ID (`map[int64]*User`), sets (`map[string]struct{}`), deduplication, grouping/aggregation (`map[string][]Order`), counting, in-memory caches, routing tables, dispatch by type (`map[string]HandlerFunc`).\n\nMention the practical gotchas you've dealt with:\n- maps are **not safe for concurrent writes** — use `sync.Mutex`/`RWMutex`, sharding, or `sync.Map` for read-mostly/disjoint-key workloads;\n- writing to a nil map panics;\n- iteration order is random;\n- preallocate with `make(map[K]V, n)` when the size is known;\n- maps never shrink their buckets, so long-lived caches need eviction or rebuilding. Go 1.24 moved maps to Swiss tables, but the semantics are unchanged.",
+  "level": 1,
+  "asked": [
+   "Amtech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "maps-swiss-tables",
+  "cat": "maps",
+  "kind": "theory",
+  "q": "What problem does the Swiss-table map implementation (Go 1.24) solve compared to the old one?",
+  "a": "The old map (buckets of 8 + chained overflow buckets, load factor 6.5) had several costs:\n- **pointer chasing through overflow buckets** on collision-heavy or large maps meant cache misses;\n- relatively **low memory density** (overflow buckets, tophash per bucket, max load 6.5/8 ≈ 81%);\n- growth doubled the whole bucket array with **incremental evacuation**, which made every operation during growth pay extra and complicated iteration.\n\nSwiss tables (from Abseil, adapted for Go):\n- **open addressing** in groups of 8 slots with a **control word**. One comparison of the 7-bit hash fragment (H2) against 8 control bytes finds candidates in parallel, so almost all misses are rejected without touching keys;\n- **higher load factor** (7/8) and no overflow buckets, so less memory and better cache locality;\n- growth is split: the map is a directory of tables of ≤1024 slots, each growing or **splitting independently** (extendible hashing). That bounds the tail latency of a single insert without old-style incremental evacuation;\n- iteration semantics (random order, safe modification during iteration) are preserved.\n\nResult: roughly 20–60% faster lookups/inserts in microbenchmarks, a few percent CPU saved in real programs, and lower memory for large maps. It's transparent to code; `GOEXPERIMENT=noswissmap` turned it off in 1.24.",
+  "level": 3,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "maps-value-not-addressable",
+  "cat": "maps",
+  "kind": "output",
+  "q": "What happens with this code, which takes the address of a map value directly?",
+  "code": "package main\n\nimport \"fmt\"\n\ntype Animal struct {\n\tName string\n}\n\nfunc PrintAnimalName(a *Animal) {\n\tfmt.Println(a.Name)\n}\n\nfunc main() {\n\tmyMap := make(map[string]Animal)\n\tmyMap[\"dog\"] = Animal{Name: \"Rex\"}\n\tPrintAnimalName(&myMap[\"dog\"])\n}\n",
+  "a": "```text\n./main.go:16:19: invalid operation: cannot take address of myMap[\"dog\"] (map index expression of struct type Animal)\n```\nIt **doesn't compile**. Map elements are **not addressable**. The map may move entries in memory when it grows (rehash or table split), which would leave any `&m[k]` pointer dangling, so the language forbids taking it.\n\nFor the same reason, `m[\"dog\"].Name = \"Max\"` is also a compile error (`cannot assign to struct field m[\"dog\"].Name in map`), and you can't call pointer-receiver methods on `m[k]`.\n\nFixes:\n```go\na := myMap[\"dog\"] // copy\nPrintAnimalName(&a)\n```\n- or store pointers: `map[string]*Animal`. Then `PrintAnimalName(myMap[\"dog\"])` works and fields can be mutated in place;\n- to update a value struct: read, modify, write back (`a := m[k]; a.Name = \"Max\"; m[k] = a`).\n\nSlices differ: `&s[i]` is allowed, because slice elements are addressable (but the pointer can go stale after an `append` that reallocates).",
+  "level": 2,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1,
+  "verified": true
+ }
+]
