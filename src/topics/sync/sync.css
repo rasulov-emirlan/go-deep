@@ -1,4 +1,4 @@
 /* sync topic */
 .sy-big { font: 700 clamp(12px, 3cqw, 26px) var(--mono); padding-top: .7em; }
-.sy-mono { font: 600 clamp(8px, 1.6cqw, 13px) var(--mono); white-space: nowrap; }
+.sy-mono { font: 600 clamp(9px, 1.6cqw, 13px) var(--mono); white-space: nowrap; }
 .sy-down { padding-top: 1.1em; }

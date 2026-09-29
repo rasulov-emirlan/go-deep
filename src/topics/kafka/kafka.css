@@ -1,7 +1,7 @@
 /* kafka topic: story cell text + crash lab */
 .kafka-cell { font: 700 clamp(9px, 2cqw, 16px) var(--mono); }
 .st-ink .kafka-cell { color: var(--paper); }
-.kafka-mono { font: 600 clamp(8px, 1.8cqw, 14px) var(--mono); white-space: nowrap; }
+.kafka-mono { font: 600 clamp(9px, 1.8cqw, 14px) var(--mono); white-space: nowrap; }
 .st-ink .kafka-mono { color: var(--paper); }
 
 .kafka-lab { display: grid; gap: 1rem; }

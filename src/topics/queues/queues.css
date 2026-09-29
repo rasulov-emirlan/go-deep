@@ -1,0 +1,25 @@
+/* queues topic: story cells, log-vs-queue lab, compare table */
+.queues-cell { font: 700 clamp(12px, 2.2cqw, 18px) var(--mono); white-space: nowrap; }
+
+.queues-try { margin: 0 0 1rem; color: var(--g800); }
+.queues-row { display: grid; grid-template-columns: 3.4rem 1fr; align-items: center; gap: .5rem; margin-bottom: .7rem; }
+.queues-name { font: 700 .8rem var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+.queues-msgs { display: flex; flex-wrap: wrap; gap: .35rem; min-height: 2.4rem; align-items: center; }
+.queues-msg { min-width: 2.8rem; height: 2.3rem; display: flex; align-items: center; justify-content: center; border: 2px solid var(--ink); font: 700 .95rem var(--mono); background: #fff; }
+.queues-msg.hot { border-color: var(--red); background: var(--red); color: #fff; }
+.queues-none { font: 500 .8rem var(--mono); color: var(--g500); }
+.queues-result { margin: 1rem 0; font: 700 1.35rem/1.3 var(--head); min-height: 3.6rem; }
+.queues-result.hot { color: var(--red); }
+.queues-result span { display: block; font: 500 1rem var(--body); color: var(--g800); }
+.queues-lab .btn { text-transform: none; font-family: var(--mono); }
+
+.queues-table { width: 100%; max-width: 40rem; margin-top: 1.2rem; border-collapse: collapse; font: 500 .82rem var(--mono); }
+.queues-table th, .queues-table td { border-bottom: 1px solid var(--g300); padding: .5rem .35rem; text-align: left; vertical-align: top; }
+.queues-table thead th { font-size: .66rem; text-transform: uppercase; letter-spacing: .05em; color: var(--g500); }
+.queues-table tbody th { font-weight: 700; }
+.queues-table td.good { color: var(--red); font-weight: 700; }
+.queues-grid { display: grid; gap: .5rem 2.5rem; }
+@media (min-width: 720px) {
+  .queues-grid { grid-template-columns: minmax(0, 22rem) 1fr; align-items: center; }
+  .queues-result { margin-top: 0; font-size: 1.7rem; }
+}

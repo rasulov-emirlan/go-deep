@@ -205,7 +205,7 @@ const tank = ({ live, fresh = 0, goal, limit, goalHot, liveHot, limitHot }: T): 
   { id: 'goal', x: 48, y: mb(goal ?? 200) - 1, w: 204, h: 3, tone: goalHot ? 'red' : 'ink', hidden: goal === undefined },
   { id: 'goalL', x: 258, y: mb(goal ?? 200) - 12, w: 160, h: 24, tone: 'none', text: '← next GC', hidden: goal === undefined },
   { id: 'limit', x: 40, y: mb(limit ?? 180) - 2, w: 220, h: 4, tone: limitHot ? 'red' : 'ink', hidden: limit === undefined },
-  { id: 'limitL', x: 258, y: mb(limit ?? 180) - 34, w: 160, h: 24, tone: 'none', text: '← GOMEMLIMIT', hidden: limit === undefined },
+  { id: 'limitL', x: 258, y: mb(limit ?? 180) - 34, w: 210, h: 24, tone: 'none', text: '← GOMEMLIMIT', hidden: limit === undefined },
 ]
 const app = (bubble?: string, more: Partial<Actor> = {}) => gopher('program', { x: 540, y: 340 }, { tag: 'program', h: 100, bubble, ...more })
 const worker = (bubble?: string, more: Partial<Actor> = {}) => gopher('marker', { x: 690, y: 340 }, { tag: 'GC', h: 100, bubble, ...more })

@@ -29,7 +29,7 @@ const acct = (who: 'Alice' | 'Bob', v: string, tone: Prop['tone'] = 'line'): Pro
   tone,
 })
 const cart = (x: number, bubble?: string, extra: Partial<Actor> = {}): Actor => ({ id: 'cart', sprite: 'adventure-pushing-cart', x, y: FLOOR, h: 120, tag: 'transfer', bubble, ...extra })
-const sum = (v: string): Prop => ({ id: 'sum', x: 330, y: 85, w: 140, h: 60, tone: 'soft', label: 'total', text: big(v) })
+const sum = (v: string): Prop => ({ id: 'sum', x: 330, y: 75, w: 140, h: 80, tone: 'soft', label: 'total', text: big(v) })
 
 export const acid: Frame[] = [
   {

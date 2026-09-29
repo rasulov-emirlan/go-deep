@@ -1,6 +1,6 @@
 /* interfaces topic */
 .if-page .st-ptext { font-size: clamp(11px, 2.4cqw, 17px); font-family: var(--mono); }
-.if-page .st-plabel { font-size: clamp(8px, 1.7cqw, 12px); }
+.if-page .st-plabel { font-size: clamp(9px, 1.7cqw, 12px); }
 .if-mono { font: 600 1em var(--mono); }
 .if-big { font: 700 clamp(18px, 4.5cqw, 34px) var(--mono); }
 .if-page .st-prop:has(.st-plabel) .st-ptext { top: 1.1em; }

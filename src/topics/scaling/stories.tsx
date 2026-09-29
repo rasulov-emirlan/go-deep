@@ -112,7 +112,7 @@ export const retryBreaker: Frame[] = [
 
 const slots = (tones: Prop['tone'][] = ['soft', 'soft', 'soft', 'soft'], texts: string[] = []): Prop[] =>
   tones.map((tone, i) => ({ id: 's' + i, x: 300 + i * 70, y: 250, w: 60, h: 90, tone, text: texts[i] ?? `c${i + 1}` }))
-const poolBox: Prop = { id: 'pool', x: 285, y: 110, w: 290, h: 240, tone: 'dashed', label: 'sql.DB pool' }
+const poolBox: Prop = { id: 'pool', x: 285, y: 85, w: 290, h: 265, tone: 'dashed', label: 'sql.DB pool' }
 const pgRight = (label = 'Postgres', tone: Prop['tone'] = 'ink'): Prop => ({ id: 'pg', x: 620, y: 230, w: 160, h: 110, tone, label: 'db', text: label })
 const user = (id: string, slot: number, sprite = 'convict-working-hard', bubble?: string, hot?: boolean, tag?: string): Actor => ({ id, sprite, x: 330 + slot * 70, y: 245, h: 70, bubble, hot, tag })
 const waiter = (id: string, i: number, bubble?: string, hot?: boolean): Actor => ({ id, sprite: 'dandy-raining', x: 60 + i * 72, y: 332, h: 88, bubble, hot })

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Code } from '../components/Code'
 import { buildSession, exportDeck, importDeck, isDue, mastered, record, resetDeck, useDeck, type Deck, type Grade } from '../lib/srs'
 import { Md } from './Md'
+import { QActions } from './QActions'
 import { allQuestions } from './data'
 import { categories, kindLabel, type Kind, type Question } from './types'
 import './bank.css'
@@ -251,6 +252,7 @@ function Drill({ pool, deck, now, onDone }: { pool: Question[]; deck: Deck; now:
         <Md text={q.q} />
       </div>
       {q.code && <Code>{q.code}</Code>}
+      <QActions q={q} />
       {!shown ? (
         <button className="btn" onClick={() => setShown(true)}>
           Show answer <span className="key">space</span>
@@ -315,6 +317,7 @@ function Browse({ pool, deck, now }: { pool: Question[]; deck: Deck; now: number
                   <div className="bq-body">
                     {q.q.includes('\n') && <Md text={q.q.split('\n').slice(1).join('\n')} />}
                     {q.code && <Code>{q.code}</Code>}
+                    <QActions q={q} />
                     <div className="qans">
                       <span className="kicker red">Answer{q.verified ? ' · ' + checked(q) : ''}</span>
                       <Md text={q.a} />

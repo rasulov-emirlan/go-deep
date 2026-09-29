@@ -9,6 +9,19 @@ services:
       - traefik.http.routers.godeep.entrypoints=websecure
       - traefik.http.routers.godeep.tls.certresolver=le
       - traefik.http.services.godeep.loadbalancer.server.port=80
+  # topic ratings: appends to ./data/feedback.jsonl; scripts/feedback-tickets.py (cron) turns dislikes into tickets
+  godeep-api:
+    build: ./api
+    restart: unless-stopped
+    networks: [web]
+    volumes:
+      - ./data:/data
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.godeep-api.rule=Host(`godeep.night.enkiduck.com`) && PathPrefix(`/api/`)"
+      - traefik.http.routers.godeep-api.entrypoints=websecure
+      - traefik.http.routers.godeep-api.tls.certresolver=le
+      - traefik.http.services.godeep-api.loadbalancer.server.port=8080
 networks:
   web:
     external: true

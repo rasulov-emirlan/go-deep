@@ -4,6 +4,9 @@ import { topics } from './topics/registry'
 import Home from './Home'
 
 const Bank = lazy(() => import('./bank/Page'))
+const Challenges = lazy(() => import('./challenges/List'))
+const Solve = lazy(() => import('./challenges/Solve'))
+const Scratch = lazy(() => import('./challenges/Scratch'))
 const loading = <div className="wrap" style={{ padding: '4rem 1.25rem' }}><span className="kicker">Loading…</span></div>
 
 function ScrollTop() {
@@ -57,6 +60,7 @@ export default function App() {
               Topics
             </NavLink>
             <NavLink to="/interview">Q bank</NavLink>
+            <NavLink to="/challenges">Code</NavLink>
           </nav>
         </div>
       </header>
@@ -71,14 +75,38 @@ export default function App() {
               </Suspense>
             }
           />
+          <Route
+            path="/challenges"
+            element={
+              <Suspense fallback={loading}>
+                <Challenges />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/challenges/:id"
+            element={
+              <Suspense fallback={loading}>
+                <Solve />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/playground"
+            element={
+              <Suspense fallback={loading}>
+                <Scratch />
+              </Suspense>
+            }
+          />
           <Route path="/:slug" element={<TopicRoute />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </main>
       <footer className="foot">
         <div className="wrap">
-          <span>Go Deep · the runtime, interactively</span>
-          <span>Verified against Go 1.26 source</span>
+          <span>Go Deep · Go interview prep, in pictures</span>
+          <span>Checked on Go 1.26 · code runs in the Go Playground</span>
         </div>
       </footer>
     </>

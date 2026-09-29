@@ -66,13 +66,13 @@ export const header: Frame[] = [
   },
   {
     caption: md('Arrays are copied whole: `b := arr` gets its own five ints.'),
-    actors: [arrGopher(), { id: 'b', sprite: 'dandy-standing', x: 70, y: 166 + CH, h: 62, tag: 'b', bubble: 'my copy' }],
-    props: [...arrRow(), ...cells('cp', ARR, 166, { label: 'b [5]int' })],
+    actors: [arrGopher(), { id: 'b', sprite: 'dandy-standing', x: 70, y: 184 + CH, h: 62, tag: 'b', bubble: 'my copy' }],
+    props: [...arrRow(), ...cells('cp', ARR, 184, { label: 'b [5]int' })],
   },
   {
     caption: md('`s := arr[1:3]` is a slice: a small header pointing into arr.'),
-    actors: [arrGopher(), who('s', SL, BARS[1])],
-    props: [...arrRow(ARR, [1, 2]), ...bar('s', 1, 2, 4, BARS[1])],
+    actors: [arrGopher(), who('s', SL, BARS[2])],
+    props: [...arrRow(ARR, [1, 2]), ...bar('s', 1, 2, 4, BARS[2])],
     stop: {
       title: 'Pointer, len, cap',
       body: (
@@ -84,8 +84,8 @@ export const header: Frame[] = [
   },
   {
     caption: md('`s[0] = 7` writes through the pointer, so arr[1] becomes 7 too.'),
-    actors: [arrGopher(), who('s', SL, BARS[1], 60, { bubble: 'wrote arr[1]' })],
-    props: [...arrRow([1, 7, 3, 4, 5], [1]), ...bar('s', 1, 2, 4, BARS[1])],
+    actors: [arrGopher(), who('s', SL, BARS[2], 60, { bubble: 'wrote arr[1]' })],
+    props: [...arrRow([1, 7, 3, 4, 5], [1]), ...bar('s', 1, 2, 4, BARS[2])],
   },
   {
     caption: md('`var n []int` is nil; `e := []int{}` is empty but not nil.'),
@@ -146,7 +146,7 @@ fmt.Println(a, b, c)
   },
   {
     caption: md('b is full, so `d := append(b, 5)` copies everything into a bigger array.'),
-    actors: [ga, gb(), gc, gd('new home')],
+    actors: [ga, gb(), gc, { ...gd(), hot: true }],
     props: [...rowA([0, 0, 0, 2]), ...abc(), ...rowB([0, 0, 0, 2, 5, null, null, null], [4]), ...bar('d', 0, 5, 8, BAR_B, { cw: 75, hot: true })],
     stop: {
       title: 'How much bigger?',
@@ -207,7 +207,7 @@ export const funcStory: Frame[] = [
   },
   {
     caption: md('Past cap, grow’s slice moves to a new array; main stops seeing its writes.'),
-    actors: [gmain(), ggrow(BAR_B, 'own array')],
+    actors: [gmain(), ggrow(BAR_B, 'moved!')],
     props: [
       ...rowM([42, 0, 0, 99, null]),
       ...bar('ms', 0, 3, 5, BARS[0], { cw: FW }),

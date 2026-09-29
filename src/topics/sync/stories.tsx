@@ -3,10 +3,10 @@ import { Code } from '../../components/Code'
 
 /* ---------- 1. data race: n++ is three steps ---------- */
 
-const counter = (v: string, hot = false): Prop => ({ id: 'n', x: 320, y: 170, w: 160, h: 80, tone: hot ? 'red' : 'line', label: 'shared n', text: <span className="sy-big">{v}</span> })
+const counter = (v: string, hot = false): Prop => ({ id: 'n', x: 320, y: 160, w: 160, h: 90, tone: hot ? 'red' : 'line', label: 'shared n', text: <span className="sy-big">{v}</span> })
 const g1 = (o: Partial<Actor> = {}): Actor => ({ id: 'g1', sprite: 'misc-standing-v2', x: 160, y: 330, h: 120, tag: 'G1', ...o })
 const g2 = (o: Partial<Actor> = {}): Actor => ({ id: 'g2', sprite: 'dandy-standing', x: 640, y: 330, h: 120, tag: 'G2', ...o })
-const code = (t: string): Prop => ({ id: 'code', x: 300, y: 280, w: 200, h: 44, tone: 'soft', text: <span className="sy-mono">{t}</span> })
+const code = (t: string): Prop => ({ id: 'code', x: 270, y: 280, w: 260, h: 44, tone: 'soft', text: <span className="sy-mono">{t}</span> })
 const steps = code('read · add · write')
 
 export const lostUpdate: Frame[] = [
@@ -103,7 +103,7 @@ export const mutexStory: Frame[] = [
 
 /* ---------- 3. WaitGroup ---------- */
 
-const wgBox = (v: string, tone: Prop['tone'] = 'line'): Prop => ({ id: 'wg', x: 310, y: 90, w: 180, h: 70, tone, label: 'wg counter', text: <span className="sy-big">{v}</span> })
+const wgBox = (v: string, tone: Prop['tone'] = 'line'): Prop => ({ id: 'wg', x: 310, y: 80, w: 180, h: 90, tone, label: 'wg counter', text: <span className="sy-big">{v}</span> })
 const main = (o: Partial<Actor> = {}): Actor => ({ id: 'main', sprite: 'fairy-tale-king', x: 125, y: 340, h: 110, tag: 'main', ...o })
 const wk = (i: number, o: Partial<Actor> = {}): Actor => ({ id: 'w' + i, sprite: 'convict-working-hard', x: 360 + i * 140, y: 340, h: 100, tag: 'W' + (i + 1), ...o })
 const doneW = (i: number): Actor => wk(i, { sprite: 'superhero-standing', dim: true, bubble: 'Done()' })

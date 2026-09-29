@@ -1,0 +1,21 @@
+/* memory-layout topic */
+.ml-mono { font-family: var(--mono); }
+.ml-big { font: 700 clamp(14px, 3.4cqw, 28px) var(--head); color: var(--red); }
+
+.ml-try { margin: 0 0 .8rem; color: var(--g800); }
+.ml-lab-grid { display: grid; gap: 1rem; align-items: start; }
+@media (min-width: 760px) { .ml-lab-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 2rem; } }
+.ml-lab-grid .code { margin: 0; }
+.ml-words { display: grid; gap: 6px; }
+.ml-word { display: grid; grid-template-columns: repeat(8, 1fr); height: 2.6rem; }
+.ml-cell {
+  display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden;
+  border: 2px solid var(--ink); margin-left: -2px; background: #fff;
+  font: 700 clamp(.6rem, 2.6vw, .8rem) var(--mono); transition: all .3s ease;
+}
+.ml-cell:first-child { margin-left: 0; }
+.ml-cell.pad { border-color: var(--red); background: var(--red); color: #fff; font-weight: 500; text-transform: uppercase; letter-spacing: .04em; }
+.ml-size { display: flex; align-items: baseline; gap: .8rem; flex-wrap: wrap; margin: 1rem 0 0; }
+.ml-size b { font: 700 clamp(2.6rem, 10vw, 3.6rem)/1 var(--head); }
+.ml-size b.hot { color: var(--red); }
+.ml-size span { font: 500 .75rem var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--g500); }

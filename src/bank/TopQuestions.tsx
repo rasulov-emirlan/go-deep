@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { Code } from '../components/Code'
 import { record, useDeck } from '../lib/srs'
 import { Md } from './Md'
+import { QActions } from './QActions'
 import { kindLabel, type Question } from './types'
 import './bank.css'
 
@@ -28,6 +29,7 @@ export function TopQuestions({ from, ids, max = 6 }: { from: unknown[][]; ids?: 
           <div className="bq-body">
             {q.q.includes('\n') && <Md text={q.q.split('\n').slice(1).join('\n')} />}
             {q.code && <Code>{q.code}</Code>}
+            <QActions q={q} />
             <div className="qans">
               <span className="kicker red">Answer</span>
               <Md text={q.a} />

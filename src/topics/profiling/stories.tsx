@@ -57,12 +57,12 @@ go tool pprof -http=: \\
   },
   {
     caption: 'A flame graph merges the counts: the wider the bar, the more CPU.',
-    actors: [lens(undefined, 700)],
+    actors: [lens(undefined, 750)],
     props: flame(),
   },
   {
     caption: 'handle is wide, but its time is spent in the calls below it.',
-    actors: [lens('flat 0?', 700)],
+    actors: [lens('flat 0?', 750)],
     props: flame('handle'),
     stop: {
       title: 'flat vs cum',
