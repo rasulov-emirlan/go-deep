@@ -77,3 +77,6 @@
   .bq-body { padding-left: .2rem; }
 }
 .topq { max-width: 56rem; }
+.qlesson { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .9rem; margin-top: .9rem; padding-top: .6rem; border-top: 1px dashed var(--g300); }
+.qlesson a { font-weight: 600; color: var(--red); text-decoration: none; overflow-wrap: anywhere; }
+.qlesson a:hover { text-decoration: underline; }

@@ -152,3 +152,14 @@ test('challenge: long code lines scroll inside the editor on a phone', async ({ 
   await expect(page.locator('.cm-content')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
 })
+
+test('question links to the section that animates it, scrolled into view', async ({ page, context }) => {
+  await page.goto('/interview?mode=browse')
+  await page.getByPlaceholder(/Search/).fill('under the hood, and what happens when')
+  await page.locator('.bq summary').first().click()
+  const link = page.locator('.bq[open] .qlesson a').first()
+  await expect(link).toHaveText(/Slices & strings · append: in place or a new array/)
+  const [tab] = await Promise.all([context.waitForEvent('page'), link.click()])
+  await expect(tab).toHaveURL(/\/slices#append$/)
+  await expect(tab.locator('#append')).toBeInViewport()
+})

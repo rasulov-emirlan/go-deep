@@ -12,8 +12,21 @@ const loading = <div className="wrap" style={{ padding: '4rem 1.25rem' }}><span 
 function ScrollTop() {
   const { pathname, hash } = useLocation()
   useEffect(() => {
-    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView()
-    else window.scrollTo(0, 0)
+    if (!hash) return window.scrollTo(0, 0)
+    // topic pages load lazily, so the section may not exist yet
+    const find = () => document.getElementById(decodeURIComponent(hash.slice(1)))
+    if (find()) return find()!.scrollIntoView()
+    const obs = new MutationObserver(() => {
+      if (!find()) return
+      obs.disconnect()
+      find()!.scrollIntoView()
+    })
+    obs.observe(document.body, { childList: true, subtree: true })
+    const stop = setTimeout(() => obs.disconnect(), 5000)
+    return () => {
+      obs.disconnect()
+      clearTimeout(stop)
+    }
   }, [pathname, hash])
   return null
 }

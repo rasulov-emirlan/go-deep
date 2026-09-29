@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Code } from '../components/Code'
 import { record, useDeck } from '../lib/srs'
+import { Lesson } from './Lesson'
 import { Md } from './Md'
 import { QActions } from './QActions'
 import { kindLabel, type Question } from './types'
@@ -33,6 +34,7 @@ export function TopQuestions({ from, ids, max = 6 }: { from: unknown[][]; ids?: 
             <div className="qans">
               <span className="kicker red">Answer</span>
               <Md text={q.a} />
+              <Lesson id={q.id} />
             </div>
             <div className="qgrade">
               <button className="btn ghost sm" onClick={() => record(q.id, 1)}>
