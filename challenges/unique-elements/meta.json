@@ -1,0 +1,8 @@
+{
+  "title": "Remove duplicates, keep order",
+  "bank": "slices-unique-elements",
+  "cat": "slices",
+  "level": 1,
+  "prompt": "Write `Unique` that removes duplicates from a slice and keeps the first occurrence of each value, in order.\n\n`[1 2 2 3 1]` → `[1 2 3]`. An empty slice gives an empty (non-nil) slice.",
+  "hint": "Remember what you've seen in a `map[T]struct{}`, and append a value only the first time."
+}

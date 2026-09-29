@@ -1,0 +1,8 @@
+{
+  "title": "Build a string from letters",
+  "bank": "algorithms-can-build-string",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `CanBuildString(source, target string) bool`: can `target` be built from the letters of `source`? Each letter of `source` can be used at most once. Letters are runes and may be Cyrillic.\n\n`(\"aabbc\", \"abca\")` → `true`, `(\"abc\", \"aa\")` → `false`",
+  "hint": "Count the runes of `source` in a map, then spend them while ranging over `target`."
+}

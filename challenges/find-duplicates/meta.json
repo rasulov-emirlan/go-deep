@@ -1,0 +1,8 @@
+{
+  "title": "Duplicates in [1, n]",
+  "bank": "algorithms-find-duplicates-in-range",
+  "cat": "algorithms",
+  "level": 2,
+  "prompt": "Write `FindDuplicates(nums []int) []int`. `nums` has length n, every value is in `[1, n]`, and each appears once or twice. Return the values that appear twice, in the order their second copy appears.\n\n- Use O(1) extra space besides the result.\n- Leave `nums` as you found it.\n\n`[4 3 2 7 8 2 3 1]` → `[2 3]`",
+  "hint": "Use the sign of `nums[v-1]` as a \"seen v\" flag, then flip every sign back at the end."
+}

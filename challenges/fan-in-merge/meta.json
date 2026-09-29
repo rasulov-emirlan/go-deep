@@ -1,0 +1,8 @@
+{
+  "title": "Fan-in: merge channels",
+  "bank": "concurrency-patterns-fan-in",
+  "cat": "concurrency-patterns",
+  "level": 1,
+  "prompt": "Write `Merge[T any](chans ...<-chan T) <-chan T`.\n\n- Forward every value from every input to the output, reading all inputs at the same time.\n- Keep each input's own order; interleaving between inputs can be anything.\n- Close the output once all inputs are closed and drained. No inputs → an already-closed output.\n\n`Merge(gen(1, 2), gen(10))` → `1 2 10` in some interleaving, then closed.",
+  "hint": "One forwarding goroutine per input plus a `WaitGroup`; a separate goroutine waits and closes the output."
+}

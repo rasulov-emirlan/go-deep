@@ -1,0 +1,8 @@
+{
+  "title": "Run goroutines that may panic",
+  "bank": "goroutines-scheduler-recover-goroutine-panic-fix",
+  "cat": "goroutines-scheduler",
+  "level": 2,
+  "prompt": "Write `RunAll(fns ...func()) []error`.\n\n- Run every function in its own goroutine, all at the same time, and wait for all of them.\n- A panic must not crash the program: `errs[i]` is an error whose message contains the panic value; functions that return normally get `nil`.\n\n`RunAll(ok, func() { panic(123) })` → `[nil, \"panic: 123\"]`.",
+  "hint": "`recover` only works in the panicking goroutine, so each goroutine needs its own deferred `recover` that writes `errs[i]`."
+}

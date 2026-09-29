@@ -1,0 +1,8 @@
+{
+  "title": "Cancellable pipeline with context",
+  "bank": "context-usage-example",
+  "cat": "context",
+  "level": 2,
+  "prompt": "Write two pipeline stages:\n\n- `Gen(ctx context.Context, nums ...int) <-chan int` sends `nums` in order.\n- `Map(ctx context.Context, in <-chan int, f func(int) int) <-chan int` sends `f(v)` for each input, in order.\n\nEach stage closes its output when done. Once `ctx` is cancelled, a stage calls no more `f`, never blocks, and closes its output, even if its input never closes.\n\n`Map(ctx, Gen(ctx, 1, 2, 3), square)` → `1 4 9`.",
+  "hint": "Every channel operation sits in a `select` with `<-ctx.Done()`; check `ctx.Err()` before doing work; `defer close(out)`."
+}

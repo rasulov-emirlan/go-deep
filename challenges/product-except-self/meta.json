@@ -1,0 +1,8 @@
+{
+  "title": "Product of all others",
+  "bank": "algorithms-product-except-self",
+  "cat": "algorithms",
+  "level": 2,
+  "prompt": "Write `ProductExceptSelf(in []int) []int` where `out[i]` is the product of every element except `in[i]`. Don't use division: it breaks on zeros.\n\n`[1 2 3]` → `[6 3 2]`, `[2 0 4]` → `[0 8 0]`. An empty slice gives an empty slice.",
+  "hint": "`out[i]` is the prefix product before `i` times the suffix product after it: two passes."
+}

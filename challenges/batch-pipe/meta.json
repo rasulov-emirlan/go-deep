@@ -1,0 +1,8 @@
+{
+  "title": "Re-batch a stream, commit in order",
+  "bank": "concurrency-patterns-batch-pipe-producer-consumer",
+  "cat": "concurrency-patterns",
+  "level": 3,
+  "prompt": "Write `Pipe(p Producer, c Consumer) error`. `p.Next()` returns small batches (≤ `MaxItems` items) with a cookie; `c.Process` wants big ones.\n\n- Gather whole batches into a buffer of at most `MaxItems` (never split one) and hand it to `Process`.\n- After `Process` succeeds, `Commit` that buffer's cookies in the order `Next` gave them.\n- On `io.EOF`, flush the rest and return `nil`. Any other error: return it; never commit unprocessed cookies.",
+  "hint": "Flush before appending a batch that wouldn't fit; allocate a fresh buffer after each flush, since `Process` may keep the slice."
+}

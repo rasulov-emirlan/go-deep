@@ -1,0 +1,8 @@
+{
+  "title": "Thread-safe lazy singleton",
+  "bank": "sync-thread-safe-singleton",
+  "cat": "sync",
+  "level": 1,
+  "prompt": "Write `NewGetter(load func() *Config) func() *Config`.\n\nThe returned getter builds the config lazily:\n\n- `load` doesn't run until the first call.\n- It runs exactly once, even with many goroutines calling at the same time.\n- Every caller gets the same pointer.\n\n`get := NewGetter(load)`; `get() == get()` and `load` ran once.",
+  "hint": "`sync.Once` (or `sync.OnceValue`, Go 1.21+) runs a function exactly once and makes concurrent callers wait for it."
+}

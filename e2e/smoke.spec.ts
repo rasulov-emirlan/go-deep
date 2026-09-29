@@ -145,3 +145,10 @@ test('challenge: compile errors are shown', async ({ page }) => {
   await expect(page.getByText('Doesn’t compile')).toBeVisible()
   await expect(page.getByText('prog.go:4:2: declared and not used: x')).toBeVisible()
 })
+
+test('challenge: long code lines scroll inside the editor on a phone', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/challenges/batch-pipe')
+  await expect(page.locator('.cm-content')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+})

@@ -1,0 +1,8 @@
+{
+  "title": "Throttle: token bucket with cancel",
+  "bank": "concurrency-patterns-throttle-token-bucket",
+  "cat": "concurrency-patterns",
+  "level": 2,
+  "prompt": "Write `Throttle(limit int, fn func()) (handle func() error, cancel func())`.\n\n- `handle` runs `fn` if fewer than `limit` calls ran this second, else returns `ErrBusy` without running it.\n- The budget refills to `limit` every second.\n- After `cancel`, `handle` returns `ErrCanceled`. `cancel` is safe to call twice and stops any background goroutine.\n\n`limit = 5`, 8 quick calls → 5 run, 3 `ErrBusy`.",
+  "hint": "A buffered channel pre-filled with `limit` tokens, a ticker goroutine that tops it up, and `sync.Once` around closing a done channel."
+}

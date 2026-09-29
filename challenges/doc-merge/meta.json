@@ -1,0 +1,8 @@
+{
+  "title": "Merge document versions",
+  "bank": "messaging-document-stream-processor",
+  "cat": "messaging",
+  "level": 3,
+  "prompt": "Messages from a queue arrive out of order and duplicated. Implement `(p *Processor) Process(d Document) *Document`, safe for concurrent use.\n\nPer `URL`, output `Text` and `FetchTime` from the latest version seen so far (by `FetchTime`), and `PubDate` plus `FirstFetchTime` (its `FetchTime`) from the earliest one. If a message changes neither end, return `nil`.\n\nVersions 2, 1 → second output: `PubDate` of v1, `FetchTime` 2, `FirstFetchTime` 1.",
+  "hint": "Keep the earliest and latest `Document` per URL in a map behind a mutex; anything in between is a no-op."
+}

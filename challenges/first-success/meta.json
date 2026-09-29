@@ -1,0 +1,8 @@
+{
+  "title": "MultiSearch: first success wins",
+  "bank": "concurrency-patterns-multisearch-first-success",
+  "cat": "concurrency-patterns",
+  "level": 2,
+  "prompt": "Write `MultiSearch(ctx context.Context, query string, sfs []SearchFunc) (Result, error)`.\n\n- Run every `SearchFunc` at once and return the first successful result without waiting for the rest.\n- Cancel the `ctx` the losers got, and don't leak their goroutines.\n- All fail → the last error received. `ctx` ends first → `ctx.Err()`. No funcs → any error.\n\nFast `{\"a\"}` in 10 ms, slow `{\"b\"}` in 1 s → `{\"a\"}` after ~10 ms.",
+  "hint": "Derive a cancellable ctx, `defer cancel()`, and collect into a channel buffered to `len(sfs)` so late senders never block."
+}

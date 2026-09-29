@@ -1,0 +1,8 @@
+{
+  "title": "Lazy init without sync.Once",
+  "bank": "sync-singleton-without-once",
+  "cat": "sync",
+  "level": 2,
+  "prompt": "Implement `NewLazy(load func() (*Config, error)) *Lazy` and `(l *Lazy) Get() (*Config, error)` without `sync.Once`.\n\n- `load` runs on the first `Get`, never twice at the same time.\n- After a success, every `Get` returns the same pointer without calling `load`.\n- A failed load is not cached: the next `Get` tries again.\n\nFirst load fails → `Get()` returns the error; the next `Get()` loads again.",
+  "hint": "Double-checked locking: a fast path on an `atomic.Pointer`, then a mutex and a second check before calling `load`."
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Counting semaphore",
+  "bank": "concurrency-patterns-semaphore",
+  "cat": "concurrency-patterns",
+  "level": 1,
+  "prompt": "Implement a counting semaphore with `n` slots:\n\n- `NewSemaphore(n int) *Semaphore`\n- `Acquire(ctx context.Context) error` blocks until a slot is free, or returns `ctx.Err()`.\n- `TryAcquire() bool` takes a slot only if one is free right now.\n- `Release()` frees a slot.\n\nWith `n = 2`: `TryAcquire()` → `true`, `true`, `false`.",
+  "hint": "A buffered channel of capacity `n` is the semaphore: send to acquire, receive to release, `select` for ctx and try."
+}

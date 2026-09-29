@@ -1,0 +1,8 @@
+{
+  "title": "Custom error, no imports",
+  "bank": "errors-custom-error-no-packages",
+  "cat": "errors",
+  "level": 1,
+  "prompt": "Write `Handle() error` that returns an error with the message `\"went wrong\"`, using your own error type and without importing any packages.",
+  "hint": "Any type with an `Error() string` method satisfies the built-in `error` interface."
+}

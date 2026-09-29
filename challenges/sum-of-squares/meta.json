@@ -1,0 +1,8 @@
+{
+  "title": "Generator with a quit channel",
+  "bank": "channels-sum-of-squares-quit",
+  "cat": "channels",
+  "level": 1,
+  "prompt": "Write `SumOfSquares(c, quit chan int)`.\n\nSend `1², 2², 3², …` on `c` until a value arrives on `quit`, then return. The consumer decides when to stop, and it may stop at any moment, even before reading anything.\n\nA consumer that reads 5 values and then sends on `quit` sums them to `55`.",
+  "hint": "Loop forever with a `select` that either sends the next square or receives from `quit` and returns."
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Reverse words, keep palindromes",
+  "bank": "go-basics-reverse-words-keep-palindromes",
+  "cat": "go-basics",
+  "level": 2,
+  "prompt": "Write `ReverseWords(s string) string`. Reverse each space-separated word, but leave words that are palindromes (case-insensitive) unchanged. Keep the spacing exactly as it was.\n\n`\"Hello worlD ollo\"` → `\"olleH Dlrow ollo\"`, `\"привет мир Ара\"` → `\"тевирп рим Ара\"`",
+  "hint": "`strings.Split(s, \" \")` keeps empty words, so repeated spaces survive; `strings.Fields` doesn't."
+}

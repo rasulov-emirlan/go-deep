@@ -1,0 +1,8 @@
+{
+  "title": "In-memory message broker",
+  "bank": "messaging-inmemory-broker",
+  "cat": "messaging",
+  "level": 3,
+  "prompt": "Implement `Send(topic string, msg []byte)` and `Receive(ctx context.Context, topic string) ([]byte, error)` on `Broker`.\n\n- Messages sent before any reader waits are kept, in FIFO order per topic.\n- Every message goes to exactly one receiver, with many goroutines sending and receiving.\n- `Receive` blocks until a message arrives, or returns `ctx.Err()` when `ctx` is done.",
+  "hint": "Queue per topic under a mutex; wake waiters by closing a `ready` channel and making a new one."
+}

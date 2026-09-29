@@ -1,0 +1,8 @@
+{
+  "title": "Group by key",
+  "bank": "maps-group-by-key",
+  "cat": "maps",
+  "level": 1,
+  "prompt": "Write `GroupBy[T any, K comparable](items []T, key func(T) K) map[K][]T` that groups items by `key(item)`. Items in a group keep their input order. Empty input gives an empty map, not nil.\n\nGrouping reviews by rating: `[{Great 5} {Bad 1} {OK 5}]` → `{5:[{Great 5} {OK 5}] 1:[{Bad 1}]}`",
+  "hint": "`append` to a missing key works, because `m[k]` gives a nil slice."
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Delayed call with cancel",
+  "bank": "sync-delay-cancel-race",
+  "cat": "sync",
+  "level": 1,
+  "prompt": "Write `Delay(d time.Duration, fn func()) (cancel func() bool)`.\n\n- `fn` runs once, `d` after the call, unless cancelled first.\n- `cancel` returns `true` if it stopped `fn` from running, `false` if `fn` already started.\n- No data races, and no goroutine left waiting after a cancel.\n\n`cancel := Delay(time.Hour, fn)`; `cancel()` → `true`, and `fn` never runs.",
+  "hint": "`time.AfterFunc` already does this: its `Stop` method has exactly the `cancel` semantics."
+}

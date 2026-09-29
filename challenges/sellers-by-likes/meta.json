@@ -1,0 +1,8 @@
+{
+  "title": "Sellers by likes",
+  "bank": "algorithms-sort-sellers-by-likes",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `SellersByLikes(names []string, likes []int) []string`. `likes[i]` belongs to `names[i]`. Return names ordered by likes, most first, with ties in alphabetical order. Don't modify the inputs. If the lengths differ, return `nil`.\n\n`[S1 S2 S3]`, `[18 15 17]` → `[S1 S3 S2]`",
+  "hint": "Sort a slice of indices with `slices.SortFunc` and `cmp.Or(cmp.Compare(...), ...)`."
+}

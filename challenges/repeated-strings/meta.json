@@ -1,0 +1,8 @@
+{
+  "title": "Strings seen more than once",
+  "bank": "algorithms-strings-appearing-more-than-once",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `Repeated(in []string) []string` that returns each string appearing more than once, listed once, in order of first appearance. Return an empty slice, not nil, when there are none.\n\n`[a bb bb b a a]` → `[a bb]`",
+  "hint": "Count in a map, then walk the input again, so the output order doesn't depend on map order."
+}

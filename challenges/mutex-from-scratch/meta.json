@@ -1,0 +1,8 @@
+{
+  "title": "Mutex without sync.Mutex",
+  "bank": "sync-implement-mutex",
+  "cat": "sync",
+  "level": 2,
+  "prompt": "Implement `Mutex` without `sync.Mutex` or `sync.RWMutex`:\n\n- `Lock()` blocks until the mutex is free, then takes it.\n- `Unlock()` frees it, and panics if it isn't locked.\n- `TryLock() bool` takes it only if it's free right now.\n\nThe zero value is an unlocked mutex. It must guard plain memory correctly under `-race`.",
+  "hint": "A compare-and-swap on an `atomic.Bool` from false to true is the lock; yield with `runtime.Gosched()` while it fails."
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Power of two",
+  "bank": "algorithms-power-of-two",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `IsPowerOfTwo(n int) bool` in O(1).\n\n`1`, `8`, `1024` → `true`. `0`, `6`, `-8` → `false`.",
+  "hint": "A power of two has exactly one set bit, and `n-1` clears the lowest one."
+}
