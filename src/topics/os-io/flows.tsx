@@ -91,12 +91,13 @@ export const epollScale: FlowDef = {
       set: setAll('grey', ready),
       add: [
         { t: 'box', id: 'scan', x: 140, y: 165, w: 280, h: 34, text: 'kernel scans all 10,000', tone: 'red' },
-        { t: 'line', id: 'ask', x1: 85, y1: 235, x2: 175, y2: 201, arrow: true, text: 'whole list' },
+        { t: 'line', id: 'ask', x1: 85, y1: 235, x2: 175, y2: 201, arrow: true },
+        { t: 'text', id: 'asklab', x: 20, y: 206, text: 'whole list', anchor: 'start' },
       ],
     },
     {
       caption: '`epoll_ctl(ADD)` registers each fd once. The kernel keeps the list and hangs a callback on each socket, so later waits never re-send or re-scan it.',
-      drop: ['scan', 'ask'],
+      drop: ['scan', 'ask', 'asklab'],
       set: setAll('ink', []),
       add: [{ t: 'box', id: 'int', x: 20, y: 14, w: 520, h: 32, text: 'kernel: interest list (registered once)' }],
     },
@@ -110,11 +111,11 @@ export const epollScale: FlowDef = {
     },
     {
       caption: '`epoll_wait` returns only that list: 3 events. Cost follows the ready events, not the 10,000 registered fds.',
-      add: [{ t: 'line', id: 'ret', x1: 200, y1: 201, x2: 100, y2: 233, arrow: true, text: '3 events' }],
+      add: [{ t: 'line', id: 'ret', x1: 200, y1: 201, x2: 100, y2: 233, arrow: true }, { t: 'text', id: 'retlab', x: 20, y: 206, text: '3 events', anchor: 'start' }],
     },
     {
       caption: '100 bytes arrive and you read 40. Level-triggered epoll reports the fd again. Edge-triggered (`EPOLLET`) fires only on new data, so it stays silent.',
-      drop: [...dots.map(dotId), 'lab', 'int', 'rdy', 'thr', 'ret', ...ready.map((i) => 'cb' + i)],
+      drop: [...dots.map(dotId), 'lab', 'int', 'rdy', 'thr', 'ret', 'retlab', ...ready.map((i) => 'cb' + i)],
       add: [
         { t: 'box', id: 'buf', x: 170, y: 40, w: 220, h: 56, label: 'SOCKET BUFFER', text: '100 B, read 40', tone: 'red' },
         { t: 'box', id: 'lt', x: 20, y: 150, w: 250, h: 62, label: 'LEVEL', text: 'reported again' },
@@ -220,7 +221,7 @@ export const writeCache: FlowDef = {
       add: [
         msg('w3', 'app', 'pc', 195, 'fsync(fd)'),
         msg('w4', 'pc', 'dc', 220, 'write pages', { y2: 245 }),
-        { t: 'box', id: 'inc', x: 285, y: 254, w: 120, h: 30, text: 'in disk cache', tone: 'red', dashed: true },
+        { t: 'box', id: 'inc', x: 275, y: 254, w: 140, h: 30, text: 'in disk cache', tone: 'red', dashed: true },
       ],
       set: { dirty: { tone: 'grey' } },
     },
