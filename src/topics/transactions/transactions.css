@@ -1,0 +1,30 @@
+/* transactions topic: story text + isolation lab */
+.tx-big { font: 700 clamp(15px, 3.6cqw, 28px) var(--mono); padding-top: .8em; }
+.tx-hot { color: var(--red); }
+.tx-mono { font: 600 clamp(9px, 1.9cqw, 14px) var(--mono); white-space: nowrap; font-variant-ligatures: none; font-feature-settings: 'calt' 0, 'liga' 0; }
+.tx-pre { white-space: pre; text-align: left; line-height: 1.35; }
+.st-ink .tx-mono { color: var(--paper); }
+.tx-tuple { display: flex; flex-direction: column; align-items: center; gap: 0; font: 500 clamp(9px, 1.8cqw, 13px)/1.25 var(--mono); }
+.tx-tuple b { font-size: 1.5em; }
+.st-red .tx-tuple b { color: var(--red); }
+
+.tx-ctl { display: flex; flex-direction: column; gap: .5rem; align-items: flex-start; }
+.tx-setup { margin: .7rem 0 .6rem; font-size: .92rem; color: var(--g800); }
+.tx-grid { display: grid; grid-template-columns: 1.4rem 1fr 1fr; border-top: 1px solid var(--g300); }
+.tx-grid > div { border-bottom: 1px solid var(--g300); padding: .35rem .4rem; min-width: 0; }
+.tx-h { font: 700 .7rem var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--g500); }
+.tx-n { font: 700 .7rem var(--mono); color: var(--g500); padding-top: .45rem !important; }
+.tx-cell { display: flex; flex-direction: column; gap: .15rem; transition: opacity .25s ease; }
+.tx-cell code { font: 500 .74rem/1.35 var(--mono); background: none; border: 0; padding: 0; overflow-wrap: anywhere; }
+.tx-both { grid-column: 2 / 4; }
+.tx-both code { color: var(--g500); }
+.tx-empty { background: var(--paper); }
+.tx-res { font: 700 .74rem/1.35 var(--mono); overflow-wrap: anywhere; }
+.tx-res.tx-wait { color: var(--g500); font-style: italic; }
+.tx-res.tx-err, .tx-res.tx-hot { color: var(--red); }
+.tx-out { margin-top: .8rem; border-left: 4px solid var(--ink); background: var(--g100); padding: .55rem .8rem; }
+.tx-out p { margin: .15rem 0 0; font-size: .95rem; }
+.tx-out.tx-anomaly { border-left-color: var(--red); background: var(--red-soft); }
+.tx-out.tx-anomaly .kicker { color: var(--red); }
+.tx-nav { display: flex; gap: .5rem; justify-content: flex-end; flex-wrap: wrap; margin-top: .8rem; }
+.tx-hint { grid-column: 1 / 4; color: var(--g500); font: 500 .8rem var(--mono); text-align: center; padding: 1rem .4rem !important; }

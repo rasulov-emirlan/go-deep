@@ -5,6 +5,7 @@ const pages = [
   { path: '/scheduler', text: 'Watch the scheduler work' },
   { path: '/maps', text: 'Swiss map lab' },
   { path: '/gc', text: 'Paint the reachable town' },
+  ...['slices', 'interfaces', 'channels', 'sync', 'patterns', 'indexes', 'transactions', 'kafka', 'http', 'scaling', 'profiling'].map((s) => ({ path: '/' + s, text: 'Asked in real interviews' })),
 ]
 
 for (const p of pages)

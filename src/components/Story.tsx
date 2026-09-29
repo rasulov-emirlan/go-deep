@@ -30,11 +30,18 @@ export type Prop = {
   text?: ReactNode // centered text
   tone?: 'line' | 'ink' | 'red' | 'soft' | 'dashed' | 'none'
   hidden?: boolean
+  z?: number
 }
 
 /** A frame with `stop` halts autoplay and shows a "why" card until the reader presses OK. */
 export type Stop = { title: string; body: ReactNode; edge?: boolean }
 export type Frame = { caption: ReactNode; actors: Actor[]; props?: Prop[]; stop?: Stop }
+
+/** `code` spans in plain-string captions */
+function inlineCode(c: ReactNode): ReactNode {
+  if (typeof c !== 'string' || !c.includes('`')) return c
+  return c.split(/(`[^`]+`)/).map((part, i) => (part.startsWith('`') && part.endsWith('`') && part.length > 1 ? <code key={i}>{part.slice(1, -1)}</code> : part))
+}
 
 const W = 800
 const H = 360
@@ -60,7 +67,7 @@ function PropBox({ p, w: SW = W, h: SH = H }: { p: Prop; w?: number; h?: number 
   return (
     <div
       className={`st-prop st-${tone}`}
-      style={{ left: pct(p.x, SW), top: pct(p.y, SH), width: pct(p.w, SW), height: pct(p.h, SH), opacity: p.hidden ? 0 : 1 }}
+      style={{ left: pct(p.x, SW), top: pct(p.y, SH), width: pct(p.w, SW), height: pct(p.h, SH), opacity: p.hidden ? 0 : 1, zIndex: p.z }}
     >
       {p.label && <span className="st-plabel">{p.label}</span>}
       {p.text && <span className="st-ptext">{p.text}</span>}
@@ -82,7 +89,7 @@ function ActorView({ a, w: SW = W, h: SH = H }: { a: Actor; w?: number; h?: numb
       }}
     >
       <img src={`/gophers/${a.sprite}.webp`} alt="" draggable={false} style={{ transform: `translateX(-50%) ${a.flip ? 'scaleX(-1)' : ''}` }} />
-      {a.bubble && <span className="st-bubble">{a.bubble}</span>}
+      {a.bubble && <span className={'st-bubble' + (a.x < SW * 0.14 ? ' l' : a.x > SW * 0.86 ? ' r' : '')}>{a.bubble}</span>}
       {a.tag && <span className={'st-tag' + (a.hot ? ' hot' : '')}>{a.tag}</span>}
     </div>
   )
@@ -126,6 +133,8 @@ export function Story({ title, frames, id }: { title: string; frames: Frame[]; i
     Math.min(...frames.flatMap((fr) => [...fr.actors.map((a) => a.y - (a.h ?? 90) - 44), ...(fr.props ?? []).map((p) => p.y - 8)])),
   )
   const up = <T extends { y: number }>(o: T): T => ({ ...o, y: o.y - top })
+  // …and keep room under the lowest feet for their tags
+  const bottom = Math.max(H, ...frames.flatMap((fr) => fr.actors.filter((a) => a.tag).map((a) => a.y + 24)))
 
   return (
     <figure className="story" id={id} tabIndex={0} onKeyDown={(e) => (e.key === 'ArrowRight' ? next() : e.key === 'ArrowLeft' ? setI(Math.max(i - 1, 0)) : null)}>
@@ -135,12 +144,12 @@ export function Story({ title, frames, id }: { title: string; frames: Frame[]; i
           {auto ? '❚❚ Pause' : `▶ Autoplay · ${stops} stops`}
         </button>
       </div>
-      <Stage props={propIds.map(findProp).map(up)} actors={actorIds.map(findActor).map(up)} h={H - top} />
+      <Stage props={propIds.map(findProp).map(up)} actors={actorIds.map(findActor).map(up)} h={bottom - top} />
       <figcaption className="story-cap" aria-live="polite">
         <span className="story-count">
           {i + 1}/{frames.length}
         </span>
-        {f.caption}
+        {inlineCode(f.caption)}
       </figcaption>
       {f.stop && (
         <div className={'story-stop' + (f.stop.edge ? ' edge' : '')}>

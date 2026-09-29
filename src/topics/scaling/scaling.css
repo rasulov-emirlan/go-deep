@@ -1,0 +1,16 @@
+/* scaling topic: stampede lab */
+.sc-controls { display: flex; flex-wrap: wrap; gap: .8rem 1.2rem; margin-bottom: 1rem; }
+.sc-controls .sc-ctl { display: flex; flex-direction: column; gap: .25rem; }
+.sc-controls .kicker { margin: 0; font-size: .64rem; }
+.sc-dots { display: grid; grid-template-columns: repeat(25, 1fr); gap: 3px; max-width: 30rem; }
+.sc-dots i, .sc-legend i { display: block; aspect-ratio: 1; border: 1.5px solid var(--ink); background: #fff; }
+.sc-dots .sc-db, .sc-legend .sc-db { background: var(--red); border-color: var(--red); }
+.sc-dots .sc-wait, .sc-legend .sc-wait { background: var(--ink); }
+.sc-dots .sc-stale, .sc-legend .sc-stale { background: var(--g300); border-color: var(--g500); }
+.sc-legend { display: flex; flex-wrap: wrap; gap: .3rem 1rem; margin-top: .6rem; font: 500 .68rem var(--mono); text-transform: uppercase; letter-spacing: .04em; color: var(--g500); }
+.sc-legend span { display: inline-flex; align-items: center; gap: .35rem; }
+.sc-legend i { width: .8rem; }
+.sc-note { margin: .8rem 0 0; font-size: .95rem; color: var(--g800); max-width: 36rem; }
+@media (max-width: 480px) {
+  .sc-lab .stat { min-width: 50%; border-bottom: 1px solid var(--g300); }
+}
