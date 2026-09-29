@@ -10,7 +10,7 @@ const dot = (id: string, x: number, y: number, text?: string, tone: 'ink' | 'red
 /* ---------- 01 · Go: two readings in one time.Time ---------- */
 
 export const twoClocks: FlowDef = {
-  h: 316,
+  h: 272,
   steps: [
     {
       caption: '`time.Now()` returns a `Time` holding two readings: the wall clock (what time is it) and the monotonic clock (only ever moves forward).',
@@ -25,31 +25,31 @@ export const twoClocks: FlowDef = {
       caption: 'Both keep running. `t0 := time.Now()` records a reading on each: wall 10:00:00.0, monotonic 3.0 s since the process started.',
       set: { ext: { tone: 'ink' } },
       add: [
-        { t: 'text', id: 'rw', x: 20, y: 176, text: 'wall', anchor: 'start' },
-        { t: 'text', id: 'rm', x: 20, y: 250, text: 'mono', anchor: 'start' },
-        { t: 'line', id: 'lw', x1: 80, y1: 176, x2: 535, y2: 176, arrow: true, tone: 'grey' },
-        { t: 'line', id: 'lm', x1: 80, y1: 250, x2: 535, y2: 250, arrow: true, tone: 'grey' },
-        { t: 'line', id: 'w0', x1: 150, y1: 164, x2: 150, y2: 188 },
-        { t: 'line', id: 'm0', x1: 150, y1: 238, x2: 150, y2: 262 },
-        { t: 'text', id: 'w0t', x: 150, y: 206, text: '10:00:00.0' },
-        { t: 'text', id: 'm0t', x: 150, y: 280, text: 'm=+3.0' },
+        { t: 'text', id: 'rw', x: 20, y: 160, text: 'wall', anchor: 'start' },
+        { t: 'text', id: 'rm', x: 20, y: 226, text: 'mono', anchor: 'start' },
+        { t: 'line', id: 'lw', x1: 80, y1: 160, x2: 535, y2: 160, arrow: true, tone: 'grey' },
+        { t: 'line', id: 'lm', x1: 80, y1: 226, x2: 535, y2: 226, arrow: true, tone: 'grey' },
+        { t: 'line', id: 'w0', x1: 150, y1: 148, x2: 150, y2: 172 },
+        { t: 'line', id: 'm0', x1: 150, y1: 214, x2: 150, y2: 238 },
+        { t: 'text', id: 'w0t', x: 150, y: 190, text: '10:00:00.0' },
+        { t: 'text', id: 'm0t', x: 150, y: 256, text: 'm=+3.0' },
       ],
     },
     {
       caption: '0.2 s later, an NTP step sets the wall clock back 1 s. The monotonic reading is untouched.',
       add: [
-        { t: 'text', id: 'ntp', x: 400, y: 150, text: 'NTP step −1 s', tone: 'red' },
-        { t: 'line', id: 'w1', x1: 400, y1: 164, x2: 400, y2: 188, tone: 'red' },
-        { t: 'line', id: 'm1', x1: 400, y1: 238, x2: 400, y2: 262 },
-        { t: 'text', id: 'w1t', x: 400, y: 206, text: '09:59:59.2', tone: 'red' },
-        { t: 'text', id: 'm1t', x: 400, y: 280, text: 'm=+3.2' },
+        { t: 'text', id: 'ntp', x: 400, y: 138, text: 'NTP step −1 s', tone: 'red' },
+        { t: 'line', id: 'w1', x1: 400, y1: 148, x2: 400, y2: 172, tone: 'red' },
+        { t: 'line', id: 'm1', x1: 400, y1: 214, x2: 400, y2: 238 },
+        { t: 'text', id: 'w1t', x: 400, y: 190, text: '09:59:59.2', tone: 'red' },
+        { t: 'text', id: 'm1t', x: 400, y: 256, text: 'm=+3.2' },
       ],
     },
     {
       caption: '`time.Since(t0)` subtracts monotonic readings: +0.2 s, correct. The same subtraction on the wall readings gives −0.8 s.',
       add: [
-        { t: 'msg', id: 'sm', x1: 150, x2: 400, y: 250, text: '+0.2 s' },
-        { t: 'msg', id: 'sw', x1: 150, x2: 400, y: 176, text: '−0.8 s', tone: 'red', dashed: true },
+        { t: 'msg', id: 'sm', x1: 150, x2: 400, y: 226, text: '+0.2 s' },
+        { t: 'msg', id: 'sw', x1: 150, x2: 400, y: 160, text: '−0.8 s', tone: 'red', dashed: true },
       ],
     },
     {
@@ -83,11 +83,11 @@ time.Since(start) // wall math`}</Code>
       caption: '`==` compares the struct fields, not the instant. `Equal` compares the instant.',
       drop: ['rw', 'rm', 'lw', 'lm', 'w0', 'm0', 'w0t', 'm0t', 'ntp', 'w1', 'm1', 'w1t', 'm1t', 'sw'],
       add: [
-        { t: 'box', id: 'ea', x: 20, y: 160, w: 240, h: 76, label: 'a := time.Now()', text: 'ext = m=+3.0' },
-        { t: 'box', id: 'eb', x: 300, y: 160, w: 240, h: 76, label: 'b := a.Round(0)', text: 'ext = seconds', tone: 'red' },
-        { t: 'text', id: 'eq', x: 280, y: 200, text: '≠', tone: 'red' },
-        { t: 'text', id: 'eqt', x: 150, y: 270, text: 'a == b → false', tone: 'red' },
-        { t: 'text', id: 'eqe', x: 410, y: 270, text: 'a.Equal(b) → true' },
+        { t: 'box', id: 'ea', x: 20, y: 150, w: 240, h: 76, label: 'a := time.Now()', text: 'ext = m=+3.0' },
+        { t: 'box', id: 'eb', x: 300, y: 150, w: 240, h: 76, label: 'b := a.Round(0)', text: 'ext = seconds', tone: 'red' },
+        { t: 'text', id: 'eq', x: 280, y: 188, text: '≠', tone: 'red' },
+        { t: 'text', id: 'eqt', x: 150, y: 252, text: 'a == b → false', tone: 'red' },
+        { t: 'text', id: 'eqe', x: 410, y: 252, text: 'a.Equal(b) → true' },
       ],
       stop: {
         title: '== and map keys',

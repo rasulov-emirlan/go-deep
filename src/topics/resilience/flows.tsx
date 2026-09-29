@@ -526,10 +526,10 @@ export const hedgeFlow: FlowDef = {
       drop: ['sq', 'slow', 'p63', 'p63b'],
       add: [
         lane('cl', 70, 'Client', 320),
-        lane('r1', 250, 'R1', 320),
+        lane('r1', 190, 'R1', 320),
         lane('r2', 430, 'R2', 320),
         { t: 'msg', id: 'q1', from: 'cl', to: 'r1', y: 70, y2: 82, text: 'read k' },
-        { t: 'box', id: 'slw', x: 242, y: 82, w: 16, h: 190, tone: 'grey' },
+        { t: 'box', id: 'slw', x: 182, y: 82, w: 16, h: 190, tone: 'grey' },
       ],
     },
     {
@@ -537,7 +537,7 @@ export const hedgeFlow: FlowDef = {
       add: [
         { t: 'line', id: 'p95', x1: 20, y1: 150, x2: 540, y2: 150, dashed: true, tone: 'grey' },
         { t: 'text', id: 'p95t', x: 20, y: 143, text: 'p95', size: 13, anchor: 'start', tone: 'grey' },
-        { t: 'msg', id: 'q2', from: 'cl', to: 'r2', y: 150, y2: 162, text: 'hedge: read k', tone: 'red' },
+        { t: 'msg', id: 'q2', from: 'cl', to: 'r2', y: 150, y2: 162, text: 'hedge', tone: 'red' },
       ],
     },
     {

@@ -58,7 +58,7 @@ export const modFlow: FlowDef = {
             { t: 'box', id: `m${i}`, x: 100, y: y - 16, w: m * 3.6, h: 22, tone: 'red' },
             { t: 'text', id: `mv${i}`, x: 100 + m * 3.6 + 8, y: y - 5, anchor: 'start', tone: 'red', text: m === 75 ? '75%' : m.toFixed(1) + '%' },
             { t: 'box', id: `i${i}`, x: 100, y: y + 10, w: Math.max(ideal * 3.6, 2), h: 9, tone: 'grey' },
-            { t: 'text', id: `iv${i}`, x: 100 + Math.max(ideal * 3.6, 2) + 8, y: y + 15, anchor: 'start', size: 13, tone: 'grey', text: ideal === 25 ? '25%' : ideal.toFixed(1) + '%' },
+            { t: 'text', id: `iv${i}`, x: 100 + m * 3.6 + 8, y: y + 15, anchor: 'start', size: 13, tone: 'grey', text: 'min ' + (ideal === 25 ? '25%' : ideal.toFixed(1) + '%') },
           ]
         }),
       ],
@@ -324,7 +324,7 @@ export const placeFlow: FlowDef = {
       },
     },
     {
-      caption: 'Maglev: fill a table of M slots (here 7). Backends take turns claiming the next free slot on their own preference list. Round 1: A takes 3, B takes 0, C skips 3 and takes 4.',
+      caption: 'Maglev fills a table of 7 slots. Backends take turns claiming their next free preferred slot. Round 1: A takes 3, B takes 0, C takes 4.',
       drop: [...[0, 1, 2, 3, 4, 5].map((i) => 'b' + i), 'u1', 'u2', 'u3'],
       add: [
         ...[0, 1, 2, 3, 4, 5, 6].map((i): El => ({ t: 'box', id: 's' + i, x: slotX(i), y: 60, w: 64, h: 56, label: String(i), text: i === 3 ? 'A' : i === 0 ? 'B' : i === 4 ? 'C' : '', tone: [3, 0, 4].includes(i) ? 'red' : 'grey', dashed: ![3, 0, 4].includes(i) })),
@@ -577,9 +577,9 @@ export const scatterFlow: FlowDef = {
       caption: 'ORDER BY … LIMIT 10 OFFSET 1000: each shard must return its top 1010 rows, then the app merges. Deep pages get expensive.',
       drop: ['q1', 'q2', 'q3', 'r1', 'r2', 'r3', 'tail'],
       add: [
-        { t: 'msg', id: 'm1', from: 'app', to: 's1', y: 80, y2: 92, text: 'top 1010' },
-        { t: 'msg', id: 'm2', from: 'app', to: 's2', y: 80, y2: 108, text: 'top 1010' },
-        { t: 'msg', id: 'm3', from: 'app', to: 's3', y: 80, y2: 124, text: 'top 1010' },
+        { t: 'msg', id: 'm1', from: 'app', to: 's1', y: 80, y2: 92, text: '1010' },
+        { t: 'msg', id: 'm2', from: 'app', to: 's2', y: 80, y2: 108, text: '1010' },
+        { t: 'msg', id: 'm3', from: 'app', to: 's3', y: 80, y2: 124, text: '1010' },
         { t: 'text', id: 'mg', x: 60, y: 200, anchor: 'start', tone: 'red', text: 'merge 3 × 1010 rows,\nkeep 10' },
       ],
     },

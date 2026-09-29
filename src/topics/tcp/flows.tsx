@@ -10,18 +10,18 @@ const pair = (len: number, csub = 'ESTAB.', ssub = 'ESTAB.'): El[] => [
 ]
 
 /* ---------- 01 · accept queue ---------- */
-const slot = (id: string, x: number): El => ({ t: 'box', id, x, y: 262, w: 44, h: 34, tone: 'grey', dashed: true })
+const slot = (id: string, x: number): El => ({ t: 'box', id, x, y: 200, w: 44, h: 34, tone: 'grey', dashed: true })
 
 export const acceptQueue: FlowDef = {
-  h: 306,
+  h: 246,
   steps: [
     {
       caption: 'Handshakes finish inside the kernel. `accept()` only takes finished connections off the accept queue. Here the queue holds 2.',
       add: [
-        { t: 'lane', id: 'c', x: 70, y: 8, len: 236, text: 'client', sub: 'connect()', w: 110 },
-        { t: 'lane', id: 'k', x: 290, y: 8, len: 236, text: 'kernel', sub: 'listening', w: 110 },
-        { t: 'lane', id: 'a', x: 490, y: 8, len: 236, text: 'your app', sub: 'accept()', w: 110 },
-        { t: 'text', id: 'ql', x: 290, y: 250, text: 'accept queue', size: 14, tone: 'grey' },
+        { t: 'lane', id: 'c', x: 70, y: 8, len: 176, text: 'client', sub: 'connect()', w: 110 },
+        { t: 'lane', id: 'k', x: 290, y: 8, len: 176, text: 'kernel', sub: 'listening', w: 110 },
+        { t: 'lane', id: 'a', x: 490, y: 8, len: 176, text: 'your app', sub: 'accept()', w: 110 },
+        { t: 'text', id: 'ql', x: 290, y: 188, text: 'accept queue', size: 14, tone: 'grey' },
         slot('q1', 246),
         slot('q2', 294),
       ],
@@ -136,20 +136,21 @@ export const timeWait: FlowDef = {
       caption: 'A client opening short connections to ONE dst ip:port burns a local port per connection for 60 s. About 28k / 60 s is roughly 470 new connections per second.',
       drop: ['c', 's', 'l1', 'f3', 'a3'],
       add: [
-        { t: 'box', id: 'ports', x: 30, y: 26, w: 500, h: 60, label: 'ports 32768–60999', text: '~28k, all in TIME_WAIT', tone: 'red' },
-        { t: 'text', id: 'rate', x: 280, y: 128, text: '28k / 60 s ≈ 470 conns/s', tone: 'ink' },
-        { t: 'text', id: 'err', x: 280, y: 176, text: 'connect: cannot assign\nrequested address', tone: 'red' },
+        { t: 'text', id: 'pl', x: 280, y: 30, text: 'ports 32768–60999', size: 17, tone: 'grey' },
+        { t: 'box', id: 'ports', x: 30, y: 46, w: 500, h: 50, text: '~28k ports, all in TIME_WAIT', tone: 'red' },
+        { t: 'text', id: 'rate', x: 280, y: 138, text: '28k / 60 s ≈ 470 conns/s', size: 20 },
+        { t: 'text', id: 'err', x: 280, y: 190, text: 'connect: cannot assign\nrequested address', size: 18, tone: 'red' },
       ],
     },
     {
       caption: 'Fix it by reusing connections. `http.Transport` keeps only 2 idle connections per host by default, so raise `MaxIdleConnsPerHost`.',
-      drop: ['rate', 'err'],
-      set: { ports: { tone: 'grey' } },
+      drop: ['rate', 'err', 'pl'],
+      set: { ports: { tone: 'grey', y: 20 } },
       add: [
-        { t: 'text', id: 'x1', x: 30, y: 124, anchor: 'start', text: '✓ pool and keep-alive' },
-        { t: 'text', id: 'x2', x: 30, y: 154, anchor: 'start', text: '✓ more source or dest IPs' },
-        { t: 'text', id: 'x3', x: 30, y: 184, anchor: 'start', text: '~ tw_reuse: outgoing only', tone: 'grey' },
-        { t: 'text', id: 'x4', x: 30, y: 226, anchor: 'start', text: '✕ tw_recycle: removed', tone: 'red' },
+        { t: 'text', id: 'x1', x: 30, y: 122, size: 18, anchor: 'start', text: '✓ pool and keep-alive' },
+        { t: 'text', id: 'x2', x: 30, y: 156, size: 18, anchor: 'start', text: '✓ more source or dest IPs' },
+        { t: 'text', id: 'x3', x: 30, y: 190, size: 18, anchor: 'start', text: '~ tw_reuse: outgoing only', tone: 'grey' },
+        { t: 'text', id: 'x4', x: 30, y: 232, size: 18, anchor: 'start', text: '✕ tw_recycle: removed', tone: 'red' },
       ],
       stop: {
         title: 'tw_recycle is gone',
@@ -348,7 +349,7 @@ export const deadPeer: FlowDef = {
         { t: 'msg', id: 'z3', from: 'c', to: 's', y: 160, y2: 178, text: 'probe' },
         { t: 'box', id: 'blk', x: 12, y: 214, w: 136, h: 34, text: 'Write blocks', tone: 'red', dashed: true },
       ],
-      set: { c: { sub: 'window 0', tone: 'ink' }, s: { sub: 'not reading', dead: false, tone: 'red' } },
+      set: { c: { sub: 'sending', tone: 'ink' }, s: { sub: 'not reading', dead: false, tone: 'red' } },
       stop: {
         title: 'Use write deadlines',
         edge: true,

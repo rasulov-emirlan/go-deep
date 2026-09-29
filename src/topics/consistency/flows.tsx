@@ -48,7 +48,7 @@ export const ladder: FlowDef = {
     },
     {
       caption: 'Eventual is a real promise: with no new writes, replicas converge. It says nothing about reads before that.',
-      set: { r3: { tone: 'ink' } },
+      set: { r3: { tone: 'ink' }, r4: { tone: 'ink' } },
       add: [down('a7', 280, 254), row('r5', 130, 316, 300, 'eventual', 'converges when writes stop')],
       stop: {
         title: 'Where availability ends',
@@ -87,7 +87,7 @@ export const linVsSeq: FlowDef = {
     {
       caption: 'Order the read before the write anyway. Each client’s own order holds, so it is sequentially consistent, just not linearizable.',
       add: [
-        label('lo', 25, 183, 'order'),
+        label('lo', 30, 183, 'order'),
         { t: 'box', id: 's1', x: 80, y: 160, w: 130, h: 36, text: 'read → 0', tone: 'soft', dashed: true },
         { t: 'box', id: 's2', x: 250, y: 160, w: 130, h: 36, text: 'write 1', tone: 'soft', dashed: true },
         { t: 'line', id: 'so', x1: 210, y1: 178, x2: 250, y2: 178, arrow: true, tone: 'grey' },
@@ -116,7 +116,7 @@ export const serVsStrict: FlowDef = {
     {
       caption: 'Serializable only needs some serial order. T2 then T1 explains everything, with no torn reads. Legal.',
       add: [
-        label('lo', 25, 183, 'order'),
+        label('lo', 30, 183, 'order'),
         { t: 'box', id: 's1', x: 80, y: 160, w: 100, h: 36, text: 'T2', tone: 'soft', dashed: true },
         { t: 'box', id: 's2', x: 220, y: 160, w: 100, h: 36, text: 'T1', tone: 'soft', dashed: true },
         { t: 'line', id: 'so', x1: 180, y1: 178, x2: 220, y2: 178, arrow: true, tone: 'grey' },
@@ -276,7 +276,7 @@ export const causal: FlowDef = {
     {
       caption: 'Causal delivery: hold the reply until its cause arrives, then show both in order.',
       drop: ['sc'],
-      add: [label('hd', 470, 250, 'hold reply,\ndeliver Q first')],
+      add: [label('hd', 490, 215, 'hold reply,\ndeliver Q first')],
       stop: {
         title: 'Only causal links order',
         edge: true,

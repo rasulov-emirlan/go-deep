@@ -13,12 +13,8 @@ export const twoPC: FlowDef = {
   h: 440,
   steps: [
     {
-      caption: 'A transfer moves $10 from a row on shard A to a row on shard B. Both changes must happen or neither, so one coordinator drives them.',
-      add: [lane('a', 90, 'Shard A', 430), lane('c', 280, 'Coordinator', 430), lane('b', 470, 'Shard B', 430), box('ask', 150, 52, 260, 28, { text: 'client: move $10 A → B', tone: 'soft' })],
-    },
-    {
-      caption: 'Phase 1, prepare: the coordinator asks every shard to do the work but not to commit yet.',
-      add: [msg('p1', 'c', 'a', 104, 'PREPARE'), msg('p2', 'c', 'b', 104, 'PREPARE')],
+      caption: 'Move $10 from shard A to shard B: both or neither. Phase 1, prepare: the coordinator asks each shard to do the work but not commit yet.',
+      add: [lane('a', 90, 'Shard A', 430), lane('c', 280, 'Coordinator', 430), lane('b', 470, 'Shard B', 430), box('ask', 150, 52, 260, 28, { text: 'client: move $10 A → B', tone: 'soft' }), msg('p1', 'c', 'a', 104, 'PREPARE'), msg('p2', 'c', 'b', 104, 'PREPARE')],
     },
     {
       caption: 'Each shard force-writes a prepare record to its log, keeps its row locks, and votes YES. A YES is a promise not to abort on its own.',
@@ -130,14 +126,9 @@ export const sagaOrch: FlowDef = {
       },
     },
     {
-      caption: 'Then release the stock and mark the order CANCELLED.',
-      add: [msg('m5', 'o', 's', 342, 'release', { tone: 'red' }), msg('r5', 's', 'o', 370, 'ok')],
-      set: { m4: { tone: 'ink' }, o: { sub: 'CANCELLED' } },
-    },
-    {
-      caption: 'Ship was the pivot, the go/no-go step. Steps after a pivot have no undo, so they are retried until they succeed.',
-      add: [text('pv', 280, 412, 'after the pivot: retry, never undo', { tone: 'red' })],
-      set: { m5: { tone: 'ink' }, sh: { tone: 'red' } },
+      caption: 'Release the stock, mark the order CANCELLED. Ship was the pivot, the go/no-go step: steps after a pivot have no undo, so they are retried.',
+      add: [msg('m5', 'o', 's', 342, 'release', { tone: 'red' }), msg('r5', 's', 'o', 370, 'ok'), text('pv', 280, 412, 'after the pivot: retry, never undo', { tone: 'red' })],
+      set: { m4: { tone: 'ink' }, o: { sub: 'CANCELLED' }, sh: { tone: 'red' } },
     },
   ],
 }
@@ -217,9 +208,14 @@ export const sagaIsolation: FlowDef = {
       ],
     },
     {
-      caption: 'Another request reads 4 and acts on it. Then the saga fails and undoes T1. That read was dirty: 4 never really existed.',
-      add: [msg('rd', 'u', 'd', 176, 'read qty'), msg('rr', 'd', 'u', 204, '4', { tone: 'red' }), msg('c1', 's', 'd', 254, 'C1 qty=5', { tone: 'red' })],
-      set: { row: { text: 'qty 5', tone: 'ink' }, t1: { tone: 'grey' } },
+      caption: 'Another request reads 4 and acts on it.',
+      add: [msg('rd', 'u', 'd', 176, 'read qty'), msg('rr', 'd', 'u', 204, '4', { tone: 'red' })],
+      set: { t1: { tone: 'grey' } },
+    },
+    {
+      caption: 'Then the saga fails and undoes T1. That read was dirty: 4 never really existed.',
+      add: [msg('c1', 's', 'd', 254, 'C1 qty=5', { tone: 'red' })],
+      set: { row: { text: 'qty 5', tone: 'ink' }, rr: { tone: 'ink' } },
       stop: {
         title: 'Undo can clobber updates',
         edge: true,
@@ -281,8 +277,12 @@ export const inbox: FlowDef = {
   h: 340,
   steps: [
     {
-      caption: 'The consumer, in one DB transaction, inserts the event id into an inbox table and applies the effect. A new id means both commit.',
-      add: [lane('k', 280, 'Kafka', 320), lane('c', 470, 'Consumer', 320), msg('e1', 'k', 'c', 84, 'evt #10'), box('in', 400, 130, 150, 50, { text: 'inbox #10', sub: 'effect applied' })],
+      caption: 'Kafka delivery is at-least-once, so the consumer may see event #10 twice. The first copy arrives.',
+      add: [lane('k', 280, 'Kafka', 320), lane('c', 470, 'Consumer', 320), msg('e1', 'k', 'c', 84, 'evt #10')],
+    },
+    {
+      caption: 'In one DB transaction the consumer inserts the event id into an inbox table and applies the effect. A new id means both commit.',
+      add: [box('in', 400, 130, 150, 50, { text: 'inbox #10', sub: 'effect applied' })],
     },
     {
       caption: 'The duplicate hits the unique id. The insert changes 0 rows, so the consumer skips the effect and commits.',
