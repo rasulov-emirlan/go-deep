@@ -1,0 +1,14 @@
+/* replication topic: quorum lab */
+.replication-lab { display: grid; gap: 1rem; }
+.replication-ctl { display: flex; align-items: center; gap: .4rem; }
+.replication-cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; max-width: 24rem; }
+.replication-cell { border: 2px solid var(--ink); padding: .5rem .2rem; text-align: center; display: grid; gap: .1rem; font-family: var(--mono); }
+.replication-cell b { font-size: .8rem; }
+.replication-cell span { font-size: 1.4rem; font-weight: 700; }
+.replication-cell small { font-size: .7rem; color: var(--g500); }
+.replication-cell.both { border-color: var(--red); background: var(--red-soft); }
+.replication-note { margin: 0; color: var(--g500); font-size: .9rem; }
+.replication-stats { display: flex; flex-wrap: wrap; gap: .6rem; }
+.replication-verdict { margin: 0; max-width: 40rem; }
+.replication-verdict b { font-family: var(--head); font-size: 1.4rem; display: block; }
+.replication-verdict b.r { color: var(--red); }

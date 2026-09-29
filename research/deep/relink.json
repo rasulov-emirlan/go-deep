@@ -1,0 +1,304 @@
+{
+ "architecture-idempotency-keys-payments": [
+  "dist-transactions#idempotency",
+  "http#anatomy"
+ ],
+ "architecture-idempotency": [
+  "dist-transactions#idempotency",
+  "http#anatomy"
+ ],
+ "architecture-saga-pattern": [
+  "dist-transactions#saga",
+  "dist-transactions#saga-edges"
+ ],
+ "architecture-saga-booking-design": [
+  "dist-transactions#saga",
+  "dist-transactions#saga-edges"
+ ],
+ "architecture-two-phase-commit": [
+  "dist-transactions#twopc",
+  "dist-transactions#saga"
+ ],
+ "architecture-payment-timeout-reconciliation": [
+  "failure-detection#silence",
+  "dist-transactions#idempotency"
+ ],
+ "architecture-circuit-breaker": [
+  "resilience#breaker",
+  "resilience#retries"
+ ],
+ "architecture-fault-tolerance-patterns": [
+  "resilience#breaker",
+  "resilience#overload"
+ ],
+ "architecture-cap-theorem": [
+  "consistency#cap",
+  "consistency#models"
+ ],
+ "architecture-eventual-consistency": [
+  "consistency#models",
+  "replication#repair"
+ ],
+ "architecture-cache-stampede": [
+  "scaling#cache",
+  "resilience#meta"
+ ],
+ "system-design-distributed-cache-challenges": [
+  "sharding#ring",
+  "sharding#cost"
+ ],
+ "concurrency-patterns-stuck-pending-task": [
+  "locks#leases",
+  "queues#sqs"
+ ],
+ "concurrency-patterns-timeouts-retries-backoff": [
+  "resilience#retries",
+  "resilience#deadlines"
+ ],
+ "concurrency-patterns-fast-and-slow-dependency": [
+  "patterns#fan",
+  "resilience#overload"
+ ],
+ "concurrency-patterns-graceful-shutdown": [
+  "patterns#shutdown",
+  "containers#pid1"
+ ],
+ "devops-linux-kill-process": [
+  "os-scheduling#tasks",
+  "patterns#shutdown"
+ ],
+ "context-timeout-wrapper": [
+  "patterns#context",
+  "resilience#deadlines"
+ ],
+ "context-passing-through-layers": [
+  "patterns#context",
+  "resilience#deadlines"
+ ],
+ "databases-locks-types": [
+  "locks#kinds"
+ ],
+ "databases-replication-types": [
+  "replication#leader",
+  "scaling#replicas"
+ ],
+ "databases-multi-master": [
+  "replication#conflicts",
+  "replication#leader"
+ ],
+ "databases-masters-replicas-count": [
+  "replication#leader",
+  "scaling#replicas"
+ ],
+ "databases-sharding-vs-replication": [
+  "sharding#cost",
+  "replication#leader"
+ ],
+ "databases-sharding-basics": [
+  "sharding#mod",
+  "sharding#ring"
+ ],
+ "databases-sharding-problems": [
+  "sharding#cost",
+  "sharding#move"
+ ],
+ "databases-sharding-key": [
+  "sharding#cost",
+  "sharding#mod"
+ ],
+ "databases-sharding-experience": [
+  "sharding#cost",
+  "sharding#move"
+ ],
+ "databases-redis-cluster-scaling": [
+  "sharding#others",
+  "sharding#move"
+ ],
+ "databases-consistency-without-transactions": [
+  "dist-transactions#saga",
+  "dist-transactions#idempotency"
+ ],
+ "databases-distributed-transactions-nosql": [
+  "dist-transactions#saga",
+  "dist-transactions#outbox"
+ ],
+ "databases-wal": [
+  "transactions#acid",
+  "os-io#cache"
+ ],
+ "devops-top-and-load-average": [
+  "os-scheduling#sched"
+ ],
+ "devops-process-vs-thread": [
+  "os-scheduling#tasks",
+  "virtual-memory#translate"
+ ],
+ "devops-cpu-over-100-percent": [
+  "scheduler#procs",
+  "os-scheduling#sched"
+ ],
+ "devops-file-descriptor": [
+  "os-io#copies"
+ ],
+ "devops-fork": [
+  "os-scheduling#tasks",
+  "virtual-memory#faults"
+ ],
+ "devops-context-switch": [
+  "os-scheduling#sched",
+  "syscalls#cost"
+ ],
+ "devops-cooperative-vs-preemptive-multitasking": [
+  "os-scheduling#sched",
+  "scheduler#model"
+ ],
+ "devops-epoll": [
+  "os-io#wait",
+  "scheduler#wait"
+ ],
+ "devops-syscalls": [
+  "syscalls#door",
+  "syscalls#wall"
+ ],
+ "devops-virtualization-vs-containers": [
+  "containers#process",
+  "containers#limits"
+ ],
+ "devops-k8s-readiness-liveness": [
+  "failure-detection#k8s"
+ ],
+ "devops-behavioral-failure-handling": [
+  "resilience#breaker",
+  "resilience#retries"
+ ],
+ "devops-os-sync-primitives": [
+  "os-scheduling#futex",
+  "sync#mutex"
+ ],
+ "goroutines-scheduler-goroutine-vs-thread": [
+  "scheduler#model",
+  "os-scheduling#tasks"
+ ],
+ "goroutines-scheduler-netpoller": [
+  "os-io#go",
+  "scheduler#wait"
+ ],
+ "goroutines-scheduler-max-goroutines": [
+  "scheduler#wait",
+  "syscalls#go"
+ ],
+ "goroutines-scheduler-gomaxprocs-kubernetes": [
+  "os-scheduling#limits",
+  "scheduler#procs"
+ ],
+ "goroutines-scheduler-switch-cost": [
+  "os-scheduling#sched",
+  "scheduler#model"
+ ],
+ "goroutines-scheduler-syscalls-handoff": [
+  "syscalls#go",
+  "scheduler#wait"
+ ],
+ "memory-gc-lazy-allocation": [
+  "virtual-memory#faults",
+  "virtual-memory#go"
+ ],
+ "memory-gc-oom-behavior": [
+  "virtual-memory#numbers",
+  "containers#limits"
+ ],
+ "messaging-transactional-outbox": [
+  "dist-transactions#outbox",
+  "kafka#outbox"
+ ],
+ "messaging-delivery-guarantees-exactly-once": [
+  "dist-transactions#idempotency",
+  "kafka#commit"
+ ],
+ "messaging-idempotent-consumer-dedup": [
+  "dist-transactions#idempotency",
+  "kafka#commit"
+ ],
+ "messaging-outbox-relay-concurrency": [
+  "dist-transactions#outbox",
+  "kafka#outbox"
+ ],
+ "messaging-kafka-replication-fault-tolerance": [
+  "replication#kafka"
+ ],
+ "messaging-document-stream-processor": [
+  "clocks#logical",
+  "dist-transactions#idempotency"
+ ],
+ "networking-keep-alive": [
+  "http#pool",
+  "dns-lb#timeouts"
+ ],
+ "networking-long-lived-tcp-connections": [
+  "tcp#timing",
+  "dns-lb#grpc"
+ ],
+ "networking-tcp-acks": [
+  "tcp#timing"
+ ],
+ "networking-tcp-vs-udp": [
+  "tls-quic#path",
+  "http#versions"
+ ],
+ "networking-sockets": [
+  "tcp#queues"
+ ],
+ "networking-dns": [
+  "dns-lb#dns"
+ ],
+ "networking-grpc-basics": [
+  "http#versions",
+  "dns-lb#grpc"
+ ],
+ "networking-http-versions": [
+  "http#versions",
+  "tls-quic#path"
+ ],
+ "networking-mtu": [
+  "tls-quic#path"
+ ],
+ "networking-http-timeouts": [
+  "resilience#deadlines",
+  "http#pool"
+ ],
+ "networking-http-transport-config": [
+  "http#pool",
+  "dns-lb#timeouts"
+ ],
+ "networking-debug-requests-not-arriving": [
+  "tcp#queues"
+ ],
+ "networking-http-methods-idempotency": [
+  "http#anatomy",
+  "dist-transactions#idempotency"
+ ],
+ "networking-url-to-response-flow": [
+  "http#url",
+  "dns-lb#dns"
+ ],
+ "sync-atomics-vs-mutex": [
+  "sync#tools",
+  "cpu-caches#sharing"
+ ],
+ "sync-mutex-internals": [
+  "sync#mutex",
+  "os-scheduling#futex"
+ ],
+ "system-design-bank-transfers": [
+  "transactions#writes",
+  "dist-transactions#idempotency"
+ ],
+ "system-design-async-resource-provisioning": [
+  "dist-transactions#saga",
+  "dist-transactions#idempotency"
+ ],
+ "system-design-survive-until-more-cpu": [
+  "resilience#overload",
+  "scaling#retries"
+ ]
+}

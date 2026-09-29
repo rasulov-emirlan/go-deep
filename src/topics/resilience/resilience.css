@@ -1,0 +1,8 @@
+/* resilience topic: retry amplification lab */
+.res-lab { display: grid; gap: .9rem; }
+.res-try { margin: 0; color: var(--g500); }
+.res-bar { height: 22px; border: 2px solid var(--ink); background: #fff; }
+.res-bar span { display: block; height: 100%; background: var(--ink); transition: width .3s ease; }
+.res-bar span.hot { background: var(--red); }
+.res-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .6rem; }
+.res-note { margin: 0; font-size: .85rem; color: var(--g500); }

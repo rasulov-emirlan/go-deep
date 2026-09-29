@@ -83,7 +83,7 @@ export const retryBreaker: Frame[] = [
     props: [svc('red', '3× load')],
     stop: {
       title: 'Retry storms multiply',
-      body: <p>Three layers that each retry 3 times send up to 27 calls to the bottom one. Retry at one layer only, and only calls that are safe to repeat.</p>,
+      body: <p>Three layers that each make up to 3 attempts (2 retries) send up to 27 calls to the bottom one. Retry at one layer only, and only calls that are safe to repeat.</p>,
     },
   },
   {
