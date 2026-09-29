@@ -562,9 +562,9 @@ export const scatterFlow: FlowDef = {
         { t: 'lane', id: 's1', x: 220, y: 10, len: 300, text: 'S1' },
         { t: 'lane', id: 's2', x: 350, y: 10, len: 300, text: 'S2' },
         { t: 'lane', id: 's3', x: 480, y: 10, len: 300, text: 'S3' },
-        { t: 'msg', id: 'q1', from: 'app', to: 's1', y: 68, y2: 80 },
+        { t: 'msg', id: 'q1', from: 'app', to: 's1', y: 68, y2: 80, text: 'query all' },
         { t: 'msg', id: 'q2', from: 'app', to: 's2', y: 88, y2: 100 },
-        { t: 'msg', id: 'q3', from: 'app', to: 's3', y: 108, y2: 120, text: 'query all' },
+        { t: 'msg', id: 'q3', from: 'app', to: 's3', y: 108, y2: 120 },
       ],
     },
     {
@@ -588,9 +588,9 @@ export const scatterFlow: FlowDef = {
       caption: 'ORDER BY … LIMIT 10 OFFSET 1000: each shard must return its top 1010 rows, then the app merges. Deep pages get expensive.',
       drop: ['q1', 'q2', 'q3', 'r1', 'r2', 'r3', 'tail'],
       add: [
-        { t: 'msg', id: 'm1', from: 'app', to: 's1', y: 68, y2: 80 },
+        { t: 'msg', id: 'm1', from: 'app', to: 's1', y: 68, y2: 80, text: 'top 1010 each' },
         { t: 'msg', id: 'm2', from: 'app', to: 's2', y: 88, y2: 100 },
-        { t: 'msg', id: 'm3', from: 'app', to: 's3', y: 108, y2: 120, text: 'top 1010 each' },
+        { t: 'msg', id: 'm3', from: 'app', to: 's3', y: 108, y2: 120 },
         { t: 'text', id: 'mg', x: 60, y: 200, anchor: 'start', tone: 'red', text: 'merge 3 × 1010 rows,\nkeep 10' },
       ],
     },
