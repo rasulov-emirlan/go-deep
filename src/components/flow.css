@@ -1,0 +1,51 @@
+/* <Flow>: SVG step diagrams. Shell (caption, stop, nav) reuses the .story classes. */
+.fl-stage { padding: 14px 0 6px; }
+.fl-stage svg { display: block; width: 100%; max-width: 760px; margin: 0 auto; height: auto; overflow: visible; }
+.flow { overflow: hidden; }
+.fl-el { transition: opacity .4s ease, transform .6s cubic-bezier(.4,0,.2,1); }
+.fl-shape { stroke-width: 2; }
+.fl-ink.fl-shape { stroke: var(--ink); fill: #fff; }
+.fl-red.fl-shape { stroke: var(--red); fill: var(--red-soft); }
+.fl-grey.fl-shape { stroke: var(--g500); fill: #fff; }
+.fl-soft.fl-shape { stroke: none; fill: var(--g100); }
+.fl-shape.dash { stroke-dasharray: 6 4; }
+.fl-t { fill: var(--ink); font-family: var(--mono); font-weight: 600; }
+.fl-sub { fill: var(--g500); font-family: var(--mono); font-weight: 500; }
+.fl-kick { fill: var(--g500); font-family: var(--mono); font-weight: 500; text-transform: uppercase; letter-spacing: .05em; }
+.fl-free { font-family: var(--mono); font-weight: 600; }
+.fl-free.prop { font-family: var(--body); }
+.fl-free.fl-ink { fill: var(--ink); }
+.fl-free.fl-red { fill: var(--red); }
+.fl-free.fl-grey { fill: var(--g500); }
+.fl-free.fl-soft { fill: var(--g500); }
+.fl-life { stroke: var(--g300); stroke-width: 2; stroke-dasharray: 5 5; }
+.fl-life.dead { stroke: var(--g200); }
+.fl-x { fill: var(--red); font-family: var(--mono); font-weight: 700; }
+.fl-ln { fill: none; stroke-width: 2.25; stroke-linecap: round; }
+.fl-ln.dash { stroke-dasharray: 6 4; }
+.fl-ln.fill { fill: var(--g100); }
+.fl-ln.fl-ink { stroke: var(--ink); }
+.fl-ln.fl-red { stroke: var(--red); }
+.fl-ln.fl-grey, .fl-ln.fl-soft { stroke: var(--g500); }
+.fl-head.fl-ink { fill: var(--ink); }
+.fl-head.fl-red { fill: var(--red); }
+.fl-head.fl-grey, .fl-head.fl-soft { fill: var(--g500); }
+/* messages: ink / red / grey by tone; older messages recede so the newest one leads */
+.fl-msg .fl-ln { transition: stroke-dashoffset .55s ease; }
+.fl-msg.fl-ink .fl-ln { stroke: var(--ink); }
+.fl-msg.fl-red .fl-ln { stroke: var(--red); }
+.fl-msg.fl-grey .fl-ln { stroke: var(--g500); }
+.fl-msg.fl-ink .fl-head { fill: var(--ink); }
+.fl-msg.fl-red .fl-head { fill: var(--red); }
+.fl-msg.fl-grey .fl-head { fill: var(--g500); }
+.fl-msg.old.fl-ink .fl-ln { stroke: var(--g500); stroke-width: 1.75; }
+.fl-msg.old.fl-ink .fl-head { fill: var(--g500); }
+.fl-msgt { font-family: var(--mono); font-weight: 600; fill: var(--ink); paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+.fl-msg.old .fl-msgt { fill: var(--g500); }
+.fl-msg.fl-red .fl-msgt { fill: var(--red); }
+.fl-bub { fill: #fff; stroke: var(--ink); stroke-width: 2; }
+.fl-bubt { fill: var(--ink); font-family: var(--body); font-weight: 600; }
+.fl-tagbg { fill: var(--ink); }
+.fl-tagbg.hot { fill: var(--red); }
+.fl-tag { fill: var(--paper); font-family: var(--mono); font-weight: 700; }
+@media (max-width: 620px) { .fl-stage { padding-top: 10px; } }
