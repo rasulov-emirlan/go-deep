@@ -1,7 +1,10 @@
-import { Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Link, NavLink, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { liveTopics, topics } from './topics/registry'
 import Home from './Home'
+
+const Bank = lazy(() => import('./bank/Page'))
+const loading = <div className="wrap" style={{ padding: '4rem 1.25rem' }}><span className="kicker">Loading…</span></div>
 
 function ScrollTop() {
   const { pathname, hash } = useLocation()
@@ -21,7 +24,7 @@ function TopicRoute() {
   if (!t?.page) return <NotFound />
   const Page = t.page
   return (
-    <Suspense fallback={<div className="wrap" style={{ padding: '4rem 1.25rem' }}><span className="kicker">Loading…</span></div>}>
+    <Suspense fallback={loading}>
       <Page />
     </Suspense>
   )
@@ -55,12 +58,21 @@ export default function App() {
                 {t.n} {t.title.split(' ')[0]}
               </NavLink>
             ))}
+            <NavLink to="/interview">Q bank</NavLink>
           </nav>
         </div>
       </header>
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route
+            path="/interview"
+            element={
+              <Suspense fallback={loading}>
+                <Bank />
+              </Suspense>
+            }
+          />
           <Route path="/:slug" element={<TopicRoute />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
