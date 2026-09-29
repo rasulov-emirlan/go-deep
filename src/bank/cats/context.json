@@ -1,0 +1,71 @@
+[
+ {
+  "id": "context-context-basics",
+  "cat": "context",
+  "kind": "theory",
+  "q": "What is context in Go, how does it work, and what is it used for?\nFollow-up: how do you check whether a context has been cancelled?",
+  "a": "`context.Context` carries **cancellation signals, deadlines, and request-scoped values** across API boundaries and goroutines.\n\n```go\ntype Context interface {\n    Deadline() (time.Time, bool)\n    Done() <-chan struct{}\n    Err() error\n    Value(key any) any\n}\n```\n\nContexts form a **tree**: `context.Background()` at the root; `WithCancel`, `WithTimeout`, `WithDeadline`, `WithValue`, `WithCancelCause`, `WithoutCancel`, `AfterFunc` derive children. Cancelling a parent cancels all descendants (not vice versa); the `Done` channel is closed as a broadcast.\n\nUse cases:\n- stop work when the client disconnects or a request times out (HTTP servers set `r.Context()`);\n- deadlines on DB/HTTP/gRPC calls (propagated across services via gRPC metadata);\n- graceful shutdown (`signal.NotifyContext`);\n- request-scoped metadata: request/trace IDs, auth principal.\n\nChecking cancellation:\n```go\nselect {\ncase <-ctx.Done():\n    return ctx.Err() // context.Canceled or context.DeadlineExceeded\ncase res := <-work:\n    ...\n}\n```\nor `if ctx.Err() != nil` in loops. Rules: pass `ctx` as the first parameter, never store it in structs, always `defer cancel()`, never pass `nil`.",
+  "level": 1,
+  "asked": [
+   "Data Driven Labs",
+   "MaxGroup",
+   "RSHB",
+   "RealIT",
+   "SpaceIT",
+   "Velme"
+  ],
+  "n": 8
+ },
+ {
+  "id": "context-with-value",
+  "cat": "context",
+  "kind": "theory",
+  "q": "What is `context.WithValue` for — what should and shouldn't be stored in it, and why? What goes in its key argument?",
+  "a": "`context.WithValue(parent, key, val)` attaches a **request-scoped value** readable by `ctx.Value(key)` down the call chain. The second argument is the **key**, the third the value.\n\nStore: request-scoped metadata that crosses API boundaries and is not required for the function's logic — request/correlation IDs, trace/span info, authenticated user/tenant, locale.\n\nDon't store:\n- **function parameters or dependencies** (DB connections, loggers-as-dependency, config, business inputs like `period`) — they become hidden, untyped, and invisible in signatures;\n- optional flags that change behavior;\n- large or mutable data.\n\nWhy: `Value` returns `any` (runtime type assertions), lookup is a linear walk up the parent chain (O(depth)), and nothing tells the reader or the compiler what a function needs.\n\nKeys: use an **unexported custom type** to avoid collisions between packages; never a plain `string` (`go vet`/staticcheck warn):\n```go\ntype ctxKey struct{}\n\nfunc WithUser(ctx context.Context, u User) context.Context {\n    return context.WithValue(ctx, ctxKey{}, u)\n}\n\nfunc UserFrom(ctx context.Context) (User, bool) {\n    u, ok := ctx.Value(ctxKey{}).(User)\n    return u, ok\n}\n```",
+  "level": 2,
+  "asked": [
+   "MaxGroup",
+   "RealIT",
+   "Tutu"
+  ],
+  "n": 3
+ },
+ {
+  "id": "context-passing-through-layers",
+  "cat": "context",
+  "kind": "theory",
+  "q": "Why pass `context.Context` through all application layers? Should it go down into the service/repository layers?",
+  "a": "**Yes — pass it through every layer that does I/O or may block**, as the first parameter: handler → service → repository → DB/HTTP client.\n\nWhy:\n- **Cancellation propagates**: if the client disconnects or the deadline passes, the in-flight SQL query (`QueryContext`), HTTP call (`NewRequestWithContext`), or gRPC call is aborted, freeing connections and goroutines instead of doing useless work.\n- **Deadlines/timeouts** apply end-to-end, including across services (gRPC propagates deadlines).\n- **Tracing and logging**: spans (OpenTelemetry), request IDs and the auth principal travel with the request; `slog.InfoContext(ctx, ...)`.\n\nRules: don't store contexts in structs, don't replace an incoming ctx with `context.Background()` in the middle of a request, and don't hide business parameters in `context.Value`.\n\nGotcha: work that must outlive the request (e.g., an async audit write after responding) must not use the request ctx, or it gets cancelled — use `context.WithoutCancel(ctx)` (Go 1.21) to keep values but drop cancellation, plus its own timeout.",
+  "level": 2,
+  "asked": [
+   "ViTech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "context-timeout-wrapper",
+  "cat": "context",
+  "kind": "code",
+  "q": "Wrap a slow function you can't change so it returns its result within a timeout or an error.\nAlso log how long the wrapper itself took; you may change the wrapper's signature.",
+  "code": "func unpredictableFunc() int64 {\n\trnd := rand.Int63n(5000)\n\ttime.Sleep(time.Duration(rnd) * time.Millisecond)\n\treturn rnd\n}\n\n// predictableFunc must call unpredictableFunc and return\n// within the timeout, or return an error.\nfunc predictableFunc() int64 {\n\treturn unpredictableFunc()\n}\n\nfunc main() {\n\tfmt.Println(\"started\")\n\tfmt.Println(predictableFunc())\n}",
+  "a": "Run the function in a goroutine, wait on its result or `ctx.Done()`:\n\n```go\nfunc predictableFunc(ctx context.Context, timeout time.Duration) (int64, error) {\n\tstart := time.Now()\n\tdefer func() { log.Printf(\"predictableFunc took %v\", time.Since(start)) }()\n\n\tctx, cancel := context.WithTimeout(ctx, timeout)\n\tdefer cancel()\n\n\tresCh := make(chan int64, 1)\n\tgo func() { resCh <- unpredictableFunc() }()\n\n\tselect {\n\tcase v := <-resCh:\n\t\treturn v, nil\n\tcase <-ctx.Done():\n\t\treturn 0, fmt.Errorf(\"unpredictableFunc: %w\", ctx.Err())\n\t}\n}\n```\n\nKey points:\n- The channel **must be buffered (cap 1)**: after a timeout nobody reads it, and an unbuffered send would block that goroutine forever (goroutine leak).\n- Accept a parent `ctx` so callers' cancellation also applies; wrap `ctx.Err()` so `errors.Is(err, context.DeadlineExceeded)` works.\n- The goroutine running `unpredictableFunc` can't be stopped — it still runs to completion in the background; the real fix is making the inner function accept a context (e.g., `http.NewRequestWithContext`).\n- `rand.Seed` is deprecated (auto-seeded since 1.20); use `math/rand/v2`. Closing the result channel is unnecessary.",
+  "level": 2,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1
+ },
+ {
+  "id": "context-usage-example",
+  "cat": "context",
+  "kind": "code",
+  "q": "Write an example of using context in Go.",
+  "code": "package main\n\n// write an example of using context\nfunc main() {}",
+  "a": "Show cancellation via timeout, propagation, checking `Done`, and a typed value key:\n\n```go\ntype ctxKey struct{}\n\nfunc work(ctx context.Context, id int) error {\n\treqID, _ := ctx.Value(ctxKey{}).(string)\n\tselect {\n\tcase <-time.After(time.Duration(id) * 300 * time.Millisecond):\n\t\tfmt.Println(reqID, \"job\", id, \"done\")\n\t\treturn nil\n\tcase <-ctx.Done():\n\t\treturn fmt.Errorf(\"%s job %d: %w\", reqID, id, ctx.Err())\n\t}\n}\n\nfunc main() {\n\tctx := context.WithValue(context.Background(), ctxKey{}, \"req-42\")\n\tctx, cancel := context.WithTimeout(ctx, time.Second)\n\tdefer cancel()\n\n\tfor i := 1; i <= 5; i++ {\n\t\tif err := work(ctx, i); err != nil {\n\t\t\tfmt.Println(err, errors.Is(err, context.DeadlineExceeded))\n\t\t\treturn\n\t\t}\n\t}\n}\n```\n\nOutput:\n```text\nreq-42 job 1 done\nreq-42 job 2 done\nreq-42 job 3: context deadline exceeded true\n```\nJobs 1 and 2 take 300 ms + 600 ms; job 3 would end at 1.8 s, past the 1 s deadline. In real code the same `ctx` goes to `db.QueryContext` / `http.NewRequestWithContext`.",
+  "level": 1,
+  "asked": [
+   "RSHB"
+  ],
+  "n": 1
+ }
+]

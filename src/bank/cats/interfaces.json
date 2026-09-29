@@ -1,0 +1,285 @@
+[
+ {
+  "id": "interfaces-what-is-interface",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "What is an interface in Go, what is it for, and how does it differ from a struct (or a class)?\nFollow-up: give production examples.",
+  "a": "An interface is a **type that describes behavior** — a set of method signatures. Any type whose method set contains those methods satisfies it **implicitly** (no `implements`). A struct is a concrete type describing **data** (fields) and possibly methods.\n\nDifferences from a class: Go interfaces carry no data or implementation, are satisfied structurally, and are usually **defined by the consumer**, not the implementer. Any named type (not only structs) can implement them.\n\nWhat they're for:\n- decoupling and dependency inversion (service depends on `UserRepo`, not Postgres);\n- testing with fakes/mocks;\n- polymorphism: one function works with many types;\n- plug-in points and decorators.\n\nProduction examples: `io.Reader`/`io.Writer` (files, sockets, gzip, buffers compose), `http.Handler` (middleware chains), `error`, `sort.Interface`, `context.Context`, `database/sql/driver`, a `Notifier` with email/SMS/push implementations, a `Clock` interface to fake time in tests.\n\nGotchas: an interface value holding a typed nil pointer is **not** `== nil`; keep interfaces small (\"the bigger the interface, the weaker the abstraction\"); \"accept interfaces, return structs\".",
+  "level": 1,
+  "asked": [
+   "A7",
+   "Avito",
+   "Forward",
+   "RSHB",
+   "RealIT",
+   "X5 Group"
+  ],
+  "n": 8
+ },
+ {
+  "id": "interfaces-oop-in-go",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "How is OOP implemented in Go, and why was it designed this way?\nFollow-up: name the three principles of OOP and how each maps to Go.",
+  "a": "Go has objects (types with methods) but **no classes and no inheritance** — it favors composition and implicit interfaces.\n\n- **Encapsulation**: package-level visibility — identifiers starting with an uppercase letter are exported, lowercase are private to the package. Constructors (`NewX`) protect invariants.\n- **Inheritance → composition**: struct **embedding** promotes the embedded type's fields and methods, but it's delegation, not subtyping — `Derived` is not a `Base`, there is no virtual dispatch back into the outer type.\n- **Polymorphism**: via **interfaces**, satisfied implicitly (structural typing): any type with the right methods fits, without `implements`. Also generics for parametric polymorphism.\n- (Abstraction, the 4th often-named principle: interfaces again.)\n\nMethods can be declared on any named type in the package (not just structs), with value or pointer receivers.\n\nWhy: inheritance hierarchies create tight coupling and the fragile base class problem; composition plus small implicit interfaces keeps code decoupled, lets consumers define the abstractions they need, and keeps the language simple.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Digital Spirit",
+   "SeniorSoft",
+   "Sovkombank",
+   "SpaceIT",
+   "X5 Tech"
+  ],
+  "n": 7
+ },
+ {
+  "id": "interfaces-embedding-and-inheritance",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "How is \"inheritance\" done in Go? How does struct embedding work, and do you prefer inheritance or composition?",
+  "a": "Go has no inheritance; it has **embedding**, which is composition with automatic delegation.\n\n```go\ntype Logger struct{ prefix string }\nfunc (l Logger) Log(msg string) { fmt.Println(l.prefix + msg) }\n\ntype Service struct {\n    Logger          // embedded\n    name string\n}\n\ns := Service{Logger: Logger{\"[svc] \"}}\ns.Log(\"hi\") // promoted: same as s.Logger.Log(\"hi\")\n```\n\nWhat it gives you:\n- Fields and methods of the embedded type are **promoted**, so the outer type's method set includes them — the outer type can satisfy interfaces through them.\n- You can **shadow** a promoted method by defining one with the same name on the outer type.\n- Embedding interfaces in structs (partial implementation, decorators) and interfaces in interfaces (`io.ReadWriter`).\n\nNot inheritance: `Service` is not a `Logger` (can't pass it where `Logger` is expected), and the embedded method's receiver is the inner value — no virtual calls back into the outer type. Ambiguous names at the same depth are a compile error on use.\n\nPreference: **composition** — Go forces it, and it's the right default anyway (\"favor composition over inheritance\"). Gotcha: embedding exports the inner type's whole API; embed deliberately, or use a named field.",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "Sovkombank",
+   "SpaceIT",
+   "VK"
+  ],
+  "n": 4
+ },
+ {
+  "id": "interfaces-empty-interface-any",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "What is the empty interface (`interface{}` / `any`) and what is it for?\nFollow-up: how does a `*MyStruct` differ from an `interface{}` holding it?",
+  "a": "`interface{}` has no methods, so **every type satisfies it**. Since Go 1.18 `any` is a built-in alias for it (identical types).\n\nUses:\n- values whose type is only known at runtime: `fmt.Println(...any)`, `json.Unmarshal` into `map[string]any`, `context.Value`, `sync.Map`, reflection-based libraries.\n- heterogeneous containers (rarely a good idea).\n\nBefore generics it was also used for \"generic\" containers; now prefer type parameters — they keep compile-time type safety and avoid boxing.\n\n`*MyStruct` vs `any`: `*MyStruct` is a concrete pointer type — the compiler knows its fields and methods, calls are direct. An `any` holding it is a two-word box (type pointer + data pointer); to use it you must type-assert back (`v.(*MyStruct)`), and a nil `*MyStruct` stored in `any` makes the interface **non-nil**.\n\nCost: type safety is lost (errors move to runtime), and storing non-pointer values in `any` may allocate. Use it at boundaries, not as a default.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "RealIT",
+   "Sarafan",
+   "X5 Tech"
+  ],
+  "n": 4
+ },
+ {
+  "id": "interfaces-internals",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "How are interfaces structured internally, and how do they give polymorphism without explicit implementation declarations?",
+  "a": "An interface value is **two words**:\n\n- **Non-empty interface → `iface`**: `tab *itab` + `data unsafe.Pointer`. The `itab` holds the interface type, the concrete type (`_type`), a hash, and a **table of method pointers** for that concrete type, in the interface's method order.\n- **Empty interface (`any`) → `eface`**: `_type *_type` + `data`. No methods, so no itab.\n\n`data` points to the value; non-pointer values are usually copied to the heap (small scalars/zero values may use static data and avoid allocation). Pointer-shaped values are stored directly.\n\nPolymorphism: calling `r.Read(p)` loads the function pointer from `itab.fun[i]` and calls it with `data` as receiver — dynamic dispatch like a vtable. Because satisfaction is structural, the compiler checks it where a concrete value is converted to an interface; for static conversions the itab is generated at compile time, and for dynamic ones (type assertions to interfaces) the runtime builds it and caches it in a global hash table.\n\nConsequences:\n- An interface is `nil` only when **both** words are nil — a typed nil pointer inside isn't nil.\n- Interface calls are indirect and block inlining (PGO can devirtualize hot sites); storing values can cause heap allocations (escape).\n- Equality compares type words then values.",
+  "level": 3,
+  "asked": [
+   "Digital Spirit",
+   "VK"
+  ],
+  "n": 3
+ },
+ {
+  "id": "interfaces-nil-interface-comparison",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "When is an interface value equal to nil? What's the difference between a nil interface and an interface holding a nil pointer?",
+  "a": "An interface value is `nil` **only when both its type and its value are nil**. An interface holding a typed nil pointer has type = `*T`, value = nil → it is **not** `== nil`.\n\n```go\nvar p *MyErr          // nil pointer\nvar err error = p     // interface: (type=*MyErr, value=nil)\nfmt.Println(p == nil)   // true\nfmt.Println(err == nil) // false\n```\n\nA freshly declared `var i any` or `var err error` is nil (both words nil).\n\nWhere it bites: functions returning a concrete pointer type as `error`:\n```go\nfunc do() error {\n    var e *MyErr\n    return e // non-nil error!\n}\n```\nFix: return a literal `nil` when there's no error; declare return types as `error`, not `*MyErr`.\n\nChecking for \"nil inside\": `reflect.ValueOf(v).IsNil()` (panics for non-nillable kinds) — but needing it usually signals a design problem. Calling a method on a nil pointer receiver works if the method handles nil; accessing fields panics.",
+  "level": 2,
+  "asked": [
+   "Crtex",
+   "Digital Habits"
+  ],
+  "n": 3
+ },
+ {
+  "id": "interfaces-type-switch-and-assertion",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "How do you check the concrete type behind an interface? What is a type switch?",
+  "a": "**Type assertion** — for one type:\n```go\ns, ok := v.(string) // ok == false if v isn't a string; no panic\ns := v.(string)     // panics if wrong type\nw, ok := r.(io.Writer) // can assert to another interface too\n```\n\n**Type switch** — branch over several types:\n```go\nswitch x := v.(type) {\ncase nil:\n    fmt.Println(\"nil\")\ncase int, int64:\n    fmt.Println(\"integer\", x) // x keeps the interface type in multi-type cases\ncase error:\n    fmt.Println(\"error\", x.Error())\ncase fmt.Stringer:\n    fmt.Println(x.String())\ndefault:\n    fmt.Printf(\"other %T\\n\", x)\n}\n```\nCases are checked in order, so put specific types before broad interfaces.\n\nOther options: `reflect.TypeOf(v)`, `%T` in fmt, and for errors `errors.As` (walks the wrap chain — prefer it to asserting on errors directly).\n\nDesign note: frequent type switches over your own types often mean a missing method on an interface.",
+  "level": 1,
+  "asked": [
+   "Sovkombank",
+   "X5 Group"
+  ],
+  "n": 2
+ },
+ {
+  "id": "interfaces-check-multiple-interfaces",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "How do you check whether a type implements several interfaces at once?",
+  "a": "**At compile time** — the usual answer — with blank assignments:\n```go\nvar (\n    _ io.Reader    = (*File)(nil)\n    _ io.Writer    = (*File)(nil)\n    _ fmt.Stringer = (*File)(nil)\n)\n```\nOr with one combined interface:\n```go\nvar _ interface {\n    io.Reader\n    io.Writer\n    fmt.Stringer\n} = (*File)(nil)\n```\nIf `*File` lacks any method, the build fails with a clear message. No runtime cost.\n\n**At runtime** (value behind an interface), assert to a combined interface:\n```go\nif rw, ok := v.(io.ReadWriter); ok {\n    // v implements both\n}\n```\nor chain individual assertions `_, ok1 := v.(io.Reader); _, ok2 := v.(io.Writer)`.\n\nGotcha: check with the right receiver form — `T` and `*T` have different method sets.",
+  "level": 2,
+  "asked": [
+   "DCloud"
+  ],
+  "n": 1
+ },
+ {
+  "id": "interfaces-comparison-and-map-keys",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "Can interface values be compared for equality? How is it done, and can an interface be a map key?\nFollow-up: if two interfaces hold different pointers to identical data, are they equal?",
+  "a": "Yes. Two interface values are equal if **both are nil**, or their **dynamic types are identical and the dynamic values are equal** (using `==` of that type). Comparison: first the type words (itab/type pointer), then the values with the type's equality function.\n\nGotchas:\n- Different types → not equal, no panic: `any(1) == any(int64(1))` is `false`.\n- Same type that is **not comparable** (slice, map, func, or a struct containing them) → **runtime panic** `comparing uncomparable type`.\n- **Pointers compare by address**, not by pointee: two `*T` pointing to separate but identical structs are **not equal**. Structs stored by value compare field by field.\n- An interface can be compared with a concrete value: `err == io.EOF`, `i == 5` (the concrete value is converted).\n\n**Map keys**: interface types are valid key types (`map[any]int`, `map[error]string`) because interfaces are comparable at compile time. But inserting a key whose dynamic type is uncomparable (e.g., `m[[]int{1}] = 1`) **panics at runtime**. Same caveat for generic `comparable` constraints — since Go 1.20 interfaces satisfy `comparable`, which can panic at runtime.",
+  "level": 2,
+  "asked": [
+   "InfoWatch"
+  ],
+  "n": 1
+ },
+ {
+  "id": "interfaces-copy-reader-to-writer",
+  "cat": "interfaces",
+  "kind": "code",
+  "q": "Given io.Reader and io.Writer, implement `myFunc(stdin, socket io.Reader, out io.Writer)` that forwards both inputs to `out`.",
+  "a": "Copy both readers into `out` concurrently (either may block indefinitely, so doing them sequentially would starve the second). `io.Copy` handles the read/write loop, partial writes, and `io.EOF`. Concurrent writes to the same writer must be serialized, so wrap `out` with a mutex; each `Write` call then delivers a whole chunk.\n\n```go\ntype lockedWriter struct {\n    mu sync.Mutex\n    w  io.Writer\n}\n\nfunc (l *lockedWriter) Write(p []byte) (int, error) {\n    l.mu.Lock()\n    defer l.mu.Unlock()\n    return l.w.Write(p)\n}\n\nfunc myFunc(stdin, socket io.Reader, out io.Writer) error {\n    w := &lockedWriter{w: out}\n    errs := make([]error, 2)\n    var wg sync.WaitGroup\n    for i, r := range []io.Reader{stdin, socket} {\n        wg.Go(func() { // Go 1.25+\n            _, errs[i] = io.Copy(w, r)\n        })\n    }\n    wg.Wait()\n    return errors.Join(errs...)\n}\n```\n\nDiscussion points: chunk interleaving between sources is arbitrary; if lines must stay intact, read with `bufio.Scanner` and write whole lines. For cancellation, close the socket (a blocked `Read` doesn't observe `context`). Pre-1.25, use `wg.Add(1)` + `go func(){ defer wg.Done() ... }()`.",
+  "level": 2,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1
+ },
+ {
+  "id": "interfaces-empty-struct-vs-empty-interface",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "What's the difference between an empty struct and an empty interface?",
+  "a": "Completely different things:\n\n- **`struct{}`** — a concrete type with **no fields and zero size**. All zero-size values may share the same address (`runtime.zerobase`), so it costs no memory. Uses: set values `map[string]struct{}`, signal-only channels `chan struct{}` (`done`, `close(ch)` as broadcast), method-only types (`type noopLogger struct{}`).\n- **`interface{}` / `any`** — an interface type with no methods, so it can **hold a value of any type**. It's two words (16 bytes on 64-bit): type pointer + data pointer, and storing values may allocate.\n\nMnemonic: `struct{}` means \"nothing\", `interface{}` means \"anything\".\n\nGotcha: `var x any = struct{}{}` is a non-nil interface holding the empty struct value.",
+  "level": 1,
+  "asked": [
+   "InDrive"
+  ],
+  "n": 1
+ },
+ {
+  "id": "interfaces-interface-refinement",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "What is interface refinement (interface embedding) in Go?",
+  "a": "Building a larger, more specific interface from smaller ones by **embedding** them; the new interface's method set is the union.\n\n```go\ntype Reader interface{ Read(p []byte) (int, error) }\ntype Writer interface{ Write(p []byte) (int, error) }\n\ntype ReadWriter interface {\n    Reader\n    Writer\n}\n\ntype ReadWriteCloser interface {\n    ReadWriter\n    io.Closer\n}\n```\n\nAny type implementing all methods satisfies the refined interface, and a `ReadWriter` value can be passed wherever a `Reader` is expected.\n\nRelated runtime \"refinement\": **checking for optional capabilities** with a type assertion, e.g., `if wt, ok := r.(io.WriterTo); ok { ... }` in `io.Copy`, or `http.Flusher` on a `ResponseWriter`. Overlapping methods with identical signatures are allowed when embedding (since Go 1.14).\n\nDesign point: keep the base interfaces tiny and compose, instead of one fat interface.",
+  "level": 2,
+  "asked": [
+   "X5 Group"
+  ],
+  "n": 1
+ },
+ {
+  "id": "interfaces-nil-byte-pointer-print",
+  "cat": "interfaces",
+  "kind": "output",
+  "q": "What does this program print? Pay attention to the last comparison.",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tvar inf interface{}\n\tfmt.Println(inf, inf == nil)\n\n\tvar data *byte\n\tfmt.Println(data, data == nil)\n\n\tinf = data\n\n\tfmt.Println(inf, inf == nil)\n\tfmt.Println(\"eq\", data == inf)\n}",
+  "a": "```text\n<nil> true\n<nil> true\n<nil> false\neq true\n```\n\n- Empty `interface{}` → prints `<nil>`, equals nil.\n- Nil `*byte` → prints `<nil>`, equals nil.\n- `inf = data`: the interface now holds (type `*byte`, value nil). `fmt` prints the value `<nil>`, but `inf == nil` is **false** because the type word is set.\n- `data == inf`: comparing a concrete value with an interface converts `data` to `interface{}` first, producing the same (type `*byte`, nil) pair → **true**.\n\nSo the printed text is the same in lines 1 and 3 while the comparisons differ — printing can't tell you whether an interface is nil.",
+  "level": 2,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "interfaces-nil-pointer-in-empty-interface",
+  "cat": "interfaces",
+  "kind": "output",
+  "q": "What do these three `== nil` checks print? (nil *string inside an empty interface)",
+  "code": "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tvar s *string\n\tfmt.Println(s == nil)\n\n\tvar i interface{}\n\tfmt.Println(i == nil)\n\n\ti = s\n\tfmt.Println(i == nil)\n}",
+  "a": "```text\ntrue\ntrue\nfalse\n```\n\n- `s` is a nil `*string` → `s == nil` is `true`.\n- `i` is a zero `interface{}` — both its type and value words are nil → `true`.\n- `i = s` stores a **typed nil**: the interface now holds type `*string` with a nil value. An interface equals `nil` only if both words are nil, so `i == nil` is `false`.\n\nChecking for \"nil inside\" requires a type assertion (`p, ok := i.(*string); ok && p == nil`) or reflection.",
+  "level": 1,
+  "asked": [
+   "Ximilabs"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "interfaces-reader-to-writer-conversion",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "Can you convert an io.Reader to an io.Writer? What happens if you try?",
+  "a": "Not with a static conversion: `io.Writer(r)` **doesn't compile**, because `io.Reader`'s method set lacks `Write`.\n\nYou can use a **type assertion**, which checks the dynamic type at runtime:\n```go\nw, ok := r.(io.Writer) // ok is true if the concrete type also has Write\nw := r.(io.Writer)     // panics if it doesn't\n```\nIt succeeds for types like `*os.File`, `*bytes.Buffer`, `net.Conn` — they implement both — and fails for, say, `*strings.Reader`.\n\nThis is exactly how the standard library discovers optional capabilities: `io.Copy` checks `src.(io.WriterTo)` and `dst.(io.ReaderFrom)`.\n\nGotcha: relying on it for your own logic is fragile — wrappers (decorators, middleware) hide the extra methods of the underlying value, so the assertion silently fails. Prefer asking for the interface you need in the signature.",
+  "level": 2,
+  "asked": [
+   "InfoWatch"
+  ],
+  "n": 1
+ },
+ {
+  "id": "interfaces-reassign-interface-param",
+  "cat": "interfaces",
+  "kind": "output",
+  "q": "What does this program print? `ToNil` sets its interface parameter to nil; it's called with a real pointer, then a nil one.",
+  "code": "package main\n\nimport \"fmt\"\n\ntype MyStruct struct {\n\tValue string\n}\n\ntype MyInterface interface {\n\tGetValue() string\n}\n\nfunc (m *MyStruct) GetValue() string {\n\treturn m.Value\n}\n\nfunc ToNil(obj MyInterface) {\n\tif obj == nil {\n\t\tfmt.Printf(\"obj = nil\")\n\t\treturn\n\t}\n\tobj = nil\n}\n\nfunc main() {\n\tmyStruct := &MyStruct{Value: \"test\"}\n\n\tToNil(myStruct)\n\tfmt.Printf(\"myStruct: %+v \\n\", myStruct)\n\n\tmyStruct = nil\n\n\tToNil(myStruct)\n\tfmt.Printf(\"myStruct: %+v \\n\", myStruct)\n}",
+  "a": "```text\nmyStruct: &{Value:test} \nmyStruct: <nil> \n```\n\n- First call: `obj` is non-nil, so nothing prints; `obj = nil` only changes the **local copy** of the interface — Go passes everything by value, so the caller's `myStruct` is untouched and prints `&{Value:test}`.\n- Second call: `myStruct` is a nil `*MyStruct`. Converted to `MyInterface`, it becomes (type `*MyStruct`, value nil) — **not a nil interface**, so `obj == nil` is false and `\"obj = nil\"` is **never printed**.\n- The second `%+v` prints `<nil>` because `myStruct` itself was set to nil in `main` — that assignment, not `ToNil`, is what changed it.\n\nTo really nil out the caller's variable you'd need a pointer to it: `func ToNil(p **MyStruct) { *p = nil }`.",
+  "level": 2,
+  "asked": [
+   "Tochka Bank"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "interfaces-reflect-isnil-any",
+  "cat": "interfaces",
+  "kind": "output",
+  "q": "What does this print for `nil`, a nil `*int`, and `42`? (`bar == nil` vs `reflect.ValueOf(bar).IsNil()` vs `bar.(int)`)",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"reflect\"\n)\n\nfunc foo(bar any) {\n\tif bar == nil {\n\t\tfmt.Println(\"nil interface\")\n\t} else if reflect.ValueOf(bar).IsNil() {\n\t\tfmt.Println(\"non-nil interface with nil value\")\n\t}\n\n\tv, ok := bar.(int)\n\tfmt.Println(v, ok)\n}\n\nfunc main() {\n\tfoo(nil)\n\tvar p *int\n\tfoo(p)\n\tfoo(42)\n}",
+  "a": "```text\nnil interface\n0 false\nnon-nil interface with nil value\n0 false\npanic: reflect: call of reflect.Value.IsNil on int Value\n```\n\n- `foo(nil)`: both interface words are nil → `bar == nil` is true. `bar.(int)` with comma-ok returns the zero value `0, false`, no panic.\n- `foo((*int)(nil))`: the interface holds type `*int` with a nil value → `bar == nil` is false; `reflect.ValueOf(bar).IsNil()` is true. Assertion to `int` fails → `0 false`.\n- `foo(42)`: `bar != nil`, then `IsNil()` is called on an `int` → **panic**: `IsNil` is only valid for chan, func, interface, map, pointer, slice, unsafe pointer. Guard it with a kind check:\n\n```go\nrv := reflect.ValueOf(bar)\nswitch rv.Kind() {\ncase reflect.Pointer, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:\n    return rv.IsNil()\n}\n```\n\nAlso: the single-value form `v := bar.(int)` would panic on a mismatch; the comma-ok form never does. (The original snippet doesn't compile as-is: `v` and `ok` are unused.)",
+  "level": 3,
+  "asked": [
+   "Avito"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "interfaces-typed-nil-check-error",
+  "cat": "interfaces",
+  "kind": "output",
+  "q": "What does this program print, and why? A typed nil pointer is passed to `checkError(err error)` three times.",
+  "code": "package main\n\nimport \"fmt\"\n\ntype errorString struct {\n\tcode int\n}\n\nfunc (e *errorString) Error() string {\n\treturn fmt.Sprintf(\"error message: %d\", e.code)\n}\n\nfunc checkError(err error) bool {\n\treturn err != nil\n}\n\nfunc main() {\n\tvar e *errorString\n\tif checkError(e) {\n\t\tfmt.Println(1, e)\n\t}\n\te = new(errorString)\n\tif checkError(e) {\n\t\tfmt.Println(2, e)\n\t}\n\te = nil\n\tif checkError(e) {\n\t\tfmt.Println(3, e)\n\t}\n}",
+  "a": "```text\n1 <nil>\n2 error message: 0\n3 <nil>\n```\n\nAll three `checkError` calls return **true**:\n- Case 1 and 3: `e` is a nil `*errorString`; passing it as `error` makes an interface with type `*errorString` and nil value, which is not `== nil`.\n- Case 2: `new(errorString)` → a real pointer, code 0.\n\nPrinting a nil `*errorString`: `fmt` sees an `error`, calls `Error()` on the nil pointer, which panics on `e.code`; `fmt` recovers panics from nil pointer receivers and prints `<nil>`.\n\nFix: don't store errors in concrete pointer variables; use `var err error` and assign `nil` or `&errorString{...}`.",
+  "level": 2,
+  "asked": [
+   "DIT Moscow"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "interfaces-typed-nil-error-handler",
+  "cat": "interfaces",
+  "kind": "output",
+  "q": "What does this program print? A nil `*MyError` is passed to a function taking `error`.",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n)\n\ntype MyError struct{}\n\nfunc (MyError) Error() string { return \"MyError!\" }\n\nfunc errorHandler(err error) {\n\tif err != nil {\n\t\tfmt.Println(\"Error:\", err)\n\t}\n}\n\nfunc main() {\n\tvar err *MyError\n\terrorHandler(err)\n\n\terr = &MyError{}\n\terrorHandler(err)\n}",
+  "a": "```text\nError: <nil>\nError: MyError!\n```\n\n- `var err *MyError` is a nil pointer, but converting it to the `error` parameter creates a **non-nil interface** (type `*MyError`, value nil). So `err != nil` is true and the \"error\" branch runs even though there's no error.\n- Printing it: `Error()` has a value receiver, so calling it through a nil `*MyError` would dereference nil and panic. `fmt` recovers panics from nil receivers and prints `<nil>` instead.\n- Second call: a real `*MyError` → `MyError!`.\n\nFix: functions should return/pass a plain `nil` of type `error` when there's no error — never a typed nil pointer stored in an `error` variable.",
+  "level": 2,
+  "asked": [
+   "Digital Spirit"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "interfaces-value-vs-pointer-in-interface",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "What's the difference between putting a struct value versus a pointer to a struct into an interface?",
+  "a": "1. **Method sets**: a value `T` has only value-receiver methods; `*T` has both value- and pointer-receiver methods. If a method has a pointer receiver, only `*T` satisfies the interface — `var s Stringer = T{}` fails to compile.\n2. **Copy vs share**: storing `T` **copies** the struct into the interface (boxed, usually heap-allocated, immutable through the interface — methods operate on a copy). Storing `*T` stores the pointer, so changes via methods are visible to everyone holding the pointer, and no copy of a big struct is made.\n3. **Assertions must match**: `v.(T)` and `v.(*T)` are different types; asserting the wrong one fails.\n4. **Nil**: a nil `*T` in an interface makes a non-nil interface; a `T` value can't be nil.\n5. **Equality**: two interfaces holding `*T` are equal only if the pointers are equal; holding `T`, they compare struct values (panics at runtime if `T` isn't comparable).\n\nPractical rule: be consistent with receivers per type; use pointers for large or mutable types and for types with a mutex.",
+  "level": 2,
+  "asked": [
+   "Tochka Bank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "interfaces-where-to-define",
+  "cat": "interfaces",
+  "kind": "theory",
+  "q": "Where is it better to define interfaces in Go, and why?",
+  "a": "**On the consumer side** — in the package that uses the behavior, not in the package that implements it.\n\n```go\n// package billing (consumer)\ntype invoiceStore interface {\n    Save(ctx context.Context, inv Invoice) error\n}\n```\nThe `postgres` package just exports a concrete `*Store`; it satisfies the interface implicitly.\n\nWhy:\n- **Implicit satisfaction** makes it possible: the implementer doesn't need to know about the interface.\n- The consumer declares only the methods it needs → small interfaces (interface segregation), easy fakes in tests.\n- No import cycles; the implementation package doesn't depend on abstractions it doesn't use.\n- \"Accept interfaces, return structs\": constructors return concrete types, so callers get full functionality and new methods don't break anyone.\n\nExceptions: widely shared abstractions defined next to the concept (`io.Reader`, `http.Handler`, `error`), and when a package offers multiple implementations of one contract (e.g., `hash.Hash`). Avoid defining interfaces \"just in case\" before a second implementation or a test needs them.",
+  "level": 2,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1
+ }
+]

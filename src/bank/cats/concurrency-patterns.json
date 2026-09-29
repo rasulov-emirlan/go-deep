@@ -1,0 +1,382 @@
+[
+ {
+  "id": "concurrency-patterns-url-checker",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Given a list of URLs, request each one and print `url ok` for 200 and `url not ok` otherwise.\nFollow-ups: make it parallel with printing in a separate goroutine; then URLs arrive on a channel; use a worker pool; why an unbuffered channel and not a buffered one?",
+  "code": "package main\n\nfunc main() {\n\tvar urls = []string{\n\t\t\"http://ozon.ru\",\n\t\t\"https://ozon.ru\",\n\t\t\"http://google.com\",\n\t\t\"http://somesite.com\",\n\t\t\"http://non-existent.domain.tld\",\n\t\t\"https://ya.ru\",\n\t\t\"http://ya.ru\",\n\t\t\"http://ёёёё\",\n\t}\n}",
+  "a": "Step 1, sequential. Use a client **with a timeout** (the default one has none), a request with `ctx`, and always close the body.\n\n```go\nvar client = &http.Client{Timeout: 5 * time.Second}\n\nfunc check(ctx context.Context, url string) bool {\n\treq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)\n\tif err != nil {\n\t\treturn false\n\t}\n\tresp, err := client.Do(req)\n\tif err != nil {\n\t\treturn false\n\t}\n\tdefer resp.Body.Close()\n\treturn resp.StatusCode == http.StatusOK\n}\n\nfunc Sequential(ctx context.Context, urls []string) {\n\tfor _, u := range urls {\n\t\tif check(ctx, u) {\n\t\t\tfmt.Println(u, \"ok\")\n\t\t} else {\n\t\t\tfmt.Println(u, \"not ok\")\n\t\t}\n\t}\n}\n```\n\nSteps 2-4: URLs from a channel, a bounded worker pool, and one printer goroutine. This covers the slice case too (feed the slice into a channel).\n\n```go\nfunc CheckStream(ctx context.Context, urls <-chan string, workers int) {\n\tresults := make(chan string)\n\tvar wg sync.WaitGroup\n\tfor range workers {\n\t\twg.Go(func() {\n\t\t\tfor u := range urls {\n\t\t\t\tstatus := \"not ok\"\n\t\t\t\tif check(ctx, u) {\n\t\t\t\t\tstatus = \"ok\"\n\t\t\t\t}\n\t\t\t\tselect {\n\t\t\t\tcase results <- u + \" \" + status:\n\t\t\t\tcase <-ctx.Done():\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t}\n\t\t})\n\t}\n\tgo func() {\n\t\twg.Wait()\n\t\tclose(results)\n\t}()\n\n\tprinted := make(chan struct{})\n\tgo func() {\n\t\tdefer close(printed)\n\t\tfor r := range results {\n\t\t\tfmt.Println(r)\n\t\t}\n\t}()\n\t<-printed\n}\n```\n\nKey points: only the sender side closes `results`, after all workers finish; `main` waits for the printer, or the last lines are lost when `main` returns; output order is arbitrary (carry an index if order matters). Invalid URLs like `http://ёёёё` just produce an error, so \"not ok\".\n\nUnbuffered vs buffered: unbuffered is a synchronous hand-off. It gives backpressure (workers can't run ahead of the printer) and makes goroutine lifetimes obvious. A buffer only absorbs bursts; it doesn't fix logic bugs, and it can hide leaks and deadlocks until the buffer fills. A buffer of `len(urls)` is fine when the count is known and you want workers to never block on the consumer.\n\nReview of the channel-based draft shown in one interview: `processURLs` drains the whole input before returning (not streaming), starts one goroutine per URL (unbounded), and uses `http.Get` without a timeout.",
+  "level": 1,
+  "asked": [
+   "Astra",
+   "Ozon"
+  ],
+  "n": 5,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-bounded-parallel-fetch-ordered",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Fetch a list of URLs in parallel with at most k concurrent requests, and return results (status codes or contents/errors) in input order.\nFollow-ups: why is a mutex needed here? Can you do it without one?",
+  "code": "var urls = []string{\n\t\"https://www.lamoda.ru/p/mp002xw0lvkd/clothes-tomollyfromjames-plate/\",\n\t\"https://www.lamoda.ru/p/mp002xw14uf2/clothes-tomollyfromjames-plate/\",\n\t\"https://www.lamoda.ru/p/rtladr746901/clothes-iceberg-plate/\",\n\t\"https://www.lamoda.ru/p/mp002xw18h9d/clothes-victoriaveisbrut-plate/\",\n\t\"https://www.lamoda.ru/p/mp002xw004x4/clothes-clanvi-plate/\",\n\t\"https://www.lamoda.ru/p/mp002xw0zfxy/clothes-glvr-plate/\",\n\t\"https://www.lamoda.ru/p/mp002xw0slmg/clothes-snezhnayakoroleva-plate-kozhanoe/\",\n\t\"https://www.lamoda.ru/p/mp002xw132c3/clothes-auranna-plate/\",\n\t// ...\n}\n\nfunc crawl(urls []string, k int) []int {}",
+  "a": "Preallocate the result slice and let each goroutine write **its own index**: order is preserved for free, and no mutex is needed. A buffered channel works as the semaphore.\n\n```go\nvar client = &http.Client{Timeout: 5 * time.Second}\n\nfunc status(ctx context.Context, url string) int {\n\treq, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)\n\tif err != nil {\n\t\treturn -1\n\t}\n\tresp, err := client.Do(req)\n\tif err != nil {\n\t\treturn -1\n\t}\n\tdefer resp.Body.Close()\n\tio.Copy(io.Discard, resp.Body)\n\treturn resp.StatusCode\n}\n\nfunc crawl(ctx context.Context, urls []string, k int) []int {\n\tres := make([]int, len(urls))\n\tsem := make(chan struct{}, k)\n\tvar wg sync.WaitGroup\n\tfor i, u := range urls {\n\t\tsem <- struct{}{}\n\t\twg.Go(func() {\n\t\t\tdefer func() { <-sem }()\n\t\t\tres[i] = status(ctx, u)\n\t\t})\n\t}\n\twg.Wait()\n\treturn res\n}\n```\n\nEquivalent worker-pool form: `k` goroutines ranging over a channel of indexes, each writing `res[i]`. `errgroup` with `SetLimit(k)` is also a good answer. With a test server measuring concurrency, peak in-flight requests was exactly `k` (verified). For the \"contents\" variant, return `[]string` and store `err.Error()` at that index on failure.\n\nMutex questions:\n- Writing distinct slice elements from different goroutines is **not** a data race (separate memory locations), and `wg.Wait()` establishes happens-before for reading them. So no mutex is needed for the results.\n- A mutex (or `sync.Map`) is needed only for genuinely shared state, e.g. a cache of already-fetched URLs to skip duplicates. Without a mutex: dedupe URLs up front in one goroutine (map url to first index, copy results at the end), or use `singleflight` to collapse concurrent duplicate fetches.\n\nReview of the cached variant shown in one interview: `result := crawl(urls, 5)` is unused, so it **doesn't compile**; the RLock check then later Lock write lets two workers fetch the same URL twice (harmless but wasted); creating an `http.Client` per request is wasteful (create one, reuse it); not draining the body hurts connection reuse.",
+  "level": 1,
+  "asked": [
+   "Data Driven Labs",
+   "Lamoda",
+   "Magnit"
+  ],
+  "n": 4,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-basket-double-checkout",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Implement an AddItemAndOrder handler (add item, recompute total, check out, publish), then prevent double checkout under concurrency.\nAdd a product to the user's basket (items unique by ProductID), recompute Total, set status to \"ordered\", and publish a checkout message. An ordered basket can't be changed.\nFollow-ups: what concurrency problems arise if the frontend sends two requests at once, or two pods/data centers handle the call at the same time? How do you prevent double checkout?",
+  "code": "// ---- internal/service/entity/basket/basket.go\ntype Basket struct {\n\tID     uint64\n\tUserID uint64\n\tItems  []BasketItem\n\tStatus string\n\tTotal  uint64\n}\n\n// ---- internal/service/entity/basket/item.go\ntype BasketItem struct {\n\tBasketID  uint64\n\tProductID uint64\n\tCount     uint64\n\tPrice     uint64\n}\n\n// ---- internal/gateway/grpc/basket/dependencies.go\ntype BasketRepository interface {\n\tLoad(ctx context.Context, UserID uint64) (*Basket, error)\n\tSave(ctx context.Context, b *Basket) error\n}\n\ntype CheckoutProducer interface {\n\tSendMessage(ctx context.Context, msg *Basket) error\n}\n\n// ---- internal/gateway/grpc/basket/server.go\ntype BasketServer struct {\n\trepo     BasketRepository\n\tproducer CheckoutProducer\n}\n\n// ---- pkg/server/grpc/basket.grpc.pb.go\ntype BasketServiceServer interface {\n\tAddItemAndOrder(ctx context.Context, req *AddItemRequest) (*EmptyResponse, error)\n}\n\ntype AddItemRequest struct {\n\tUserID    uint64\n\tProductID uint64\n\tPrice     uint64\n\tCount     uint64\n}\n\ntype EmptyResponse struct{}\n\n// ---- internal/gateway/grpc/basket/add_item.go\nfunc (bs *BasketServer) AddItemAndOrder(ctx context.Context, req *AddItemRequest) (*EmptyResponse, error) {\n\tbasket, err := bs.repo.Load(ctx, req.UserID)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\t// place your code\n\n\terr = bs.repo.Save(ctx, basket)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn &EmptyResponse{}, nil\n}",
+  "a": "Handler logic:\n\n```go\nvar ErrAlreadyOrdered = errors.New(\"basket already ordered\")\n\nconst StatusOrdered = \"ordered\"\n\nfunc (bs *BasketServer) AddItemAndOrder(ctx context.Context, req *AddItemRequest) (*EmptyResponse, error) {\n\tif req.Count == 0 {\n\t\treturn nil, errors.New(\"count must be positive\")\n\t}\n\tbasket, err := bs.repo.Load(ctx, req.UserID)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif basket.Status == StatusOrdered {\n\t\treturn nil, ErrAlreadyOrdered\n\t}\n\n\tfound := false\n\tfor i := range basket.Items {\n\t\tif basket.Items[i].ProductID == req.ProductID {\n\t\t\tbasket.Items[i].Count += req.Count\n\t\t\tbasket.Items[i].Price = req.Price\n\t\t\tfound = true\n\t\t\tbreak\n\t\t}\n\t}\n\tif !found {\n\t\tbasket.Items = append(basket.Items, BasketItem{\n\t\t\tBasketID: basket.ID, ProductID: req.ProductID, Count: req.Count, Price: req.Price,\n\t\t})\n\t}\n\n\tvar total uint64\n\tfor _, it := range basket.Items {\n\t\ttotal += it.Count * it.Price\n\t}\n\tbasket.Total = total\n\tbasket.Status = StatusOrdered\n\n\tif err := bs.repo.Save(ctx, basket); err != nil {\n\t\treturn nil, err\n\t}\n\tif err := bs.producer.SendMessage(ctx, basket); err != nil {\n\t\treturn nil, err\n\t}\n\treturn &EmptyResponse{}, nil\n}\n```\n\n(Map errors to gRPC codes: `FailedPrecondition` for already ordered, `InvalidArgument` for bad input. Taking the price from the client is itself questionable; it should come from the catalog.)\n\nConcurrency problems:\n- **Lost update / double checkout**: two requests (double click, retry, two pods, two DCs) both `Load` a non-ordered basket, both modify and `Save`, both publish. Last write wins, one item may vanish, and checkout is emitted twice. An in-process mutex doesn't help across pods.\n- **Dual write**: `Save` succeeds and `SendMessage` fails (or vice versa), so DB and broker disagree.\n\nFixes:\n- **Optimistic locking**: add `Version`; `Save` does `UPDATE baskets SET ..., version = version + 1 WHERE id = $1 AND version = $2` (or `AND status <> 'ordered'`). 0 rows affected means conflict: reload and retry, or return `Aborted`. Verified with 10 concurrent calls against a versioned in-memory repo: exactly 1 checkout and 1 message.\n- Or **pessimistic**: `SELECT ... FOR UPDATE` inside a transaction around load-modify-save.\n- **Transactional outbox**: write the checkout event into an `outbox` table in the **same transaction** as the status change; a relay publishes it (at-least-once). A unique constraint on `(basket_id, event_type)` blocks duplicates; consumers stay idempotent.\n- **Idempotency key** from the client, stored with a unique index, so retries return the first result.\n- Multi-DC: there must be one source of truth per basket (home-region sharding by user, or a strongly consistent DB); two independent writable copies can't prevent double checkout without consensus.",
+  "level": 3,
+  "asked": [
+   "Kuper"
+  ],
+  "n": 3,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-semaphore",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Implement a semaphore. For example, how do you run at most two goroutines at a time instead of all at once?",
+  "a": "A buffered channel of capacity n is a counting semaphore: a send acquires a slot, a receive releases it.\n\n```go\ntype Semaphore struct{ slots chan struct{} }\n\nfunc NewSemaphore(n int) *Semaphore { return &Semaphore{slots: make(chan struct{}, n)} }\n\nfunc (s *Semaphore) Acquire(ctx context.Context) error {\n\tselect {\n\tcase s.slots <- struct{}{}:\n\t\treturn nil\n\tcase <-ctx.Done():\n\t\treturn ctx.Err()\n\t}\n}\n\nfunc (s *Semaphore) TryAcquire() bool {\n\tselect {\n\tcase s.slots <- struct{}{}:\n\t\treturn true\n\tdefault:\n\t\treturn false\n\t}\n}\n\nfunc (s *Semaphore) Release() { <-s.slots }\n```\n\nUsage, at most 2 at a time:\n\n```go\nsem := NewSemaphore(2)\nvar wg sync.WaitGroup\nfor _, t := range tasks {\n\twg.Go(func() {\n\t\tif err := sem.Acquire(ctx); err != nil {\n\t\t\treturn\n\t\t}\n\t\tdefer sem.Release()\n\t\tdo(t)\n\t})\n}\nwg.Wait()\n```\n\nVerified: 10 tasks with `n = 2` never had more than 2 running at once. Acquiring **before** `go` (in the loop) also bounds the number of goroutines, not just the active ones.\n\nAlternatives: `golang.org/x/sync/semaphore.Weighted` (weighted acquire, FIFO fairness, ctx-aware), `errgroup.SetLimit(2)`, or a fixed pool of 2 workers. A mutex + `sync.Cond` + counter also works but can't be combined with `select`/ctx. Gotcha: `Release` without `Acquire` blocks forever (or corrupts the count in other implementations).",
+  "level": 1,
+  "asked": [
+   "CloudX",
+   "QROQO",
+   "X5 Tech"
+  ],
+  "n": 3,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-async-sequential-logger",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Make this FileLogger non-blocking and concurrency-safe using a buffered channel and a background goroutine.\nKeep messages in order, never write after Close, and allow Close to be called twice.",
+  "code": "package main\n\nimport \"os\"\n\ntype Logger interface {\n\tLog(message string) error\n\tClose() error\n}\n\ntype FileLogger struct {\n\tfile *os.File\n}\n\nfunc NewFileLogger(fileName string) (*FileLogger, error) {\n\tf, err := os.Create(fileName)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\treturn &FileLogger{f}, nil\n}\n\nfunc (f FileLogger) Log(message string) error {\n\t_, err := f.file.WriteString(message + \"\\n\")\n\treturn err\n}\n\nfunc (f FileLogger) Close() error {\n\treturn f.file.Close()\n}",
+  "a": "Wrap the real logger: callers push into a buffered channel, and a single goroutine drains it. One consumer means messages are written in channel order.\n\n```go\nvar ErrClosed = errors.New(\"logger closed\")\n\ntype AsyncLogger struct {\n\tnext     Logger\n\tmsgs     chan string\n\tmu       sync.RWMutex\n\tclosed   bool\n\tonce     sync.Once\n\tdone     chan struct{}\n\tcloseErr error\n}\n\nfunc NewAsyncLogger(next Logger, buf int) *AsyncLogger {\n\tl := &AsyncLogger{next: next, msgs: make(chan string, buf), done: make(chan struct{})}\n\tgo func() {\n\t\tdefer close(l.done)\n\t\tfor m := range l.msgs {\n\t\t\t_ = l.next.Log(m)\n\t\t}\n\t}()\n\treturn l\n}\n\nfunc (l *AsyncLogger) Log(m string) error {\n\tl.mu.RLock()\n\tdefer l.mu.RUnlock()\n\tif l.closed {\n\t\treturn ErrClosed\n\t}\n\tl.msgs <- m\n\treturn nil\n}\n\nfunc (l *AsyncLogger) Close() error {\n\tl.once.Do(func() {\n\t\tl.mu.Lock()\n\t\tl.closed = true\n\t\tclose(l.msgs)\n\t\tl.mu.Unlock()\n\t\t<-l.done\n\t\tl.closeErr = l.next.Close()\n\t})\n\treturn l.closeErr\n}\n```\n\nWhy each piece:\n- `RWMutex`: many `Log` calls proceed in parallel (read lock); `Close` takes the write lock, so no `Log` can be mid-send when the channel closes. Otherwise it would panic with `send on closed channel`.\n- `sync.Once`: second `Close` is a no-op and returns the same error.\n- `done`: `Close` waits until the buffer is drained before closing the file, so nothing is lost.\n\nDesign choices to discuss: when the buffer is full, `Log` blocks (backpressure); alternatively drop with `select { default: }` and count drops. Write errors from the background goroutine are lost here; report them via a callback or metric. \"Ordered\" means ordered by arrival into the channel; across goroutines there's no other global order anyway. Also use pointer receivers (the original has value receivers).",
+  "level": 2,
+  "asked": [
+   "Kaspersky",
+   "Ximilabs"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-batch-pipe-producer-consumer",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Implement Pipe(p Producer, c Consumer): move small batches from a source into large batches for a consumer, committing progress in order.\nRead via Next (items + cookie), buffer at most MaxItems, hand the buffer to Process, then Commit every cookie in the order Next returned them.\nHarder: Next, Process and Commit are slow network calls; pipeline them so reading continues while Process/Commit run.",
+  "a": "Invariant: a cookie may be committed only after **all** its items were successfully processed, and cookies are committed strictly in order. After a restart the source resumes from the last committed cookie, so this gives at-least-once delivery (the consumer should be idempotent).\n\nSequential version. Since one `Next` never returns more than `MaxItems`, flush **before** appending a batch that wouldn't fit. No batch is ever split, so each cookie maps to exactly one flush.\n\n```go\nfunc Pipe(p Producer, c Consumer) error {\n\tbuf := make([]any, 0, MaxItems)\n\tvar cookies []int\n\tflush := func() error {\n\t\tif len(buf) == 0 {\n\t\t\treturn nil\n\t\t}\n\t\tif err := c.Process(buf); err != nil {\n\t\t\treturn err\n\t\t}\n\t\tfor _, ck := range cookies {\n\t\t\tif err := p.Commit(ck); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t}\n\t\tbuf = make([]any, 0, MaxItems)\n\t\tcookies = cookies[:0]\n\t\treturn nil\n\t}\n\tfor {\n\t\titems, cookie, err := p.Next()\n\t\tif err != nil {\n\t\t\treturn err\n\t\t}\n\t\tif len(buf)+len(items) > MaxItems {\n\t\t\tif err := flush(); err != nil {\n\t\t\t\treturn err\n\t\t\t}\n\t\t}\n\t\tbuf = append(buf, items...)\n\t\tcookies = append(cookies, cookie)\n\t}\n}\n```\n\nIf you must fill buffers exactly (split a batch across flushes), attach the cookie to the flush containing the batch's **last** item and commit it only then.\n\nPipelined version: three stages connected by small buffered channels, first error cancels everything.\n\n```go\ntype batch struct {\n\titems   []any\n\tcookies []int\n}\n\nfunc PipeConcurrent(ctx context.Context, p Producer, c Consumer) error {\n\tctx, cancel := context.WithCancelCause(ctx)\n\tdefer cancel(nil)\n\ttoProcess := make(chan batch, 1)\n\ttoCommit := make(chan []int, 1)\n\tvar wg sync.WaitGroup\n\n\twg.Go(func() {\n\t\tdefer close(toProcess)\n\t\tcur := batch{items: make([]any, 0, MaxItems)}\n\t\tfor ctx.Err() == nil {\n\t\t\titems, cookie, err := p.Next()\n\t\t\tif err != nil {\n\t\t\t\tcancel(err)\n\t\t\t\treturn\n\t\t\t}\n\t\t\tif len(cur.items)+len(items) > MaxItems {\n\t\t\t\tselect {\n\t\t\t\tcase toProcess <- cur:\n\t\t\t\tcase <-ctx.Done():\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t\tcur = batch{items: make([]any, 0, MaxItems)}\n\t\t\t}\n\t\t\tcur.items = append(cur.items, items...)\n\t\t\tcur.cookies = append(cur.cookies, cookie)\n\t\t}\n\t})\n\n\twg.Go(func() {\n\t\tdefer close(toCommit)\n\t\tfor b := range toProcess {\n\t\t\tif err := c.Process(b.items); err != nil {\n\t\t\t\tcancel(err)\n\t\t\t\treturn\n\t\t\t}\n\t\t\tselect {\n\t\t\tcase toCommit <- b.cookies:\n\t\t\tcase <-ctx.Done():\n\t\t\t\treturn\n\t\t\t}\n\t\t}\n\t})\n\n\twg.Go(func() {\n\t\tfor cks := range toCommit {\n\t\t\tfor _, ck := range cks {\n\t\t\t\tif err := p.Commit(ck); err != nil {\n\t\t\t\t\tcancel(err)\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t}\n\t\t}\n\t})\n\n\twg.Wait()\n\treturn context.Cause(ctx)\n}\n```\n\nOrdering holds because each stage is a single goroutine and channels are FIFO. Process stays sequential (one batch at a time); parallelizing it would need a reorder buffer before the committer. Note: allocate a fresh buffer after handing one off, since reusing `buf[:0]` would overwrite data the consumer is still reading.",
+  "level": 3,
+  "asked": [
+   "Yandex"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-errgroup",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "What is errgroup? Can a sync.WaitGroup return an error?",
+  "a": "`sync.WaitGroup` can't return errors: it only counts. To collect errors with it you need extra plumbing (a mutex-guarded slice, a buffered error channel, `errors.Join`).\n\n`golang.org/x/sync/errgroup` is WaitGroup + error propagation + cancellation:\n\n```go\ng, ctx := errgroup.WithContext(ctx)\ng.SetLimit(10)\nfor _, u := range urls {\n\tg.Go(func() error {\n\t\treturn fetch(ctx, u)\n\t})\n}\nif err := g.Wait(); err != nil {\n\treturn err\n}\n```\n\n- `g.Go(f)` runs `f` in a goroutine; `g.Wait()` waits for all and returns the **first** non-nil error.\n- `WithContext` returns a ctx that is cancelled on the first error (or when `Wait` returns), so siblings can stop early. They must actually honor `ctx`.\n- `SetLimit(n)` bounds concurrency (`Go` blocks when n are running); `TryGo` doesn't block.\n\nGotchas: only the first error is kept, so if you need all of them, collect them yourself and `errors.Join`. Don't use the derived `ctx` after `Wait` (it's cancelled). A zero `errgroup.Group{}` works but doesn't cancel anything.",
+  "level": 1,
+  "asked": [
+   "Plata",
+   "Sovkombank"
+  ],
+  "n": 2
+ },
+ {
+  "id": "concurrency-patterns-fan-in",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Implement fan-in: merge several channels into one output channel.\nFollow-ups: what output order do you expect, does it change with buffered channels, and how do the goroutines finish?",
+  "a": "One forwarding goroutine per input, a WaitGroup, and a separate goroutine that closes the output when all forwarders are done.\n\n```go\nfunc Merge[T any](chans ...<-chan T) <-chan T {\n\tout := make(chan T)\n\tvar wg sync.WaitGroup\n\tfor _, ch := range chans {\n\t\twg.Go(func() {\n\t\t\tfor v := range ch {\n\t\t\t\tout <- v\n\t\t\t}\n\t\t})\n\t}\n\tgo func() {\n\t\twg.Wait()\n\t\tclose(out)\n\t}()\n\treturn out\n}\n```\n\nWhy it's correct:\n- Only one place closes `out`, and only after every sender has finished, so there is no send on a closed channel.\n- The closer runs in its own goroutine, so `Merge` returns immediately and the consumer can start reading (calling `wg.Wait()` inline would deadlock with an unbuffered `out`).\n\nFollow-ups:\n- **Order**: values from one input keep their relative order; interleaving across inputs is arbitrary.\n- **Buffered inputs**: correctness is unchanged; buffering only changes timing/throughput. Forwarders still drain what's buffered before `range` ends.\n- **Termination**: each forwarder's `range` ends when its input is closed and drained, then `Done`. At zero, the closer closes `out`, which ends the consumer's `range`. If an input is never closed, `out` is never closed.\n- **Leaks**: if the consumer may stop early, add a `ctx` and `select { case out <- v: case <-ctx.Done(): return }` in the forwarder.\n\nAlternative for dynamic sets: `reflect.Select`, rarely worth it.",
+  "level": 1,
+  "asked": [
+   "Sovkombank",
+   "Tochka Bank"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-graceful-shutdown",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "What is graceful shutdown: how, when and why?",
+  "a": "Graceful shutdown means stopping without losing work: stop taking new work, finish or safely hand back in-flight work, flush state, release resources, all within a deadline.\n\nWhy: deploys and autoscaling kill pods constantly. Kubernetes sends SIGTERM, then SIGKILL after `terminationGracePeriodSeconds` (30 s by default). Without it you drop requests, lose buffered messages, leave half-done jobs and uncommitted offsets.\n\nHow in Go:\n\n```go\nctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)\ndefer stop()\n\ngo func() {\n\tif err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {\n\t\tlog.Fatal(err)\n\t}\n}()\n\n<-ctx.Done()\nshutdownCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)\ndefer cancel()\n_ = srv.Shutdown(shutdownCtx)\ncancelWorkers()\nwg.Wait()\ndb.Close()\n```\n\nOrder: fail readiness first (optionally sleep a few seconds so the load balancer stops routing), `http.Server.Shutdown` (closes listeners, waits for active requests), stop consumers and commit offsets, drain workers via ctx cancel + WaitGroup, flush logs/metrics/batches, close DB and brokers last.\n\nWorker loops typically `select` on `ctx.Done()` and the job channel. Gotchas: `Shutdown` doesn't wait for hijacked/WebSocket connections (`RegisterOnShutdown`); background goroutines must also listen to ctx; the total must fit in the grace period.",
+  "level": 1,
+  "asked": [
+   "Employcity",
+   "MascotGames"
+  ],
+  "n": 2
+ },
+ {
+  "id": "concurrency-patterns-rate-limiter-external-api",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "An external API allows 100 requests per second on your plan. How do you avoid exceeding it and overpaying?\nContext: e.g. a maps/geocoding provider. Follow-up: how do you limit outgoing requests in general?",
+  "a": "Two different limits, often both needed:\n- **Concurrency limit** (how many in flight): semaphore, worker pool, `errgroup.SetLimit`, `http.Transport.MaxConnsPerHost`.\n- **Rate limit** (how many per second): token bucket.\n\nIn production use `golang.org/x/time/rate`:\n\n```go\nlim := rate.NewLimiter(rate.Limit(100), 10)\nif err := lim.Wait(ctx); err != nil {\n\treturn err\n}\nresp, err := client.Do(req)\n```\n\n`Wait` blocks until a token is available (or ctx ends); `Allow` is the non-blocking variant for \"reject with 429\". Keep a margin (e.g. 90 rps) since clocks and the provider's window differ.\n\nHand-rolled, evenly spaced: a ticker every 10 ms.\n\n```go\ntype Limiter struct{ tick *time.Ticker }\n\nfunc NewLimiter(rps int) *Limiter {\n\treturn &Limiter{tick: time.NewTicker(time.Second / time.Duration(rps))}\n}\n\nfunc (l *Limiter) Wait(ctx context.Context) error {\n\tselect {\n\tcase <-l.tick.C:\n\t\treturn nil\n\tcase <-ctx.Done():\n\t\treturn ctx.Err()\n\t}\n}\n```\n\n(No bursts; for bursts, a buffered token channel refilled by the ticker.)\n\nBeyond one process:\n- N replicas each limiting to 100 rps give N×100. Either split the quota (100/N per pod, simple but wastes capacity) or use a shared limiter: Redis with GCRA/sliding window via a Lua script, or a single egress proxy/gateway.\n- Handle 429/`Retry-After` with backoff+jitter anyway.\n- \"Don't overpay\": cache responses (geocoding results are very cacheable), dedupe concurrent identical calls with `singleflight`, batch requests if the API supports it, and queue non-urgent calls to smooth peaks.",
+  "level": 2,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-semaphore-vs-worker-pool",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "What's the difference between a semaphore and a worker pool, and why do we need them?\nFollow-up: if there are very many requests to an external service, what's the problem?",
+  "a": "Both **bound concurrency**, so you don't exhaust memory, sockets, DB connections or overload a dependency. They differ in shape:\n\n- **Semaphore**: one goroutine per task, but only `k` may be in the critical part at once (`sem := make(chan struct{}, k)`; acquire before, release after). Simple for finite batches, easy to keep result order (write by index), goroutine count still grows with tasks (they wait, cheaply).\n- **Worker pool**: exactly `k` long-lived goroutines pulling from a job channel. Bounded goroutine count and memory, per-worker resources can be reused (buffers, connections), natural backpressure on the producer, and it fits infinite streams.\n\nRule: finite list, want simplicity, use a semaphore (or `errgroup.SetLimit`); stream or heavy per-worker setup, use a pool.\n\nFollow-up: neither limits **rate**. With k=10 and 10 ms responses you still send 1000 rps and hit the provider's quota (429s, bans, bills). Add a rate limiter (token bucket, `x/time/rate`), timeouts, retries with backoff+jitter on 429/5xx, a circuit breaker, caching of repeated lookups, and, across several instances, a shared/distributed quota.",
+  "level": 1,
+  "asked": [
+   "Tutu",
+   "ViTech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "concurrency-patterns-stream-slow-calls",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "IDs arrive on a channel (couriers, hotels). For each one make a slow call (~500 ms), send the results to another channel, and print them.",
+  "code": "package main\n\nimport (\n\t\"time\"\n)\n\ntype Order struct {\n\tCourierID int\n}\n\nfunc main() {\n\tcouriers := getCouriers()\n\t// There's a stream of courier IDs (CourierID) arriving on a channel;\n\t// 1) make a getOrder() call (order), the call takes 500ms;\n\t// 2) send the results into a channel;\n\t// 3) read the results from the channel and print them.\n\n\t// your code here\n\tprintln(\"exit\")\n}\n\nfunc getOrder(cid int) Order {\n\ttime.Sleep(time.Millisecond * 500)\n\treturn Order{CourierID: cid}\n}\n\nfunc getCouriers() chan int {\n\tch := make(chan int)\n\tgo func() {\n\t\tfor i := 1; i <= 10; i++ {\n\t\t\tch <- i\n\t\t}\n\t\tclose(ch)\n\t}()\n\treturn ch\n}",
+  "a": "Sequentially, 10 IDs × 500 ms = 5 s. With a worker pool, the calls overlap.\n\n```go\nfunc fetchOrders(ctx context.Context, ids <-chan int, workers int) <-chan Order {\n\tout := make(chan Order)\n\tvar wg sync.WaitGroup\n\tfor range workers {\n\t\twg.Go(func() {\n\t\t\tfor id := range ids {\n\t\t\t\to := getOrder(id)\n\t\t\t\tselect {\n\t\t\t\tcase out <- o:\n\t\t\t\tcase <-ctx.Done():\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t}\n\t\t})\n\t}\n\tgo func() {\n\t\twg.Wait()\n\t\tclose(out)\n\t}()\n\treturn out\n}\n\nfunc main() {\n\tfor o := range fetchOrders(context.Background(), getCouriers(), 10) {\n\t\tfmt.Println(o)\n\t}\n\tprintln(\"exit\")\n}\n```\n\nWith 10 workers the run took `500ms` for 10 IDs (verified), versus 5 s sequentially.\n\nPoints to discuss:\n- **Bounded** workers, not a goroutine per ID: the input stream may be infinite, and the downstream may need protecting (add a rate limiter for a search API).\n- `out` is closed by one goroutine after all workers finish; the consumer's `range` then ends and `main` prints `exit`.\n- Results arrive out of order; if order matters, carry an index/sequence and reorder, or use per-key partitioning.\n- `ctx` lets the consumer stop early without leaking workers blocked on `out <- o`; the slow call itself should also take `ctx` and have a timeout.\n- Errors: carry them in the result (`struct{ Order; Err error }`) rather than dropping them.",
+  "level": 1,
+  "asked": [
+   "Tutu",
+   "X5 Group"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-thread-safe-cache",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Implement a thread-safe string cache (Get/Set).\nFollow-ups: Mutex or RWMutex? Why defer Unlock? How do you bound its size and evict the oldest entry? Where are the allocations and the memory leak, and how do you avoid them? Slice, ring buffer or linked list?",
+  "code": "type Cache interface {\n\tGet(k string) (v string, ok bool)\n\tSet(k, v string)\n}",
+  "a": "Basic version: map + RWMutex (reads dominate, `Get` doesn't mutate).\n\n```go\ntype MapCache struct {\n\tmu sync.RWMutex\n\tm  map[string]string\n}\n\nfunc (c *MapCache) Get(k string) (string, bool) {\n\tc.mu.RLock()\n\tdefer c.mu.RUnlock()\n\tv, ok := c.m[k]\n\treturn v, ok\n}\n\nfunc (c *MapCache) Set(k, v string) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tc.m[k] = v\n}\n```\n\nBounded LRU: map to list element, move on access, evict from the back. Now `Get` mutates recency, so it needs a full `Mutex`.\n\n```go\ntype entry struct{ k, v string }\n\ntype LRU struct {\n\tmu    sync.Mutex\n\tcap   int\n\tll    *list.List\n\titems map[string]*list.Element\n}\n\nfunc (c *LRU) Get(k string) (string, bool) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\te, ok := c.items[k]\n\tif !ok {\n\t\treturn \"\", false\n\t}\n\tc.ll.MoveToFront(e)\n\treturn e.Value.(*entry).v, true\n}\n\nfunc (c *LRU) Set(k, v string) {\n\tc.mu.Lock()\n\tdefer c.mu.Unlock()\n\tif e, ok := c.items[k]; ok {\n\t\te.Value.(*entry).v = v\n\t\tc.ll.MoveToFront(e)\n\t\treturn\n\t}\n\tc.items[k] = c.ll.PushFront(&entry{k, v})\n\tif c.ll.Len() > c.cap {\n\t\told := c.ll.Back()\n\t\tc.ll.Remove(old)\n\t\tdelete(c.items, old.Value.(*entry).k)\n\t}\n}\n```\n\nFollow-ups:\n- **Mutex vs RWMutex**: RW only when reads dominate and don't mutate; LRU `Get` mutates. Under heavy load, **shard** (N caches by key hash).\n- **defer**: unlocks on panic and every return path; since Go 1.14 open-coded defers cost almost nothing.\n- **Allocations**: a `list.Element` + `*entry` per insert, boxing into `any`, map growth, the key strings. The unbounded map version is the \"leak\": it grows forever, and Go maps **never shrink** after deletes (true with Swiss tables too); substring keys can pin large parent strings; expired TTL entries linger without a janitor.\n- **Avoid allocations**: preallocate `[]entry` of capacity N and link entries by `int32` indexes (intrusive list in a slice), map `string` to `int32`; reuse slots on eviction.\n- **Structure**: FIFO eviction needs only a **ring buffer** (O(1), zero alloc). LRU needs O(1) move-to-front, so a **doubly linked list** (ideally index-based inside a slice). A plain slice gives O(n) removals.",
+  "level": 2,
+  "asked": [
+   "Astra",
+   "WMX"
+  ],
+  "n": 2,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-worker-count-sizing",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "You have a million tasks. How do you choose the number of workers, and how do you distribute load in Go?",
+  "a": "Don't start a million goroutines that each hold resources. Use a bounded **worker pool** fed by a channel. Idle workers pull the next task, so load balances itself.\n\nSizing depends on what bounds the work:\n- **CPU-bound**: about `runtime.GOMAXPROCS(0)` workers. More only adds scheduling overhead. Since Go 1.25 GOMAXPROCS respects container CPU limits (cgroups) by default; before that, `automaxprocs` was needed in Kubernetes.\n- **I/O-bound**: bounded by the downstream, not by cores: DB pool size, the external API's rate limit, file descriptors, memory per in-flight task. Little's law gives a first guess: `workers ≈ target throughput × latency` (1000 rps × 50 ms ≈ 50).\n- Then **measure**: increase until throughput stops growing or latency/error rate at the dependency grows. Make it configurable.\n\nDistribution patterns:\n- Shared job channel + N workers (work sharing); the runtime's work-stealing scheduler balances goroutines across Ps.\n- Partition by key (hash to a worker) when per-key ordering matters.\n- Batching to amortize per-task overhead; backpressure via bounded channels.\n- Beyond one process: a queue (Kafka/RabbitMQ/SQS) with consumer groups, horizontal scaling.\n\nGotcha: goroutines are cheap (~2 KB stack), so the limit is almost never \"goroutines\" but the resources they hold.",
+  "level": 2,
+  "asked": [
+   "Employcity"
+  ],
+  "n": 2
+ },
+ {
+  "id": "concurrency-patterns-batcher-review",
+  "cat": "concurrency-patterns",
+  "kind": "output",
+  "q": "Review this batching code: what does the program actually print, and what's wrong with it?",
+  "code": "package main\n\nimport (\n\t\"context\"\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc main() {\n\tin := make(chan string)\n\thandle(context.Background(), 7*time.Second, in, 7)\n\n\tfor i := 0; i < 10; i++ {\n\t\tin <- fmt.Sprintf(\"in-%0.2v\", i)\n\t\ttime.Sleep(200 * time.Millisecond)\n\t}\n\n\tfmt.Printf(\"done sending in.\")\n\tselect {\n\tcase <-time.After(3 * time.Second):\n\t\tfmt.Printf(\"exiting.\")\n\t\tbreak\n\t}\n}\n\nfunc handle(ctx context.Context, tickerDur time.Duration, in <-chan string, batchSize int) {\n\tgo func() {\n\t\tmsg := make(chan string)\n\t\tticker := time.NewTicker(tickerDur)\n\t\tdefer close(msg)\n\t\tdefer ticker.Stop()\n\n\t\tgo func(msg chan string) {\n\t\t\tfor {\n\t\t\t\ts := <-in\n\t\t\t\tmsg <- s\n\t\t\t}\n\t\t}(msg)\n\n\t\tbatch := make([]string, 0, batchSize)\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-ticker.C:\n\t\t\t\tif len(batch) == 0 {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\tcase m := <-msg:\n\t\t\t\tbatch = append(batch, m)\n\t\t\t\tif len(batch) <= batchSize {\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\tcase <-ctx.Done():\n\t\t\t\tfmt.Printf(\"context done.\\n\")\n\t\t\t\tbreak\n\t\t\t}\n\n\t\t\tfor _, m := range batch {\n\t\t\t\tfmt.Printf(\"processing %s\\n\", m)\n\t\t\t}\n\t\t\tbatch = batch[:0]\n\t\t}\n\t}()\n}",
+  "a": "Output (about 5.1 s total):\n\n```text\nprocessing in-00\nprocessing in-01\nprocessing in-02\nprocessing in-03\nprocessing in-04\nprocessing in-05\nprocessing in-06\nprocessing in-07\ndone sending in.exiting.\n```\n\n(`%0.2v` on an int pads to 2 digits; the last two `Printf`s have no newline.)\n\nOnly 8 of 10 items are processed. The flush happens when the batch reaches **8** (`len <= batchSize` continues until len is 8, an off-by-one: the batch exceeds `batchSize`). `in-08` and `in-09` stay in the batch; the 7 s ticker never fires within the program's ~5 s lifetime, and nothing flushes on exit.\n\nOther bugs:\n- The inner relay goroutine (`in` to `msg`) has no exit condition and leaks; after `close(msg)` it would panic on send, and reading a closed `in` would spin forever with zero values.\n- `break` in `case <-ctx.Done()` only leaves the `select`, not the `for`: cancellation prints `context done.` and loops forever (busy-looping on the closed Done channel).\n- No completion signal: `main` sleeps 3 s and hopes; there's no final flush on shutdown or on input close.\n- The relay goroutine is pointless: `select` can read `in` directly.\n\nFixed:\n\n```go\nfunc handle(ctx context.Context, tickerDur time.Duration, in <-chan string, batchSize int) <-chan struct{} {\n\tdone := make(chan struct{})\n\tgo func() {\n\t\tdefer close(done)\n\t\tticker := time.NewTicker(tickerDur)\n\t\tdefer ticker.Stop()\n\n\t\tbatch := make([]string, 0, batchSize)\n\t\tflush := func() {\n\t\t\tfor _, m := range batch {\n\t\t\t\tfmt.Printf(\"processing %s\\n\", m)\n\t\t\t}\n\t\t\tbatch = batch[:0]\n\t\t}\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-ticker.C:\n\t\t\t\tif len(batch) > 0 {\n\t\t\t\t\tflush()\n\t\t\t\t}\n\t\t\tcase m, ok := <-in:\n\t\t\t\tif !ok {\n\t\t\t\t\tflush()\n\t\t\t\t\treturn\n\t\t\t\t}\n\t\t\t\tbatch = append(batch, m)\n\t\t\t\tif len(batch) >= batchSize {\n\t\t\t\t\tflush()\n\t\t\t\t}\n\t\t\tcase <-ctx.Done():\n\t\t\t\tflush()\n\t\t\t\treturn\n\t\t\t}\n\t\t}\n\t}()\n\treturn done\n}\n```\n\n`main` closes `in` after sending and waits on `<-done`; all 10 items are processed (batches of 7 + 3).",
+  "level": 2,
+  "asked": [
+   "M.Video"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-fast-and-slow-dependency",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "Your service calls two others, one fast and one slow. How would you handle this, and which patterns would you apply?",
+  "a": "Goal: overall latency and availability shouldn't be dictated by the slow dependency.\n\n- **Call in parallel**, not sequentially (`errgroup.WithContext`): latency becomes `max(fast, slow)`, not the sum.\n- **Separate timeouts from a deadline budget**: e.g. 300 ms for the whole request, 100 ms for the fast service, whatever remains for the slow one; propagate `ctx`.\n- **Degrade gracefully**: if the slow part is optional, return the fast part plus a partial/default result when the slow call times out.\n- **Cache** the slow service's responses (TTL, stale-while-revalidate), and use `singleflight` to collapse duplicate concurrent calls.\n- **Go asynchronous** if the result isn't needed in the response: put a message on a queue, return 202, notify later; or precompute/materialize the data ahead of time.\n- **Protect yourself**: circuit breaker on the slow one, bulkhead (separate connection pool/semaphore) so it can't starve calls to the fast one, retries with backoff only where idempotent.\n- **Hedged requests** if the slow one has a long tail but a good median.\n- Observe it: per-dependency latency histograms and traces to see where time goes.\n\nMention the trade-off: caching and async give speed but eventual consistency.",
+  "level": 2,
+  "asked": [
+   "Forward"
+  ],
+  "n": 1
+ },
+ {
+  "id": "concurrency-patterns-gather-from-many-services",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "An endpoint gathers strings from 30 services and concatenates them. How do you build it?\nFollow-ups: without a WaitGroup? Without channels either? And if you only need the first response?",
+  "a": "Base: fan out, write each result by index, wait, join. Latency becomes the slowest call instead of the sum.\n\n```go\nfunc GatherWG(ctx context.Context, svcs []Service) string {\n\tparts := make([]string, len(svcs))\n\tvar wg sync.WaitGroup\n\tfor i, s := range svcs {\n\t\twg.Go(func() {\n\t\t\tif v, err := s(ctx); err == nil {\n\t\t\t\tparts[i] = v\n\t\t\t}\n\t\t})\n\t}\n\twg.Wait()\n\treturn strings.Join(parts, \"\")\n}\n```\n\nWithout WaitGroup: collect exactly `n` results from a channel (buffered, so no sender blocks if we bail out).\n\n```go\ntype res struct {\n\ti int\n\tv string\n}\nch := make(chan res, len(svcs))\nfor i, s := range svcs {\n\tgo func() {\n\t\tv, _ := s(ctx)\n\t\tch <- res{i, v}\n\t}()\n}\nparts := make([]string, len(svcs))\nfor range svcs {\n\tr := <-ch\n\tparts[r.i] = r.v\n}\n```\n\nWithout WaitGroup and channels: a mutex-guarded counter plus `sync.Cond` (or `errgroup`, which hides a WaitGroup; or an atomic counter with polling, which is worse).\n\n```go\nvar mu sync.Mutex\ncond := sync.NewCond(&mu)\nleft := len(svcs)\nfor i, s := range svcs {\n\tgo func() {\n\t\tv, _ := s(ctx)\n\t\tmu.Lock()\n\t\tparts[i] = v\n\t\tleft--\n\t\tif left == 0 {\n\t\t\tcond.Signal()\n\t\t}\n\t\tmu.Unlock()\n\t}()\n}\nmu.Lock()\nfor left > 0 {\n\tcond.Wait()\n}\nmu.Unlock()\n```\n\nFirst response only: buffered channel of size n, return the first success, `cancel()` the rest via ctx.\n\n```go\nctx, cancel := context.WithCancel(ctx)\ndefer cancel()\nch := make(chan result, len(svcs))\nfor _, s := range svcs {\n\tgo func() {\n\t\tv, err := s(ctx)\n\t\tch <- result{v, err}\n\t}()\n}\nfor range svcs {\n\tif r := <-ch; r.err == nil {\n\t\treturn r.v, nil\n\t}\n}\nreturn \"\", errAllFailed\n```\n\nProduction concerns: overall deadline via `ctx`, per-service timeouts, partial results vs fail-all policy, a concurrency limit if 30 grows, `strings.Builder` for large joins.",
+  "level": 2,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-http-proxy-goroutine-bug",
+  "cat": "concurrency-patterns",
+  "kind": "output",
+  "q": "Find and fix the bugs in this HTTP proxy handler.",
+  "code": "package main\n\nimport (\n\t\"io\"\n\t\"log\"\n\t\"net/http\"\n)\n\nfunc handler(w http.ResponseWriter, r *http.Request) {\n\tgo func() {\n\t\tlog.Info(\"Start request\")\n\t\tresp, err := http.Get(\"https://example.com/data\")\n\t\tif err != nil {\n\t\t\tlog.Println(\"request error:\", err)\n\t\t\treturn\n\t\t}\n\t\tdefer resp.Body.Close()\n\n\t\tbody, _ := io.ReadAll(resp.Body)\n\t\tw.Write(body)\n\t}()\n}\n\nfunc main() {\n\thttp.HandleFunc(\"/proxy\", handler)\n\tlog.Fatal(http.ListenAndServe(\":8080\", nil))\n}",
+  "a": "It doesn't compile:\n\n```text\n# conc2/p15\np15/main.go:11:7: undefined: log.Info\n```\n\nThe standard `log` package has no `Info` (that's `log/slog` or third-party loggers); use `log.Println` or `slog.Info`.\n\nLogic bugs once it compiles:\n1. **Writing to `ResponseWriter` from a goroutine after the handler returned.** The handler returns immediately, `net/http` finishes the response (empty 200), and the later `w.Write` is invalid use of a recycled writer: a data race or panic, and the client never gets the body. There's no reason for a goroutine here: do the work synchronously.\n2. No timeout: `http.Get` uses `DefaultClient`, which has no timeout, so a hung upstream pins the goroutine forever.\n3. The incoming request's context isn't propagated: if the client disconnects, the upstream call keeps running.\n4. Upstream errors aren't reported to the client (should be 502), and the upstream status/headers aren't forwarded.\n5. `io.ReadAll` error ignored, and the whole body is buffered in memory; stream it with `io.Copy`.\n6. `http.ListenAndServe` without server timeouts (Slowloris).\n\n```go\nvar upstream = &http.Client{Timeout: 5 * time.Second}\n\nfunc handler(w http.ResponseWriter, r *http.Request) {\n\treq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, \"https://example.com/data\", nil)\n\tif err != nil {\n\t\thttp.Error(w, \"internal error\", http.StatusInternalServerError)\n\t\treturn\n\t}\n\tresp, err := upstream.Do(req)\n\tif err != nil {\n\t\tlog.Println(\"request error:\", err)\n\t\thttp.Error(w, \"upstream unavailable\", http.StatusBadGateway)\n\t\treturn\n\t}\n\tdefer resp.Body.Close()\n\n\tw.Header().Set(\"Content-Type\", resp.Header.Get(\"Content-Type\"))\n\tw.WriteHeader(resp.StatusCode)\n\tif _, err := io.Copy(w, resp.Body); err != nil {\n\t\tlog.Println(\"copy error:\", err)\n\t}\n}\n```\n\nServe with `&http.Server{Addr: \":8080\", ReadHeaderTimeout: 5 * time.Second, ...}`. For a real reverse proxy, `httputil.ReverseProxy` handles headers, streaming and errors.",
+  "level": 2,
+  "asked": [
+   "MaxGroup"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-job-processor-review",
+  "cat": "concurrency-patterns",
+  "kind": "output",
+  "q": "Code review: what issues do you see in this JobProcessor worker pool (Submit / StartWorkers / Stop)?",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"log\"\n\t\"sync\"\n\t\"time\"\n)\n\ntype Job struct {\n\tID      int\n\tPayload string\n}\n\ntype JobProcessor struct {\n\tjobs       chan Job\n\tprocessing map[int]bool\n\tmu         sync.Mutex\n}\n\nfunc NewJobProcessor(bufferSize int) *JobProcessor {\n\treturn &JobProcessor{\n\t\tjobs:       make(chan Job, bufferSize),\n\t\tprocessing: make(map[int]bool),\n\t}\n}\n\nfunc (p *JobProcessor) StartWorkers(n int) {\n\tfor i := 0; i < n; i++ {\n\t\tgo func(workerID int) {\n\t\t\tfor job := range p.jobs {\n\t\t\t\tp.mu.Lock()\n\t\t\t\tif p.processing[job.ID] {\n\t\t\t\t\tp.mu.Unlock()\n\t\t\t\t\tlog.Printf(\"worker %d: job %d already processing\", workerID, job.ID)\n\t\t\t\t\tcontinue\n\t\t\t\t}\n\t\t\t\tp.processing[job.ID] = true\n\t\t\t\tp.mu.Unlock()\n\n\t\t\t\tlog.Printf(\"worker %d: started job %d\", workerID, job.ID)\n\t\t\t\ttime.Sleep(100 * time.Millisecond) // simulate work\n\t\t\t\tlog.Printf(\"worker %d: finished job %d\", workerID, job.ID)\n\n\t\t\t\tp.mu.Lock()\n\t\t\t\tdelete(p.processing, job.ID)\n\t\t\t\tp.mu.Unlock()\n\t\t\t}\n\t\t}(i)\n\t}\n}\n\nfunc (p *JobProcessor) Submit(job Job) {\n\tp.jobs <- job\n}\n\nfunc (p *JobProcessor) Stop() {\n\tclose(p.jobs)\n}\n\nfunc main() {\n\tprocessor := NewJobProcessor(10)\n\tprocessor.StartWorkers(3)\n\n\tfor i := 0; i < 5; i++ {\n\t\tprocessor.Submit(Job{ID: i % 3, Payload: fmt.Sprintf(\"data-%d\", i)})\n\t}\n\n\ttime.Sleep(1 * time.Second)\n\tprocessor.Stop()\n}",
+  "a": "Output is nondeterministic (worker IDs, timestamps and interleaving vary). One run:\n\n```text\n2026/09/29 15:40:08 worker 2: started job 0\n2026/09/29 15:40:08 worker 0: started job 1\n2026/09/29 15:40:08 worker 1: started job 2\n2026/09/29 15:40:09 worker 2: finished job 0\n2026/09/29 15:40:09 worker 2: started job 0\n2026/09/29 15:40:09 worker 1: finished job 2\n2026/09/29 15:40:09 worker 0: finished job 1\n2026/09/29 15:40:09 worker 1: job 1 already processing\n2026/09/29 15:40:09 worker 2: finished job 0\n```\n\nFive jobs with IDs `0,1,2,0,1` were submitted; the second job with ID 1 was **silently dropped**.\n\nIssues:\n- **Dedup drops work**: a job whose ID is in flight is discarded, not retried or queued, and payloads differ (`data-1` vs `data-4`). If dedup is intended, it's check-then-act only over in-flight jobs; completed IDs run again. Clarify semantics: idempotency key, per-key serialization, or reject with an error.\n- **`Stop` doesn't wait**: it just closes the channel; nothing waits for workers, so in-flight jobs are cut off when `main` exits. Add a `sync.WaitGroup` and wait in `Stop`.\n- **`time.Sleep(1 * time.Second)` as synchronization**: works by luck.\n- **`Submit` after `Stop` panics** (send on closed channel), and `Stop` twice panics (close of closed channel). Guard with a mutex + closed flag and `sync.Once`, return an error.\n- **`Submit` blocks** forever when the buffer is full and no one reads: accept a `ctx` and `select`.\n- No cancellation for running jobs (no ctx), no error reporting, a panic in a job kills the process (recover per job), workers can be started twice.",
+  "level": 2,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1
+ },
+ {
+  "id": "concurrency-patterns-monitor-plates",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Count presses per pressure plate from per-plate channels and return the counts once all channels are closed.\nEach plate's channel receives true when pressed and false when released.\n`func MonitorPlates(channels []chan bool) []int`",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"sync\"\n)\n\nfunc main() {\n\t// TODO\n}\n\nfunc MonitorPlates(channels []chan bool) []int {\n\t// TODO\n}",
+  "a": "One goroutine per plate, each writing only its own index, and a WaitGroup to know when all channels are closed.\n\n```go\nfunc MonitorPlates(channels []chan bool) []int {\n\tcounts := make([]int, len(channels))\n\tvar wg sync.WaitGroup\n\tfor i, ch := range channels {\n\t\twg.Go(func() {\n\t\t\tpressed := false\n\t\t\tfor v := range ch {\n\t\t\t\tif v && !pressed {\n\t\t\t\t\tcounts[i]++\n\t\t\t\t}\n\t\t\t\tpressed = v\n\t\t\t}\n\t\t})\n\t}\n\twg.Wait()\n\treturn counts\n}\n```\n\nPoints to make:\n- `counts[i]` is a distinct memory location per goroutine, so no mutex is needed, and `wg.Wait()` makes all writes visible before returning.\n- A press is counted on the **rising edge** (false to true), so a repeated `true` without a release isn't double-counted. If the spec guarantees strict alternation, `if v { counts[i]++ }` is enough. Clarify this with the interviewer.\n- `range ch` exits when the channel is closed, which is the \"all closed\" condition.\n- Alternative without per-plate goroutines: a single `select` loop over a dynamic set (`reflect.Select`), or fan-in into one channel of `(plate, value)` events processed by one goroutine.\n- A nil channel in the slice would block forever; validate input.\n\nTest: plate k gets k+1 press/release pairs, then `true, true, close`, giving `[2 3 4]`.",
+  "level": 1,
+  "asked": [
+   "Sovkombank"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-multisearch-first-success",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Implement MultiSearch: run all SearchFuncs concurrently and return the first successful result immediately.\nIf every SearchFunc fails, return the last error received.",
+  "code": "package main\n\nimport \"context\"\n\ntype Result struct{}\n\ntype SearchFunc func(ctx context.Context, query string) (Result, error)\n\nfunc MultiSearch(ctx context.Context, query string, sfs []SearchFunc) (Result, error) {\n\t// Implement a function that runs query against every given SearchFunc.\n\t// As soon as the first successful result comes back, return it immediately without\n\t// waiting for the rest.\n\t// If all SearchFuncs fail, return the last error received.\n}",
+  "a": "```go\nfunc MultiSearch(ctx context.Context, query string, sfs []SearchFunc) (Result, error) {\n\tif len(sfs) == 0 {\n\t\treturn Result{}, errors.New(\"no search functions\")\n\t}\n\tctx, cancel := context.WithCancel(ctx)\n\tdefer cancel()\n\n\ttype res struct {\n\t\tr   Result\n\t\terr error\n\t}\n\tch := make(chan res, len(sfs))\n\tfor _, sf := range sfs {\n\t\tgo func() {\n\t\t\tr, err := sf(ctx, query)\n\t\t\tch <- res{r, err}\n\t\t}()\n\t}\n\n\tvar lastErr error\n\tfor range sfs {\n\t\tselect {\n\t\tcase x := <-ch:\n\t\t\tif x.err == nil {\n\t\t\t\treturn x.r, nil\n\t\t\t}\n\t\t\tlastErr = x.err\n\t\tcase <-ctx.Done():\n\t\t\treturn Result{}, ctx.Err()\n\t\t}\n\t}\n\treturn Result{}, lastErr\n}\n```\n\nWhy it's built this way:\n- **Buffered channel of `len(sfs)`**: after we return, the losers can still send and exit. With an unbuffered channel they'd block forever, a goroutine leak.\n- **`defer cancel()`**: tells the still-running searches to stop wasting resources (they must honor `ctx`).\n- **Count results, don't close the channel**: exactly `len(sfs)` sends happen, so reading `len(sfs)` times is enough, and there's no close/send race.\n- **Caller's ctx** is respected: a timeout returns `ctx.Err()` immediately.\n- \"Last error\" means last received in time. If you want all of them, `errors.Join`.\n\nVerified cases: fast success beats slow success and an early failure (`{fast}`); all failing returns the later error (`e2`); a 20 ms deadline returns `context deadline exceeded`.",
+  "level": 2,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-sequential-channel-receives-timing",
+  "cat": "concurrency-patterns",
+  "kind": "output",
+  "q": "What does this program print and how long does it take? How would you make it finish in 3 seconds instead of 6?",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"time\"\n)\n\nfunc main() {\n\tstart := time.Now()\n\t_, _ = <-worker(), <-worker()\n\n\tfmt.Printf(\"time passed: %v\\n\", time.Since(start))\n}\n\nfunc worker() chan int {\n\tch := make(chan int)\n\tgo func() {\n\t\ttime.Sleep(3 * time.Second)\n\t\tch <- 1\n\t}()\n\treturn ch\n}",
+  "a": "```text\ntime passed: 6.003656372s\n```\n\n(the exact duration varies slightly.)\n\nIn a tuple assignment the operands are evaluated left to right: first `worker()` is called and `<-` blocks for 3 s until its goroutine sends, and only then is the second `worker()` called, so its goroutine starts its 3 s sleep only then. Total is about 6 s.\n\nFix: start both workers first, then receive; the sleeps run concurrently and the total is about 3 s.\n\n```go\nc1, c2 := worker(), worker()\n_, _ = <-c1, <-c2\n```\n\nFor N workers: start all, then collect (or fan-in). Note: if the snippet is written without the receive operators (`_, _ = worker(), worker()`), it prints almost immediately (`time passed: 1.883µs` in our run), because nobody waits on the channels. The two goroutines then block forever on their unbuffered sends; in a long-running program that's a goroutine leak. Buffered channels (`make(chan int, 1)`) would let them exit.",
+  "level": 1,
+  "asked": [
+   "DIT Moscow"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-stop-goroutines-externally",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "You have 10 running goroutines. How do you stop them from the outside?",
+  "a": "You can't kill a goroutine in Go. You **ask** it to stop, and it must cooperatively check for the signal. Two standard tools, both broadcast to any number of goroutines:\n\n- **`context.Context`**: `ctx, cancel := context.WithCancel(parent)`, pass `ctx` to each goroutine, call `cancel()` from outside. Also gives deadlines, `context.Cause`, and propagates into `net/http`, `database/sql`, gRPC.\n- **A `done` channel that you close**: `close(done)` wakes every receiver at once. Sending one value per goroutine is fragile.\n\n```go\nfunc worker(ctx context.Context, jobs <-chan Job) {\n\tfor {\n\t\tselect {\n\t\tcase <-ctx.Done():\n\t\t\treturn\n\t\tcase j, ok := <-jobs:\n\t\t\tif !ok {\n\t\t\t\treturn\n\t\t\t}\n\t\t\tprocess(ctx, j)\n\t\t}\n\t}\n}\n\nfunc runAndStop(jobs <-chan Job) {\n\tctx, cancel := context.WithCancel(context.Background())\n\tvar wg sync.WaitGroup\n\tfor range 10 {\n\t\twg.Go(func() { worker(ctx, jobs) })\n\t}\n\tcancel()\n\twg.Wait()\n}\n```\n\nDetails that matter:\n- Also **wait** for them to exit (WaitGroup/errgroup), otherwise \"stopped\" just means \"signalled\".\n- Every blocking call inside must also be cancellable (pass `ctx` down, use `select` on sends), or a goroutine stuck in `ch <- v` or a slow I/O call never sees the signal.\n- Closing the input channel is the natural stop signal for pure consumers.",
+  "level": 1,
+  "asked": [
+   "Sovkombank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "concurrency-patterns-stuck-pending-task",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "A worker crashes while a task is in PENDING status, so the task hangs forever. How do you solve this?",
+  "a": "Treat \"PENDING\" as a **lease**, not a permanent state: every claim has an expiry, and expired claims become claimable again.\n\n- Add `locked_until` (or `heartbeat_at`), `attempts` and `worker_id` columns.\n- Claim atomically, taking both new tasks and expired leases:\n\n```sql\nUPDATE tasks\nSET status = 'PENDING', locked_until = now() + interval '5 minutes',\n    attempts = attempts + 1, worker_id = $1\nWHERE id = (\n  SELECT id FROM tasks\n  WHERE status = 'NEW' OR (status = 'PENDING' AND locked_until < now())\n  ORDER BY created_at\n  FOR UPDATE SKIP LOCKED\n  LIMIT 1)\nRETURNING id, payload, attempts;\n```\n\n- Long tasks **heartbeat** (extend `locked_until`) periodically.\n- On success, set DONE with a condition on the claim (`WHERE id = $1 AND attempts = $2`), which acts as a fencing token: a \"zombie\" worker whose lease expired can't overwrite the new owner's result.\n- After `max_attempts`, move to FAILED/dead-letter and alert.\n\nConsequence: delivery is **at-least-once**, so processing must be idempotent (idempotency keys, upserts, dedup on side effects). This is the same idea as SQS visibility timeouts, Kafka consumer-group rebalancing and Redis Streams `XAUTOCLAIM`. Choose the lease longer than p99 processing time, or rely on heartbeats.",
+  "level": 2,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "concurrency-patterns-throttle-token-bucket",
+  "cat": "concurrency-patterns",
+  "kind": "code",
+  "q": "Implement a throttle: handle() runs fn at most `limit` times per second, cancel() stops the limiter.\nhandle returns ErrBusy when the current second's limit is exhausted and ErrCanceled after the limiter was stopped.",
+  "code": "package main\n\nimport (\n\t\"errors\"\n\t\"fmt\"\n\t\"time\"\n)\n\nvar ErrBusy = errors.New(\"busy\")\nvar ErrCanceled = errors.New(\"canceled\")\n\n// throttle ensures fn runs at most `limit` times per second.\n// Returns ErrBusy if the limit is reached, ErrCanceled if the limiter was stopped.\n// Returns handle (runs fn subject to the limit) and cancel (stops the limiter).\nfunc throttle(limit int, fn func()) (handle func() error, cancel func()) {\n\ttokens := make(chan struct{}, limit)\n\tcancelCh := make(chan struct{})\n\n\tfor range limit {\n\t\ttokens <- struct{}{}\n\t}\n\n\tgo func() {\n\t\tticker := time.NewTicker(time.Second)\n\t\tdefer func() {\n\t\t\tticker.Stop()\n\t\t}()\n\t\tfor {\n\t\t\tselect {\n\t\t\tcase <-ticker.C:\n\t\t\t\tfor range limit {\n\t\t\t\t\tselect {\n\t\t\t\t\tcase tokens <- struct{}{}:\n\t\t\t\t\tdefault:\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\tcase <-cancelCh:\n\t\t\t\treturn\n\t\t\t}\n\t\t}\n\t}()\n\n\thandle = func() error {\n\t\tselect {\n\t\tcase <-cancelCh:\n\t\t\treturn ErrCanceled\n\t\tdefault:\n\t\t\tselect {\n\t\t\tcase <-tokens:\n\t\t\t\tfn()\n\t\t\t\treturn nil\n\t\t\tdefault:\n\t\t\t\treturn ErrBusy\n\t\t\t}\n\t\t}\n\t}\n\n\tcancel = func() {\n\t\tclose(cancelCh)\n\t}\n\n\treturn handle, cancel\n}\n\nfunc main() {\n\thandle, cancel := throttle(5, work)\n\tdefer cancel()\n\n\tconst n = 8\n\tvar nOK, nErr int\n\tfor range n {\n\t\terr := handle()\n\t\tif err == nil {\n\t\t\tnOK += 1\n\t\t} else {\n\t\t\tnErr += 1\n\t\t}\n\t}\n\n\tfmt.Printf(\"%d calls: %d OK, %d busy\\n\", n, nOK, nErr)\n}\n\nfunc work() {\n\tfmt.Print(\".\")\n}",
+  "a": "The shown token-bucket implementation works. Running its `main` prints:\n\n```text\n.....8 calls: 5 OK, 3 busy\n```\n\nHow it works: `tokens` is a buffered channel pre-filled with `limit` tokens. A goroutine refills up to `limit` every second via a ticker (non-blocking sends, so the bucket never overflows). `handle` checks `cancelCh` first, then takes a token without blocking (`select` with `default`) and runs `fn`, else returns `ErrBusy`. `cancel` closes `cancelCh`, which stops the refiller and makes every later `handle` return `ErrCanceled`.\n\nIssues to raise in review:\n- **`cancel()` twice panics** (close of closed channel): wrap it in `sync.Once`.\n- **Fixed-window bursts**: the bucket refills all at once each tick, so up to `2×limit` calls can happen within a short window around a tick boundary. For smooth limiting refill one token every `time.Second/limit`, or use `golang.org/x/time/rate` (`rate.NewLimiter(rate.Limit(limit), limit).Allow()`).\n- Race between cancel and handle: a `handle` that already passed the cancel check may still run `fn`. Usually acceptable; document it.\n- `fn` runs synchronously in the caller's goroutine, and a panic in `fn` propagates to the caller (fine, but say it).\n- The ticker goroutine lives until `cancel`: forgetting `cancel` leaks it. Return a `Stop`-style API and document that.\n\n```go\nvar once sync.Once\ncancel = func() { once.Do(func() { close(cancelCh) }) }\n```",
+  "level": 2,
+  "asked": [
+   "Digital Habits"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-timeouts-retries-backoff",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "How do you protect a service against timeouts and slow dependencies?",
+  "a": "Layered defenses:\n\n- **Timeouts everywhere**: `http.Client{Timeout}` or per-request `context.WithTimeout`, `http.Server` `ReadHeaderTimeout`/`ReadTimeout`/`WriteTimeout`/`IdleTimeout`, DB query contexts. The default `http.Client` has no timeout.\n- **Deadline propagation**: pass the incoming request's ctx down, so work stops when the caller has given up; gRPC propagates deadlines automatically.\n- **Retries with exponential backoff and jitter**: e.g. `sleep = rand(0, min(cap, base*2^attempt))` (\"full jitter\"), so clients don't retry in sync (thundering herd). Retry only transient errors (timeouts, 503, 429 honoring `Retry-After`) and only **idempotent** operations, or use idempotency keys. Cap attempts and use a retry budget (e.g. at most 10% extra load), and retry at one layer only to avoid multiplicative retry storms.\n- **Circuit breaker**: after an error-rate threshold, fail fast for a while, then probe (half-open).\n- **Bulkheads**: separate pools/semaphores per dependency so one slow service can't eat all goroutines/connections.\n- **Hedged requests** for tail latency (send a second request after p95).\n- **Fallbacks**: cache, defaults, partial responses; load shedding when overloaded.\n\nGotcha: retries without backoff and budgets turn a slowdown into an outage.",
+  "level": 2,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "concurrency-patterns-user-service-review",
+  "cat": "concurrency-patterns",
+  "kind": "output",
+  "q": "Code review: what issues do you see in this UserService.AddUser implementation?",
+  "code": "package main\n\nimport (\n\t\"fmt\"\n\t\"log\"\n\t\"net/mail\"\n\t\"time\"\n)\n\ntype User struct {\n\tID        int\n\tName      string\n\tEmail     string\n\tCreatedAt time.Time\n\tIsActive  bool\n}\n\ntype UserService struct {\n\tusers []User\n}\n\nfunc NewUserService() *UserService {\n\treturn &UserService{\n\t\tusers: make([]User, 0),\n\t}\n}\n\nfunc (us *UserService) AddUser(name string, email string) error {\n\tif name == \"\" || email == \"\" {\n\t\treturn fmt.Errorf(\"name or email cannot be empty\")\n\t}\n\n\t_, err := mail.ParseAddress(email)\n\tif err != nil {\n\t\treturn fmt.Errorf(\"invalid email: %s\", email)\n\t}\n\n\tfor _, user := range us.users {\n\t\tif user.Email == email {\n\t\t\treturn fmt.Errorf(\"user already exists\")\n\t\t}\n\t}\n\n\tuser := User{\n\t\tID:        len(us.users) + 1,\n\t\tName:      name,\n\t\tEmail:     email,\n\t\tCreatedAt: time.Now(),\n\t\tIsActive:  true,\n\t}\n\n\tus.users = append(us.users, user)\n\tlog.Printf(\"New user added: %s\", user.Email)\n\n\tgo us.sendWelcomeEmail(user.Email)\n\n\treturn nil\n}\n\nfunc (us *UserService) sendWelcomeEmail(email string) {\n\t// Simulate sending an email\n\ttime.Sleep(2 * time.Second)\n\tfmt.Printf(\"Welcome email sent to %s\\n\", email)\n}\n\nfunc main() {\n\tservice := NewUserService()\n\terr := service.AddUser(\"Alice\", \"alice@example.com\")\n\tif err != nil {\n\t\tlog.Fatal(err)\n\t}\n}",
+  "a": "Output:\n\n```text\n2026/09/29 15:40:08 New user added: alice@example.com\n```\n\n(the timestamp varies). `Welcome email sent to ...` is **never printed**: `main` returns right after `AddUser`, killing the fire-and-forget goroutine after 0 of its 2 seconds.\n\nIssues:\n- **Not concurrency-safe**: `us.users` is read and appended without a lock. Concurrent `AddUser` calls race (lost users, duplicate emails passing the check, duplicate IDs). Add a `sync.Mutex` and make check+insert one critical section.\n- **IDs from `len(users)+1`**: breaks with deletions and concurrency. Use a counter under the lock, or DB sequences/UUIDs.\n- **O(n) duplicate check**: index by normalized email (`map[string]User`, lowercase/trim). In a DB, a unique index is the real guarantee.\n- **Fire-and-forget goroutine**: no error handling, no retry, not waited for on shutdown, lost on crash, unbounded if signups spike. Use a queue/outbox, or at least a bounded worker with graceful shutdown (WaitGroup/ctx).\n- **Errors**: string errors can't be checked; use sentinels (`ErrUserExists`) and `%w` to wrap the `mail.ParseAddress` error instead of discarding it.\n- Minor: `mail.ParseAddress` accepts `\"Name <a@b.c>\"`, so store `addr.Address`; logging raw emails is PII; `CreatedAt` should be UTC; no `context.Context`; storage should sit behind a repository interface for tests.",
+  "level": 1,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "concurrency-patterns-when-goroutines-help",
+  "cat": "concurrency-patterns",
+  "kind": "theory",
+  "q": "Will processing data with goroutines always speed up a service? What kind of work parallelizes well?",
+  "a": "No. Goroutines help only when work can overlap and the bottleneck isn't shared.\n\nParallelizes well:\n- **I/O-bound** work with independent waits: calls to other services, DB queries, file reads. Latency becomes max instead of sum, even on one core.\n- **CPU-bound**, embarrassingly parallel work with large chunks: image processing, hashing, parsing independent records. Speedup is capped at the number of cores (GOMAXPROCS).\n\nDoesn't help, or hurts:\n- Tiny tasks: goroutine creation, channel ops and scheduling cost more than the work. Batch them.\n- Work that serializes on a shared resource: one mutex, one DB row, a single-connection pool, a rate-limited API, memory bandwidth.\n- Sequential dependencies: step N needs step N-1's result.\n- A service already saturated with concurrent requests: extra per-request parallelism just adds contention and GC pressure.\n\nAmdahl's law: if 20% of the work is sequential, max speedup is 5x regardless of cores. Also mind false sharing, and that more in-flight requests can overload downstreams.\n\nAnswer in an interview: \"depends on the bottleneck; I'd profile (pprof, trace), bound concurrency, and benchmark\".",
+  "level": 1,
+  "asked": [
+   "Velme"
+  ],
+  "n": 1
+ }
+]

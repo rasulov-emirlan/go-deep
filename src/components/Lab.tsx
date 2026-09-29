@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
 
-export function Lab({ title, controls, children, foot, id }: { title: string; controls?: ReactNode; children: ReactNode; foot?: ReactNode; id?: string }) {
+export function Lab({ title, controls, children, foot, id, className }: { title: string; controls?: ReactNode; children: ReactNode; foot?: ReactNode; id?: string; className?: string }) {
   return (
-    <div className="lab" id={id}>
+    <div className={'lab' + (className ? ' ' + className : '')} id={id}>
       <div className="lab-head">
         <span className="kicker">▶ {title}</span>
         {controls && <div className="controls">{controls}</div>}

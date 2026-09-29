@@ -1,0 +1,34 @@
+/* channels topic: simulator lab + nil/closed table */
+.ch-board { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: .6rem; align-items: stretch; }
+.ch-board .kicker { display: block; margin: 0 0 .35rem; font-size: .62rem; }
+.ch-q { border: 2px dashed var(--g500); padding: .4rem; min-height: 7.5rem; }
+.ch-qbody { display: flex; flex-wrap: wrap; gap: .25rem; align-items: flex-end; }
+.ch-g { display: flex; flex-direction: column; align-items: center; width: 2.6rem; }
+.ch-g img { height: 2.6rem; width: auto; }
+.ch-g span { font: 700 .62rem var(--mono); background: var(--ink); color: var(--paper); padding: 0 .25em; white-space: nowrap; }
+.ch-g b { color: #ff8a93; }
+.ch-more, .ch-empty { font: 500 .66rem var(--mono); color: var(--g500); text-transform: uppercase; }
+.ch-buf { border: 2px solid var(--ink); padding: .4rem; display: flex; flex-direction: column; }
+.ch-board.closed .ch-buf { border-color: var(--red); background: var(--red-soft); }
+.ch-board.closed .ch-buf .kicker { color: var(--red); }
+.ch-slots { display: flex; gap: .3rem; flex: 1; align-items: center; justify-content: center; }
+.ch-slot { width: 2.4rem; height: 2.4rem; border: 2px solid var(--ink); display: flex; align-items: center; justify-content: center; font: 700 1rem var(--mono); background: #fff; }
+.ch-slot.full { background: var(--ink); color: var(--paper); }
+.ch-slot.none { width: auto; padding: 0 .5rem; border-style: dashed; border-color: var(--g500); color: var(--g500); font-size: .7rem; text-transform: uppercase; }
+.ch-btns { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .9rem; }
+.ch-btns .btn { text-transform: none; }
+.ch-msg { margin: .8rem 0 0; padding: .5rem .7rem; border-left: 4px solid var(--g300); background: var(--g100); font-size: .92rem; min-height: 2.9em; }
+.ch-msg.ok { border-left-color: var(--ink); }
+.ch-msg.park { border-left-color: var(--g500); }
+.ch-msg.zero { border-left-color: var(--red); }
+.ch-msg.panic { border-left-color: var(--red); background: var(--red-soft); color: var(--red); font-weight: 600; }
+.ch-got { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; margin-top: .6rem; }
+.ch-got .kicker { margin: 0 .2rem 0 0; font-size: .62rem; }
+.ch-got span:not(.kicker) { font: 600 .72rem var(--mono); border: 1.5px solid var(--ink); padding: .05rem .35rem; }
+.ch-got span.zero { border-color: var(--red); color: var(--red); }
+
+.ch-table { border-collapse: collapse; font-size: .9rem; margin: .5rem 0 1.5rem; width: 100%; max-width: 36rem; }
+.ch-table th, .ch-table td { border: 1px solid var(--g300); padding: .4rem .55rem; text-align: left; vertical-align: top; }
+.ch-table th { font: 500 .66rem var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--g500); background: var(--paper); }
+.ch-table td:first-child { font-family: var(--mono); font-size: .82rem; white-space: nowrap; }
+.ch-table .p { color: var(--red); font-weight: 600; }

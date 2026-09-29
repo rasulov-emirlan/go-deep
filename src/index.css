@@ -276,3 +276,14 @@ details.sandbox > .sandbox-body { padding: 0 1rem 1rem; }
 .bank-cta:hover { border-color: var(--red); color: inherit; }
 .bank-cta:hover b { color: var(--red); }
 .bank-link { margin-top: 1.2rem; font: 500 .8rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.tgroup { margin-top: 1.6rem; } .tgroup > .kicker { display: block; margin-bottom: .5rem; }
+/* shared story fixes: text sits under a prop's label, bubbles stay inside the stage edges, stop code scrolls */
+.st-prop:has(.st-plabel) > .st-ptext { top: 1.1em; }
+.st-bubble.l { transform: translate(-18%, -6px); }
+.st-bubble.l::after { left: 18%; }
+.st-bubble.r { transform: translate(-82%, -6px); }
+.st-bubble.r::after { left: 82%; }
+.story-stop pre { overflow-x: auto; max-width: 100%; }
+@media (max-width: 620px) {
+  .story { margin-left: -1.25rem; margin-right: -1.25rem; border-left: 0; border-right: 0; }
+}

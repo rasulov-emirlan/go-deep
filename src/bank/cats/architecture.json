@@ -1,0 +1,612 @@
+[
+ {
+  "id": "architecture-monolith-vs-microservices",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "Monolith vs microservices: pros, cons, and when is each justified?\nFollow-up: why do teams break monoliths apart, what problems appear after the move, and what do you think of the \"microservices everywhere\" trend?",
+  "a": "**Default to a (modular) monolith; split when organizational or scaling pain is real and measurable.**\n\nMonolith pros: one deploy, in-process calls, ACID transactions, easy refactoring and debugging, cheap to run. Cons: coupled releases, one blast radius, whole-app scaling, hard for many teams to work in one codebase, one tech stack.\n\nMicroservices pros: independent deploys and scaling, team autonomy (Conway's law), fault isolation, per-service tech choices. Problems they bring:\n- network failures, latency, partial failure — you need timeouts, retries, circuit breakers;\n- distributed data: no cross-service transactions → sagas, outbox, eventual consistency;\n- operational overhead: CI/CD, service discovery, tracing, on-call per service;\n- API versioning and contract testing; harder local dev and debugging.\n\nJustified when many teams step on each other, components have very different scaling/availability needs, or domain boundaries are stable and well understood.\n\nOn the trend: much of it is cargo cult — small teams pay the distributed-systems tax without having the org problem microservices solve. A well-modularized monolith with clear boundaries is easy to split later; a \"distributed monolith\" is the worst of both.",
+  "level": 2,
+  "asked": [
+   "DCloud",
+   "RSHB",
+   "SpaceIT",
+   "WMX"
+  ],
+  "n": 6
+ },
+ {
+  "id": "architecture-solid",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is SOLID, and how do the principles map onto Go?\nFollow-up: explain Dependency Inversion with a practical example, and how SOLID relates to clean architecture.",
+  "a": "- **S — Single Responsibility**: a module has one reason to change. In Go: small, focused packages and types; handler ≠ business logic ≠ storage.\n- **O — Open/Closed**: extend behavior without modifying code — new interface implementations, middleware/decorators, functional options.\n- **L — Liskov Substitution**: any implementation of an interface must honor its contract (e.g., an `io.Reader` must follow `Read` semantics: return `n > 0` data before `io.EOF`, etc.).\n- **I — Interface Segregation**: small interfaces (`io.Reader`, `io.Writer`, `fmt.Stringer`); define them at the consumer with only the methods it needs.\n- **D — Dependency Inversion**: high-level code depends on abstractions, not concrete implementations.\n\nDIP example:\n```go\n// service package\ntype UserRepo interface {\n    Get(ctx context.Context, id int64) (User, error)\n}\ntype Service struct{ repo UserRepo }\n\n// main wires the concrete implementation\nsvc := service.New(postgres.NewUserRepo(db))\n```\nThe service doesn't import Postgres; in tests you pass a fake.\n\nRelation to clean architecture: clean architecture is essentially SRP + DIP applied at the level of layers — the dependency rule (point inward) is DIP.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Avito",
+   "EyesOfWonder",
+   "IT One",
+   "RSHB"
+  ],
+  "n": 6
+ },
+ {
+  "id": "architecture-idempotency-keys-payments",
+  "cat": "architecture",
+  "kind": "design",
+  "q": "How do you guarantee a payment/transfer isn't executed twice when the client retries after a network error or the backend fails midway?\nContext: a user lost connection, retried, and made 5 transfers instead of 1.",
+  "a": "The problem: retries of a non-idempotent `POST`. The server applied the first request but the response was lost, so every retry created a new transfer.\n\nFix with **idempotency keys**:\n1. Client generates a key (UUID) once per user intent (when the form opens) and sends it with every retry: `Idempotency-Key: 3f9…`.\n2. Server, in one DB transaction: `INSERT INTO idempotency(key, user_id, request_hash, status) VALUES (...)` with a unique constraint. On conflict:\n   - same key, finished → return the **stored response**;\n   - same key, in progress → `409`/`425` \"retry later\";\n   - same key, different payload → `422`.\n3. Do the transfer; store the result against the key in the same transaction as the business write.\n4. Pass the key (or a derived one) downstream to the payment provider — most PSPs (Stripe, etc.) accept idempotency keys, which covers \"backend failed after charging but before saving\".\n5. Recover half-done operations with a reconciliation job / outbox, not by re-charging.\n\nAlso: keep keys with a TTL (e.g., 24h+), scope them per user, disable the \"Pay\" button client-side (UX only, not a guarantee). A cache (Redis `SET NX`) can front the check, but the durable unique constraint is the real guarantee.",
+  "level": 2,
+  "asked": [
+   "Kuper",
+   "MascotGames",
+   "Plata",
+   "Velme"
+  ],
+  "n": 4
+ },
+ {
+  "id": "architecture-saga-pattern",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is the saga pattern and how does it manage distributed transactions?\nFollow-up: how do you cancel/undo steps of a saga?",
+  "a": "A saga replaces one distributed ACID transaction with a **sequence of local transactions**, each in its own service; if a step fails, previously completed steps are undone by **compensating transactions** (semantic undo: refund, cancel booking, release reservation).\n\nTwo styles:\n- **Choreography:** services react to each other's events. Simple for 2–3 steps, but the flow is implicit and hard to follow.\n- **Orchestration:** a coordinator (state machine, or a workflow engine like Temporal/Camunda) sends commands and triggers compensations. Easier to reason about, monitor and change.\n\nUndo mechanics: compensations run in reverse order, must be **idempotent** and retryable (they can't \"fail\"; retry until done). Messages are published via **transactional outbox**. Order steps so that the non-compensatable \"pivot\" step (e.g., charging a card) comes as late as possible.\n\nTrade-off vs 2PC: no locks and better availability, but **no isolation** — others can see intermediate states. Mitigate with semantic locks (status `PENDING`), commutative updates, re-reading values.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "DCloud",
+   "Tehzor",
+   "X5 Tech"
+  ],
+  "n": 4
+ },
+ {
+  "id": "architecture-service-communication",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "How can microservices communicate with each other? What are the downsides of synchronous vs asynchronous communication?",
+  "a": "**Synchronous:** REST/HTTP, gRPC (HTTP/2 + protobuf), GraphQL. **Asynchronous:** message brokers/queues (RabbitMQ, SQS), event logs (Kafka, NATS JetStream), pub/sub, webhooks. Also (anti-pattern) a shared database.\n\nSync downsides:\n- temporal coupling: caller fails if callee is down; latency adds up along the chain;\n- cascading failures, need for timeouts/retries/circuit breakers;\n- tight contract coupling, load on the callee equals load on the caller.\n\nAsync downsides:\n- eventual consistency, harder reasoning about state;\n- extra infrastructure (broker) to operate;\n- at-least-once delivery → duplicates, so consumers must be idempotent; ordering issues;\n- harder debugging/tracing, need DLQs and monitoring of lag;\n- no immediate result for the user (need polling/callbacks).\n\nRule of thumb: sync for queries that need an answer now, async for commands/events where the caller doesn't need to wait.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "SpaceIT"
+  ],
+  "n": 4
+ },
+ {
+  "id": "architecture-design-patterns-in-practice",
+  "cat": "architecture",
+  "kind": "behavioral",
+  "q": "Which design patterns have you used in practice? Tell me about the last one you implemented.",
+  "a": "Name patterns you can show in Go code, with a reason:\n- **Decorator/middleware**: wrap `http.Handler` or a repository for logging, metrics, retries, caching.\n- **Proxy**: a caching or rate-limiting client in front of an external API.\n- **Adapter / Ports & Adapters (hexagonal)**: domain depends on interfaces; Postgres/Kafka/HTTP clients are adapters.\n- **Strategy**: pluggable behaviour via an interface or func (pricing rules, payment providers).\n- **Factory / functional options**: `NewServer(opts ...Option)`.\n- **Repository, Unit of Work**, **Observer/pub-sub** via channels or Kafka.\n- **Worker pool, pipeline, fan-out/fan-in** for concurrency.\n- Distributed: **Outbox**, **Saga**, **Circuit breaker**.\n\nTell the last one with context: problem → why the pattern → result. Pitfall: listing GoF names without a Go example, or forcing Java-style class hierarchies onto Go.",
+  "level": 2,
+  "asked": [
+   "Amtech",
+   "Kvando",
+   "RSHB"
+  ],
+  "n": 3
+ },
+ {
+  "id": "architecture-async-api",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is an asynchronous API, what is it for, and how is it implemented?",
+  "a": "An API where the server **accepts the request and does the work later**, instead of holding the connection until done. Used for long-running or unreliable work (reports, video processing, payments with external providers, calls to slow third parties) and to absorb load spikes.\n\nTypical implementation:\n1. Client `POST /jobs` → server validates, stores a job (or publishes to a queue) and returns **`202 Accepted`** with a job ID / `Location: /jobs/{id}`.\n2. Workers consume from a queue (Kafka, RabbitMQ, SQS) and update job status.\n3. Client gets the result by **polling** `GET /jobs/{id}`, via a **webhook/callback**, or via push (WebSocket/SSE).\n\nAlso counts: event-driven APIs described with AsyncAPI (pub/sub topics).\n\nGotchas: make submission idempotent (idempotency key), persist the job and enqueue atomically (outbox), handle retries/DLQ, and expire old results.",
+  "level": 2,
+  "n": 2,
+  "asked": [
+   "Avito"
+  ]
+ },
+ {
+  "id": "architecture-authn-authz",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What's the difference between authentication and authorization, and how do you implement them in a REST API?",
+  "a": "**Authentication** = who you are (verify identity). **Authorization** = what you may do (check permissions). AuthN comes first; failures map to **401 Unauthorized** vs **403 Forbidden**.\n\nImplementation in a REST API:\n- AuthN: OAuth 2.0 / OpenID Connect with an identity provider; clients send `Authorization: Bearer <token>`. Tokens are **JWTs** validated statelessly (signature, `exp`, `iss`, `aud`) or opaque tokens checked via introspection/session store. Service-to-service: mTLS or client-credentials tokens. API keys for simple machine clients.\n- Put it in **middleware**: parse and verify the token, put the principal into `context.Context`.\n- AuthZ: RBAC (roles), ABAC/ReBAC (attributes, relationships — e.g., \"owner of this order\"), policy engines like OPA/Casbin/SpiceDB. Coarse checks can live in the gateway; resource-level checks must be in the service.\n\nGotchas: short-lived access tokens + refresh tokens, revocation strategy for JWT, HTTPS only, never trust client-provided user IDs, avoid IDOR by always checking ownership.",
+  "level": 1,
+  "asked": [
+   "DCloud",
+   "Velme"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-caching-basics",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is caching, and what's the difference between a cache and a data store?",
+  "a": "A cache is a **fast, temporary copy** of data whose source of truth lives elsewhere, kept to cut latency and offload the slower source (DB, remote API, expensive computation).\n\nCache vs data store:\n- **Source of truth:** a data store owns the data; a cache can always be rebuilt and may lose everything at any time without data loss.\n- **Durability/consistency:** stores guarantee durability and consistency; caches trade them for speed (eviction, TTL, possibly stale reads).\n- **Capacity:** caches hold a hot subset with eviction policies (LRU/LFU/TTL); stores hold everything.\n\nLevels: CPU caches, in-process (a map + mutex, `ristretto`, `otter`), distributed (Redis, Memcached), HTTP/CDN caches, DB buffer pool.\n\nGotcha: once you use Redis as the only place some data exists (sessions without persistence, counters), it's a data store and needs persistence/replication thinking — not cache semantics.",
+  "level": 1,
+  "asked": [
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-caching-strategies",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What caching strategies exist, and what are their pros and cons?\nFollow-up: what is the \"read from cache, on miss read DB, store, return\" pattern called, and what are its downsides?",
+  "a": "That pattern is **cache-aside (lazy loading)**. Main strategies:\n\n- **Cache-aside:** app reads cache, on miss loads from DB and populates. Simple, cache holds only hot data, cache failure degrades gracefully. Downsides: first request is slow (miss penalty), **stale data** until TTL/invalidation, race between update and populate (stale value written back), **cache stampede** on hot misses.\n- **Read-through:** the cache library/layer loads on miss itself — same as cache-aside but logic is centralized.\n- **Write-through:** write to cache and DB synchronously. Cache always fresh; slower writes, caches data never read.\n- **Write-behind (write-back):** write to cache, flush to DB asynchronously. Fast writes, risk of data loss.\n- **Write-around:** write only to DB; cache fills on read.\n- **Refresh-ahead:** refresh hot keys before expiry.\n\nBuilding one correctly: TTL + jitter, bounded size with eviction (LRU/LFU), invalidate by deleting rather than updating on writes, single-flight on misses, negative caching, metrics (hit ratio), and never let the cache be the only copy.\n\nLocal (in-process) cache: fastest, but per-instance inconsistency and memory pressure. Distributed (Redis): shared, network hop, needs HA.",
+  "level": 2,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-circuit-breaker",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is a circuit breaker used for? Have you used circuit breakers and timeouts in practice?",
+  "a": "A circuit breaker **stops calling a failing dependency** for a while, failing fast instead of piling up waiting requests, so the dependency can recover and the caller doesn't exhaust goroutines/connections (prevents cascading failure).\n\nStates:\n- **Closed**: calls pass; failures are counted in a sliding window.\n- **Open**: after an error/timeout threshold, calls fail immediately (or use a fallback: cached value, default, degraded response).\n- **Half-open**: after a cooldown, let a few trial requests through; success → closed, failure → open again.\n\nIn Go: `sony/gobreaker`, or service-mesh level (Envoy outlier detection).\n\nIt works together with **timeouts** (every outbound call gets a `context.WithTimeout` / `http.Client.Timeout` — without them the breaker never sees failures), **retries with backoff + jitter** (only for idempotent calls, with a retry budget), and bulkheads.\n\nFor the behavioral part: give a concrete case — which dependency, thresholds chosen, what fallback, how you verified it (metrics on state transitions).",
+  "level": 2,
+  "asked": [
+   "SpaceIT",
+   "WMX"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-ddd",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is Domain-Driven Design (DDD)?\nFollow-up: why use interfaces when implementing DDD, and what are the layers of clean architecture?",
+  "a": "DDD is an approach where the **software model mirrors the business domain**, built together with domain experts.\n\nStrategic DDD: **ubiquitous language**, **bounded contexts**, context maps, core vs supporting vs generic subdomains — tells you where to invest and where service boundaries go.\n\nTactical DDD: **entities** (identity), **value objects** (immutable, equality by value), **aggregates** with an aggregate root enforcing invariants and forming a transaction boundary, **domain events**, **repositories** (persistence per aggregate), domain services, factories.\n\nWhy interfaces: the domain must not depend on infrastructure. Repositories and external gateways are declared as interfaces in the domain/application layer and implemented in infrastructure (dependency inversion). That keeps the domain pure and testable with in-memory fakes, and lets you swap storage.\n\nClean architecture layers: **entities** → **use cases** → **interface adapters** (controllers, gateways, presenters) → **frameworks & drivers** (DB, web, UI), with dependencies pointing inward.",
+  "level": 2,
+  "asked": [
+   "Sarafan",
+   "ViTech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-ddd-bounded-context",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is a bounded context in DDD, and how does it influence microservice design?",
+  "a": "A **bounded context** is an explicit boundary inside which one domain model and its **ubiquitous language** are consistent. The same word can mean different things in different contexts: a \"Product\" in Catalog (description, photos) is not a \"Product\" in Warehouse (SKU, stock) or Billing (price, tax).\n\nInfluence on microservices:\n- A bounded context is the natural candidate for a service boundary (one context → one or a few services, never one service spanning several contexts).\n- Each context owns its data; others get it via APIs or events, not shared tables.\n- Relationships between contexts are made explicit with a **context map**: customer/supplier, conformist, shared kernel, **anti-corruption layer** translating foreign models.\n\nGotcha: splitting by technical layers or by entities (\"user-service\", \"order-item-service\") instead of by bounded contexts produces chatty, tightly coupled services.",
+  "level": 2,
+  "asked": [
+   "DCloud",
+   "X5 Tech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-decorator-pattern",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is the Decorator pattern used for, and how would you implement it in Go?",
+  "a": "Decorator **adds behavior to an object without changing it**, by wrapping it in another object with the same interface. Used for cross-cutting concerns: logging, metrics, caching, retries, auth. Stackable and follows open/closed.\n\nGo implementation — wrap an interface:\n```go\ntype Repo interface {\n    Get(ctx context.Context, id int64) (User, error)\n}\n\ntype loggingRepo struct {\n    next Repo\n    log  *slog.Logger\n}\n\nfunc (r loggingRepo) Get(ctx context.Context, id int64) (User, error) {\n    start := time.Now()\n    u, err := r.next.Get(ctx, id)\n    r.log.InfoContext(ctx, \"repo.Get\", \"id\", id, \"dur\", time.Since(start), \"err\", err)\n    return u, err\n}\n```\n\nThe most idiomatic Go decorator is HTTP **middleware**: `func(http.Handler) http.Handler`. Function decorators (`func(f HandlerFunc) HandlerFunc`) work too.",
+  "level": 1,
+  "asked": [
+   "RSHB",
+   "SpaceIT"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-fault-tolerance-patterns",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What fault-tolerance patterns do you know?",
+  "a": "- **Timeouts** and deadline propagation (`context`) on every network call.\n- **Retries** with exponential backoff + jitter, only for idempotent operations, with a retry budget to avoid retry storms.\n- **Circuit breaker**: fail fast when a dependency is unhealthy.\n- **Bulkhead**: isolate resources (separate pools/semaphores per dependency) so one slow dependency can't consume everything.\n- **Rate limiting / load shedding / back-pressure**: reject early under overload (429/503) instead of collapsing.\n- **Fallbacks / graceful degradation**: cached or default data, turn off non-critical features.\n- **Idempotency** + deduplication so retries and redeliveries are safe.\n- **Redundancy**: replicas, multi-AZ, failover, leader election; health checks and readiness probes.\n- **Async decoupling** via queues, **outbox**, DLQs.\n- **Graceful shutdown**, hedged requests for tail latency, chaos testing to verify.",
+  "level": 2,
+  "n": 2,
+  "asked": []
+ },
+ {
+  "id": "architecture-hexagonal",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is hexagonal architecture (ports and adapters), and what are its pros and cons?",
+  "a": "The application core (domain + use cases) sits in the middle and talks to the outside world only through **ports** — interfaces it owns. **Adapters** implement them for concrete technologies.\n\n- **Driving (primary) side**: HTTP/gRPC handlers, CLI, consumers call the core through input ports (use-case interfaces).\n- **Driven (secondary) side**: the core calls output ports (`OrderRepository`, `Notifier`), implemented by Postgres, Kafka, SMTP adapters.\n\nPros:\n- Core is independent of frameworks and infrastructure → easy unit tests with fakes.\n- Swappable adapters (DB, broker, transport); multiple entry points to the same logic.\n- Clear boundaries, fits DDD.\n\nCons:\n- More indirection, boilerplate (DTO mapping, interfaces) — overkill for simple CRUD.\n- Risk of leaky abstractions (transactions, pagination, DB-specific features hard to hide behind ports).\n- Needs team discipline.\n\nIt's the same dependency rule as clean/onion architecture, just described with ports and adapters instead of concentric layers.",
+  "level": 2,
+  "asked": [
+   "SpaceIT",
+   "X5 Tech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-idempotency",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is idempotency? Is a POST request idempotent?\nFollow-up: how would you make it idempotent?",
+  "a": "An operation is **idempotent** if doing it once or N times leaves the system in the same state (the response may differ, e.g., 201 then 200/409). It matters because networks force retries: timeouts don't tell you whether the request was applied.\n\nHTTP: `GET`, `HEAD`, `PUT`, `DELETE`, `OPTIONS` are idempotent by spec; **`POST` is not** (each call may create a new resource); `PATCH` isn't guaranteed.\n\nMaking POST idempotent:\n- Client sends an **`Idempotency-Key`** (UUID per logical operation). Server stores key → status/result with a unique constraint; a repeat returns the stored result instead of re-executing.\n- Or use natural keys / upserts (`INSERT ... ON CONFLICT DO NOTHING`), or convert to `PUT /resources/{client-generated-id}`.\n- Conditional updates (version/ETag, `WHERE status = 'pending'`) make state transitions idempotent.\n\nGotcha: \"safe\" (no side effects) ≠ idempotent — `DELETE` is idempotent but not safe.",
+  "level": 1,
+  "asked": [
+   "ZeBrains"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-layered-go-service",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What layers would you split this Go service into? Walk through its architecture and layering.",
+  "a": "A typical, pragmatic layout:\n\n- **Transport** (`internal/transport/http`, `grpc`, consumers): decode/validate requests, call use cases, map errors to status codes, encode responses. No business logic.\n- **Service / use-case** (`internal/service`): business rules, orchestration, transactions boundaries; depends on interfaces for storage and external clients.\n- **Domain/models** (`internal/domain`): entities, value objects, domain errors.\n- **Repository / infrastructure** (`internal/repository/postgres`, `internal/client/...`): SQL, caches, HTTP clients to other services; implement the service's interfaces.\n- **Wiring** (`cmd/app/main.go`): config, logger, DB pool, dependency injection, graceful shutdown.\n\nCross-cutting: middleware (logging, auth, recovery, tracing, metrics), `context.Context` flowing through all layers.\n\nExplain the benefits: each layer testable in isolation (service with fake repo), transport or DB can change independently. Keep it proportional — a tiny service may just need `handler` + `store`.",
+  "level": 1,
+  "asked": [
+   "Kuper",
+   "VK"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-microservices-patterns",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What microservice architecture patterns do you know?",
+  "a": "Group them by the problem they solve:\n\n- **Decomposition:** by business capability / bounded context, strangler fig for migration.\n- **Communication:** API gateway, backend-for-frontend, sync RPC (REST/gRPC) vs async messaging, service discovery.\n- **Data:** database per service, saga (orchestration/choreography), CQRS, event sourcing, transactional outbox/inbox, API composition.\n- **Resilience:** timeouts, retries with backoff + jitter, circuit breaker, bulkhead, rate limiting, idempotent consumers.\n- **Observability:** distributed tracing (OpenTelemetry), correlation IDs, structured logs, health checks.\n- **Deployment:** service per container, sidecar/service mesh, blue-green/canary.\n\nSenior signal: for each pattern say what problem it solves and what it costs (saga = no isolation, compensations to write; CQRS = eventual consistency on the read side).",
+  "level": 2,
+  "asked": [
+   "LinIT"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-negative-cache",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is a negative cache?",
+  "a": "Caching the fact that something **does not exist** or failed (\"user 42: not found\"), so repeated lookups of missing keys don't hit the database or upstream every time.\n\nWhy: protects the DB from **cache penetration** — lots of requests for nonexistent IDs (bugs, scrapers, attacks) always miss the normal cache. DNS is the classic example (NXDOMAIN answers are cached with their own TTL).\n\nHow:\n- Store a sentinel value (e.g., empty marker) with a **short TTL**, shorter than positive entries.\n- Invalidate it when the entity is created, otherwise new data looks missing until TTL.\n- For huge ID spaces, a **Bloom filter** in front of the DB is an alternative.\n\nGotcha: never negatively cache transient errors (timeouts, 5xx) for long — you'd turn a blip into an outage.",
+  "level": 2,
+  "asked": [
+   "Sovkombank",
+   "VK"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-payment-timeout-reconciliation",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "A payment request to a bank timed out and the user saw an error, but the bank later processed it. How do you design for that?\nContext: often asked after \"which payment services did you integrate and what went wrong?\"",
+  "a": "**A timeout is an unknown outcome, not a failure.** Model the payment as a state machine and reconcile asynchronously instead of reporting \"failed\".\n\n- **Idempotency key** per payment attempt, sent to the bank, so retries can't double-charge.\n- Persist the payment as `PENDING` *before* calling the bank (or via the outbox pattern).\n- On timeout: keep `PENDING`/`UNKNOWN`, tell the user \"processing\", and don't let them start a new payment for the same order.\n- Resolve the state by: the bank's **webhook/callback**; a **status poll** with backoff (`GET /payments/{key}`); and a daily **reconciliation job** against the bank's registry/statement that fixes mismatches and alerts on discrepancies.\n- Terminal transitions are idempotent (`PENDING→SUCCESS` once), then notify the user and downstream services via events.\n\nGotcha: never auto-retry a non-idempotent charge, and if you void on timeout, handle \"the bank succeeded after we voided\" with a refund/compensation flow.",
+  "level": 3,
+  "asked": [
+   "Crtex",
+   "Velme"
+  ],
+  "n": 2
+ },
+ {
+  "id": "architecture-api-gateway",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is an API Gateway, and what role does it play in a microservices architecture?",
+  "a": "A single entry point in front of the services that handles **cross-cutting edge concerns** so each service doesn't have to:\n\n- routing requests to the right service, versioning;\n- authentication (validate JWT/OAuth), sometimes coarse authorization;\n- rate limiting, quotas, request size limits, WAF-ish protection;\n- TLS termination, CORS, compression, caching;\n- request aggregation/composition (or a **BFF** per client type);\n- protocol translation (REST ↔ gRPC), observability (access logs, tracing headers).\n\nExamples: Kong, Envoy, NGINX, Traefik, AWS API Gateway.\n\nTrade-offs: another hop and a potential single point of failure/bottleneck (run it HA), and it must not become a place for business logic — that turns it into a new monolith.",
+  "level": 1,
+  "asked": [
+   "DCloud"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-applied-architecture",
+  "cat": "architecture",
+  "kind": "behavioral",
+  "q": "Which architecture do you apply in practice (e.g. layered, clean, hexagonal)?",
+  "a": "Typical Go answer: a **layered/clean-ish structure** — transport (HTTP/gRPC handlers) → service/use-case layer with business logic → repository/adapters for DB, cache and external APIs, with dependencies pointing inward via small interfaces defined by the consumer.\n\nWhy: business logic is testable without infrastructure, adapters are replaceable, and boundaries are clear.\n\nBe pragmatic: Go favours flat, small packages; don't build five layers of mappers for a CRUD service. Mention project layout (`cmd/`, `internal/`), explicit wiring in `main`, and where transactions live (use-case level, via a transaction manager/unit of work). Pitfall: dogmatic \"Clean Architecture\" with interfaces for everything and one implementation each.",
+  "level": 2,
+  "asked": [
+   "RSHB"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-architecture-styles",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What architectural styles do you know? What is layered architecture, and what is a \"Big Ball of Mud\"?",
+  "a": "**Layered (n-tier)**: code organized in horizontal layers — presentation → business/service → data access (→ DB). Each layer depends only on the one below. Simple and familiar; downsides: business logic depends on persistence, changes cut across all layers, and it tends to become \"anemic services + fat repositories\".\n\n**Big Ball of Mud**: the absence of architecture — a haphazardly structured system where everything depends on everything, global state, copy-paste, no boundaries. Arises from time pressure and no refactoring; it's what happens by default.\n\nOthers worth naming:\n- **Clean / Onion / Hexagonal (ports & adapters)** — domain at the center, dependencies inward.\n- **Modular monolith** — one deployable, strict module boundaries.\n- **Microservices**, **SOA**.\n- **Event-driven** (pub/sub, event sourcing), **CQRS**.\n- **Serverless**, **pipes and filters**, **microkernel/plugin**, **space-based**, **MVC/MVVM** (UI-level).",
+  "level": 1,
+  "asked": [
+   "SpaceIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-c4-model",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "Have you heard of the C4 model for architecture diagrams?",
+  "a": "Yes — C4 (by Simon Brown) describes software architecture as **four zoom levels** of diagrams:\n\n1. **Context**: the system as a box, its users and external systems.\n2. **Containers**: deployable/runnable units — web app, API service, database, queue — and how they communicate.\n3. **Components**: major building blocks inside one container (modules, services, repositories).\n4. **Code**: classes/structs — usually generated or skipped.\n\nPlus supporting diagrams: deployment, dynamic (sequence-like), system landscape.\n\nWhy it's useful: a shared, lightweight notation so different audiences (business, devs, ops) look at the right level; diagrams-as-code with Structurizr DSL, PlantUML C4 or Mermaid keeps them versioned next to the code and ADRs.",
+  "level": 1,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-cache-invalidation",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "How would you invalidate the cache in an orders-list/aggregator service?",
+  "a": "Pick by how stale data may be:\n\n- **TTL** as a baseline safety net (short for order status, longer for reference data), with jitter.\n- **Explicit invalidation on write**: after committing an order change, **delete** (not update) the affected keys — the user's orders list, the order card. Deleting avoids races where two writers put values in the wrong order.\n- **Event-driven invalidation**: services publish `OrderChanged` events (outbox/CDC → Kafka); the aggregator consumes them and evicts/refreshes entries. Needed when data comes from several services.\n- **Versioned keys**: `orders:{user}:v{n}` — bump the version to invalidate a whole group atomically.\n\nConsistency details:\n- Race \"read old from DB → writer updates DB + deletes cache → reader writes old value\": mitigate with short TTL, delayed double delete, or version checks.\n- Pagination lists are hard to invalidate partially; cache per-page with short TTL or cache order IDs and fetch cards by ID.\n- Read-your-own-writes: bypass the cache for the user who just changed something.",
+  "level": 2,
+  "asked": [
+   "Tutu"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-cache-metrics",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What metrics would you collect from a cache to understand its effectiveness?",
+  "a": "- **Hit ratio** = hits / (hits + misses), overall and per key prefix — the main one. Track misses separately from errors.\n- **Latency**: p50/p99 of cache get/set vs the backend latency it saves.\n- **Backend load**: DB/upstream QPS with and without the cache — the real goal.\n- **Evictions** and **expirations** per second: high evictions with a low hit ratio means the cache is too small or the working set doesn't fit.\n- **Memory usage / item count / key size** distribution; big keys.\n- **Errors/timeouts** talking to the cache, connection pool saturation.\n- **Staleness**: age of served entries, invalidation lag.\n- **Hot keys** and stampede indicators (concurrent loads per key, singleflight shared counts).\n- For Redis: `keyspace_hits/misses`, `evicted_keys`, `used_memory`, CPU, replication lag.\n\nExport them as Prometheus counters/histograms and alert on hit-ratio drops and eviction spikes.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-cache-stampede",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What happens when 100k concurrent requests hit a cold key in an unwarmed cache, and how do you prevent it?",
+  "a": "All of them miss at once and go to the database — a **cache stampede** (thundering herd / dog-piling). The DB gets 100k identical queries, latency spikes, connections run out, and it may fall over; then the cache never fills because the loads time out.\n\nMitigations:\n- **Request coalescing**: one loader per key, others wait for its result — `golang.org/x/sync/singleflight` in-process, and a distributed lock (`SET key:lock NX PX`) across instances.\n- **Warm the cache** before switching traffic (deploys, cold starts).\n- **Stale-while-revalidate / refresh-ahead**: serve the old value while one worker refreshes; probabilistic early expiration (XFetch).\n- **TTL jitter** so many keys don't expire simultaneously.\n- Protect the DB anyway: connection pool limits, rate limiting/load shedding, circuit breaker.\n\n```go\nv, err, _ := group.Do(key, func() (any, error) {\n    return loadFromDB(ctx, key)\n})\n```\n\nNote `singleflight` only dedups within one process; with 50 pods you still get 50 queries unless you also use a distributed lock or a warm cache.",
+  "level": 3,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "architecture-cap-theorem",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is the CAP theorem, and how does it relate to distributed databases?",
+  "a": "CAP: in a distributed system, when a **network partition** (P) happens, you must choose between **Consistency** (every read sees the latest write — linearizability) and **Availability** (every request to a non-failed node gets a response). Partitions are not optional, so the real choice is CP vs AP **during a partition**.\n\n- **CP**: refuse or block requests on the minority side to stay consistent — etcd, ZooKeeper, Consul, Spanner, typical leader-based setups with synchronous quorum.\n- **AP**: keep answering and reconcile later (eventual consistency, conflict resolution) — Cassandra, DynamoDB with default settings, CouchDB.\n\nNuances a senior should add:\n- \"C\" in CAP is not the \"C\" in ACID.\n- Many systems are tunable per operation (Cassandra quorum reads/writes, `R + W > N`).\n- **PACELC** extends it: Else (no partition) you trade **Latency vs Consistency** — this is the everyday trade-off.\n- A single-node Postgres isn't \"CA\"; it's just not distributed. Adding async replicas makes replica reads AP-ish (stale).",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-clean-architecture",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What does clean architecture mean, and how do you apply it \"correctly\"?",
+  "a": "Core idea: **business logic doesn't depend on frameworks, DBs, or transport**; dependencies point **inward**.\n\nLayers (inside → out): **entities** (domain rules), **use cases** (application logic), **interface adapters** (HTTP handlers, repositories, presenters), **frameworks & drivers** (DB, web framework, brokers).\n\nHow it looks in Go:\n- Domain and use-case packages define small interfaces they need (`OrderRepository`, `PaymentGateway`); infrastructure packages implement them (dependency inversion). Interfaces live at the consumer.\n- Handlers translate HTTP ↔ DTOs, use cases work with domain types, repositories map rows ↔ entities.\n- Wiring happens in `main`/`cmd` (manual DI).\n- Use cases are unit-tested with fakes, no DB needed.\n\n\"Correctly\" = pragmatically: don't create four layers and mappers for a CRUD service; don't cargo-cult Java-style `interfaces` packages. Keep the dependency rule, keep the domain free of `sql`/`http` imports, and add layers only when they pay off.",
+  "level": 2,
+  "asked": [
+   "EyesOfWonder"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-code-smells",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What kinds of code smells exist, and how can they be fixed?",
+  "a": "Common smells and fixes:\n\n- **Long function / large struct (god object)** → extract functions/types, split by responsibility.\n- **Duplicated code** → extract a shared function (but tolerate a little duplication over the wrong abstraction).\n- **Long parameter list** → introduce a params struct or functional options.\n- **Primitive obsession** → value types (`type UserID int64`, `Money`).\n- **Feature envy** (method uses another type's data more than its own) → move the method.\n- **Shotgun surgery** / divergent change → regroup code so one change touches one place.\n- **Deep nesting** → early returns / guard clauses.\n- **Magic numbers/strings** → named constants.\n- **Dead code**, speculative generality → delete.\n- Go-specific: ignored errors (`_ =`), `interface{}` everywhere, huge interfaces defined next to the implementation, global mutable state, goroutines without lifecycle control, `init()` side effects.\n\nFix safely: cover with tests first, refactor in small steps; linters (`golangci-lint`: `gocyclo`, `dupl`, `errcheck`, `unused`) catch many automatically.",
+  "level": 1,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-cqrs",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is CQRS, and how have you applied it when designing microservices?",
+  "a": "**Command Query Responsibility Segregation**: separate the write model (commands that change state and enforce invariants) from the read model (queries, often denormalized and optimized per screen).\n\nTypical microservice use:\n- Write side stores normalized data (Postgres) and publishes events (via outbox/CDC).\n- Read side consumes events and builds **projections**: an Elasticsearch index for search, a Redis/ClickHouse view for dashboards, a denormalized table joining data from several services (solves \"join across services\").\n- Reads and writes scale independently.\n\nA good answer example: \"Orders were written to Postgres; an order-history projection for the client app was built from events in a separate table, so heavy list queries stopped competing with checkout writes.\"\n\nTrade-offs: **eventual consistency** (read-your-own-writes needs care: return the new state from the command, or read from the write side briefly), more moving parts, projection rebuilds. Don't use it for simple CRUD. CQRS doesn't require event sourcing, though they pair well.",
+  "level": 2,
+  "asked": [
+   "DCloud"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-dependency-injection",
+  "cat": "architecture",
+  "kind": "behavioral",
+  "q": "Have you worked with dependency injection in Go? How do you do it?",
+  "a": "In Go DI is usually **manual constructor injection**: components receive their dependencies (interfaces or concrete types) as constructor arguments, and `main` wires the graph.\n\n```go\nrepo := postgres.NewOrderRepo(pool)\nsvc := orders.NewService(repo, kafkaProducer, clock)\nh := httpapi.NewHandler(svc, logger)\n```\n\nBenefits: explicit dependencies, easy fakes in tests, no global state. Interfaces are defined where they're consumed and kept small.\n\nFor big graphs, tools exist: **`google/wire`** (compile-time codegen, no reflection) or **`uber-go/fx`/`dig`** (runtime reflection, lifecycle hooks). Many teams stay manual because it's readable. Pitfalls: package-level globals/`init()` singletons (hidden coupling, hard tests) and service-locator patterns.",
+  "level": 2,
+  "asked": [
+   "RSHB"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-error-logging-layer",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "In a layered service (HTTP → service → repository), if a Postgres query fails, which layer should log the error?",
+  "a": "**Log once, at the top** — usually the transport layer (handler or a middleware), where the request is finished and you decide the response.\n\n- Repository: don't log; **wrap** with context and return: `fmt.Errorf(\"get user %d: %w\", id, err)`.\n- Service: add business context if useful, map to domain errors (`ErrNotFound`), return.\n- Handler/middleware: log the full wrapped chain once with request context (request ID, user, route, trace ID) and map to a status code (404 vs 500).\n\nWhy: logging at every layer produces duplicate, noisy entries for one failure and makes it hard to count errors. The wrapped error already carries the path.\n\nExceptions: errors you **handle and swallow** (fallback to cache, retry that succeeds, background workers without a caller) must be logged where they're swallowed. Use structured logging (`slog`) with the context so the log correlates with the trace.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "architecture-eventual-consistency",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is eventual consistency?",
+  "a": "A consistency model where, **if no new writes happen, all replicas/services eventually converge** to the same value — but reads in between may return stale data.\n\nWhere it appears: async DB replicas, caches, CQRS read models, data propagated between microservices via events, DNS, multi-region stores (Cassandra, DynamoDB).\n\nWhy accept it: availability and latency (see CAP/PACELC) — no need for synchronous coordination across nodes/services.\n\nHow to live with it:\n- Design UX for it (\"order is being processed\").\n- **Read-your-own-writes**: read from the leader or return the fresh state from the command.\n- Idempotent, order-tolerant consumers (versions, timestamps, or monotonic sequence numbers per key).\n- Conflict resolution for multi-writer systems: last-write-wins, CRDTs, merges.\n- Monitor replication/consumer lag to bound \"eventually\".",
+  "level": 1,
+  "asked": [
+   "SpaceIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-facade-vs-adapter",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "How are the Facade and Adapter patterns similar, and how do they differ?",
+  "a": "Both are **structural wrappers** that hide something behind a different interface — that's the similarity.\n\n- **Adapter**: makes an **existing** interface compatible with the one a client expects. Intent: compatibility. Typically wraps **one** object and translates calls (e.g., wrap a third-party SMS SDK so it satisfies your `Notifier` interface; `http.HandlerFunc` adapts a function to `http.Handler`).\n- **Facade**: provides a **new, simplified** interface to a **complex subsystem** of many objects. Intent: simplicity. E.g., `CheckoutService.PlaceOrder()` coordinating inventory, payment and shipping clients.\n\nShort version: adapter changes the shape of an interface to fit; facade reduces complexity by offering a higher-level entry point. (A decorator, by contrast, keeps the same interface and adds behavior.)",
+  "level": 1,
+  "asked": [
+   "SpaceIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-gateway-caching-design",
+  "cat": "architecture",
+  "kind": "design",
+  "q": "You have a Go HTTP gateway and want to put caching in front of everything. How would you approach it?",
+  "a": "Don't cache \"everything\" blindly — plan it:\n\n1. **Clarify**: which endpoints are read-heavy, acceptable staleness per endpoint, personalized vs public data, current latency/QPS, what hurts (DB load? upstream latency?).\n2. **Choose what to cache**: only idempotent `GET`s; key = method + normalized path + relevant query params + relevant headers (`Accept-Language`, user/tenant for private data). Never mix users in one key.\n3. **Layers**: CDN/HTTP caching with `Cache-Control`/`ETag` for public data; in-process LRU (fast, per pod) + Redis (shared) for the rest.\n4. **Implementation**: a middleware wrapping `http.Handler` that captures the response (status, headers, body), only caches 200s within size limits, respects `Cache-Control: no-store`.\n5. **Freshness**: per-route TTL with jitter, invalidation by events or versioned keys, stale-while-revalidate.\n6. **Stampede/penetration**: `singleflight` per key, negative caching with a short TTL.\n7. **Failure modes**: cache down → bypass, don't fail requests; timeouts on Redis calls; memory bounds.\n8. **Observability**: hit ratio, latency, evictions per route; a kill switch/feature flag per route.\n\nRoll out per endpoint, measuring backend load reduction.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "architecture-law-of-demeter",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is the Law of Demeter?",
+  "a": "The **principle of least knowledge**: a method should only talk to its \"immediate friends\" — its own fields, its parameters, objects it creates — not reach through them to their internals. \"Don't talk to strangers.\"\n\nViolation (train wreck):\n```go\ncity := order.Customer().Address().City()\n```\nThe caller now depends on the structure of `Customer` and `Address`; changing them breaks it.\n\nBetter: ask for what you need — `order.ShippingCity()` — or pass the needed value in directly.\n\nBenefits: lower coupling, easier refactoring and mocking. Caveat: applied dogmatically it produces lots of wrapper methods; fluent builders and plain data structs/DTOs are fine to chain through.",
+  "level": 1,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-microservice-monolith-vs-soa",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is a \"distributed monolith\" (microservice monolith), and how does it differ from SOA?",
+  "a": "A **distributed monolith** is a system split into services that still have to be changed, deployed, and scaled together: shared database, synchronous call chains, shared domain library, lockstep releases. You get microservice costs (network, ops) with monolith coupling.\n\nSymptoms: one feature touches five services; you can't deploy A without B; one service failing takes down everything.\n\n**SOA** (service-oriented architecture) is an older enterprise style: coarse-grained services integrated via a central **ESB** that holds routing, transformation and often business logic, with shared canonical data models and heavyweight standards (SOAP/WS-*). Microservices are \"SOA done with smart endpoints and dumb pipes\": fine-grained, owned by one team, own their data, lightweight protocols, decentralized governance.\n\nSo a distributed monolith is an accidental anti-pattern, while SOA is a deliberate (centralized) architecture.",
+  "level": 3,
+  "asked": [
+   "WMX"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-microservices-scalability",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What provides scalability in a microservices architecture?",
+  "a": "Mostly **statelessness plus independent horizontal scaling**:\n\n- Stateless services (session/state in Redis/DB) behind a load balancer, so you add replicas (Kubernetes HPA on CPU/RPS/queue lag).\n- Each service scales independently according to its own load, instead of scaling the whole app.\n- Database per service, so storage scales separately: read replicas, sharding/partitioning, caches.\n- Asynchronous messaging (Kafka, RabbitMQ) to absorb spikes and decouple producers from consumers; scale consumers by partitions.\n- Caching (CDN, Redis) and back-pressure/rate limiting to protect downstreams.\n\nGotcha: the bottleneck usually moves to shared stateful parts (one DB, one hot partition, a synchronous chain of calls), so scalability is only as good as the least scalable dependency.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "architecture-middleware",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is middleware?",
+  "a": "Code that sits **between the incoming request and the handler** (or around any call chain) and handles cross-cutting concerns: logging, auth, panic recovery, tracing, metrics, CORS, rate limiting, request IDs, timeouts, compression.\n\nIn Go HTTP it's a function that wraps a handler:\n```go\nfunc Logging(log *slog.Logger) func(http.Handler) http.Handler {\n    return func(next http.Handler) http.Handler {\n        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {\n            start := time.Now()\n            next.ServeHTTP(w, r)\n            log.Info(\"req\", \"method\", r.Method, \"path\", r.URL.Path, \"dur\", time.Since(start))\n        })\n    }\n}\n```\n\nMiddlewares chain (order matters: recovery outermost, auth before business handlers) and can short-circuit (return 401 without calling `next`). gRPC has the same idea as interceptors. It's the decorator pattern applied to handlers.",
+  "level": 1,
+  "asked": [
+   "ViTech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-monolith-migration",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "How do you migrate a monolith to microservices?\nFollow-up: what happens to the monolith during the transition, and how do you migrate its data into per-service databases?",
+  "a": "Incrementally, with the **strangler fig** pattern — never a big-bang rewrite.\n\n1. Find seams: bounded contexts with low coupling and high change rate; first modularize inside the monolith.\n2. Put a facade/API gateway in front; route one capability at a time to the new service.\n3. The monolith **keeps running** and shrinks: it calls the new service (through an anti-corruption layer) or has its code for that capability deleted once traffic is switched. Feature flags make the switch reversible.\n\nData migration:\n- Start with the new service owning its tables logically (separate schema, no foreign joins from the monolith).\n- Backfill history with a bulk copy, then keep in sync via **CDC** (Debezium on the WAL/binlog) or dual writes through an outbox.\n- Switch reads, verify (shadow reads, row-count/checksum comparisons), then switch writes and make the service the source of truth; the monolith reads via API or events.\n- Remove the old tables last.\n\nGotcha: naive dual writes without an outbox diverge on partial failure.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "architecture-review-currency-updater",
+  "cat": "architecture",
+  "kind": "code",
+  "q": "Code review this currency-rate updater: it fetches bank rates over HTTP, parses them, and inserts them into Postgres. What's wrong with it?\nFollow-up: how would you structure the per-bank logic (Strategy) and mock it, and where should the DB connection be initialized?",
+  "a": "Problems:\n- **SQL built with `Sprintf`** → injection and float formatting issues; use `$1..$4` placeholders.\n- **New DB connection per rate**: `sql.Open` + `Ping` inside `updateCurrency`; `*sql.DB` is a pool meant to be created once.\n- **Hardcoded credentials** and auth token; `sslmode=disable`.\n- `panic` for routine errors; one bad bank aborts all others. Return errors, collect them (`errors.Join`), exit non-zero.\n- `defer resp.Body.Close()` **inside a loop** — bodies stay open until `main` returns.\n- `http.Client{}` with **no timeout**; no context; status code not checked; `io.ReadAll` unbounded; body not trimmed (`\"91.5\\n\"` fails `ParseFloat`); `ReadAll` error ignored.\n- `if bankName == \"Bank 2\"` branching → per-bank behavior hardcoded; config inline in code; loop variable named `url` shadows `net/url`.\n- CLI parsing by hand, nested if/else; no logging, no tests possible.\n\nStructure (Strategy): each bank is a `RateProvider`; storage is a `RateStore`.\n```go\ntype RateProvider interface {\n    Fetch(ctx context.Context) (Rate, error)\n}\n\ntype RateStore interface {\n    Save(ctx context.Context, r Rate) error\n}\n\nfunc update(ctx context.Context, providers []RateProvider, store RateStore) error {\n    var errs []error\n    for _, p := range providers {\n        r, err := p.Fetch(ctx)\n        if err == nil {\n            err = store.Save(ctx, r)\n        }\n        errs = append(errs, err)\n    }\n    return errors.Join(errs...)\n}\n```\nBank-specific quirks (auth header, decimal comma) become provider config or separate implementations.\n\nMocks: generate `RateProvider`/`RateStore` mocks with `mockery`/`gomock`, or hand-write fakes; test `update` for \"one provider fails, others still saved\". Test HTTP providers against `httptest.Server` (bad status, comma decimal, garbage body, timeout).\n\nDB init: once in `main` (composition root) — read DSN from env, `sql.Open`, `PingContext`, configure pool, `defer db.Close()`, inject `*sql.DB` into `pgStore`.",
+  "level": 2,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-review-visits-handler",
+  "cat": "architecture",
+  "kind": "code",
+  "q": "Refactor this HTTP handler that queries visit stats from Postgres. What issues do you see?",
+  "a": "Issues:\n- **SQL injection**: query built with `fmt.Sprintf`; use placeholders (`$1::interval`) and `QueryContext`.\n- `context.WithValue` with a **string key** (collisions; `go vet`/staticcheck flag it) and passing a request parameter via context at all — pass it as an argument. The value stored is a `string`, but it's asserted as `Period` → **panic**. Unvalidated period input.\n- `ctx` passed as second argument (convention: first); `r.Context()` not used for the query.\n- **All errors ignored**: `sql.Open`, `db.Query`, `rows.Scan`, `json.Marshal`, `ListenAndServe`.\n- `rows` never closed → connection leak; `rows.Err()` not checked.\n- `visits` undeclared → doesn't compile; `period` declared and unused → doesn't compile.\n- **Hardcoded credentials** in the source; `ssl=disable` (and invalid param/host).\n- No `Content-Type`, no status codes, no timeouts on `http.Server`; `chi/middleware` import path is v1 while router is v5.\n- Aggregation into `DayVisit` in Go could be done in SQL (`GROUP BY date_trunc('day', ts)`).\n\nCore of the fix:\n```go\nfunc (r *Repo) Visits(ctx context.Context, p Period) ([]Visit, error) {\n    rows, err := r.db.QueryContext(ctx,\n        `SELECT user_id, location, timestamp FROM visits WHERE timestamp > NOW() - $1::interval`,\n        p.Interval())\n    if err != nil {\n        return nil, err\n    }\n    defer rows.Close()\n\n    var visits []Visit\n    for rows.Next() {\n        var v Visit\n        if err := rows.Scan(&v.UserID, &v.Location, &v.TS); err != nil {\n            return nil, err\n        }\n        visits = append(visits, v)\n    }\n    return visits, rows.Err()\n}\n```\nThe handler parses and validates `period` (400 on bad input), calls the repo with `r.Context()`, logs once and returns 500 on error, sets `Content-Type: application/json`. DSN comes from env/secret store; `http.Server` gets `ReadHeaderTimeout`.",
+  "level": 2,
+  "asked": [
+   "T-Bank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-rich-vs-anemic-model",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What kinds of domain models are there? Rich vs anemic.",
+  "a": "- **Anemic model**: entities are plain data structs (fields, getters/setters); all business logic lives in services. Easy and common in CRUD Go code, but invariants are scattered — anyone can set `order.Status = \"paid\"` without checks. Fowler calls it an anti-pattern for complex domains.\n- **Rich model**: entities encapsulate data **and** behavior that protects invariants.\n\n```go\nfunc (o *Order) Pay(amount Money) error {\n    if o.status != StatusNew {\n        return ErrInvalidState\n    }\n    if amount != o.total {\n        return ErrAmountMismatch\n    }\n    o.status = StatusPaid\n    return nil\n}\n```\n\nUnexported fields + methods ensure the order can only move through valid states.\n\nChoice: rich models pay off in domains with real rules (payments, bookings); for simple CRUD an anemic model is fine and honest.",
+  "level": 2,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-saga-booking-design",
+  "cat": "architecture",
+  "kind": "design",
+  "q": "How do you book a ticket and a hotel (two services) as one action: hotel without ticket OK, ticket without hotel never?",
+  "a": "This is a **saga with a deliberate step order**:\n\n1. Orchestrator (or the booking service) creates a `Trip` in `PENDING` state with an idempotency key.\n2. **Book the hotel first.** If it fails → trip fails, nothing to compensate.\n3. Then book the ticket. If it fails → either keep the hotel (allowed by the business rule: \"hotel without ticket\" is OK) and mark trip `HOTEL_ONLY`, or run the compensation `CancelHotel` if the user wanted all-or-nothing.\n4. A ticket is only issued after the hotel is confirmed, so \"ticket without hotel\" can't happen by construction.\n\nSupporting pieces:\n- Reserve-then-confirm (**TCC** style: hold with TTL, then confirm) makes compensation cheap.\n- Commands/events via **outbox** + broker; every step and compensation idempotent (keyed by trip ID).\n- Orchestrator state persisted, so a crash resumes the saga (Temporal-like workflow or a DB state machine with a retry worker).\n- Timeouts: an unconfirmed hold expires on its own.\n\nWhy not 2PC: the services (and often external providers) don't support XA; locking both resources blocks availability.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "architecture-service-discovery",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "How does a microservice register itself so others can discover it (service discovery)?",
+  "a": "Via a **service registry**:\n\n- **Self-registration:** on startup the instance registers its address in a registry (Consul, etcd, ZooKeeper, Eureka) and keeps heartbeating/renewing a TTL lease; it deregisters on shutdown, and the lease expiry removes crashed instances.\n- **Third-party registration:** the platform does it. In **Kubernetes** the kubelet reports pod readiness and Endpoints/EndpointSlices behind a Service are updated automatically; clients use the DNS name `svc.namespace.svc.cluster.local`.\n\nDiscovery then is **client-side** (client queries the registry and load-balances itself, e.g. gRPC resolvers) or **server-side** (client calls a load balancer/proxy or service mesh sidecar that knows the endpoints).\n\nKey detail: health/readiness checks decide whether an instance is routable; graceful shutdown should first fail readiness, drain, then exit.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "architecture-two-phase-commit",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What is two-phase commit (2PC), and why is it rarely used in microservices?",
+  "a": "2PC is an atomic commit protocol for a transaction spanning several resource managers, run by a **coordinator**:\n\n1. **Prepare:** coordinator asks every participant to prepare; each writes the change durably, holds locks, and votes yes/no.\n2. **Commit/abort:** if all voted yes, coordinator tells everyone to commit, otherwise abort.\n\nProblems:\n- **Blocking:** if the coordinator dies after prepare, participants sit holding locks, unable to decide alone.\n- Latency (two round trips + fsyncs) and locks held across the network → low throughput and availability.\n- Requires every participant to support XA/prepared transactions (Postgres `PREPARE TRANSACTION` does; Kafka, most HTTP APIs, external providers don't).\n\nIn microservices you usually prefer **sagas + outbox + idempotency** (availability, eventual consistency). 2PC/consensus-backed commits still live inside databases (distributed SQL like Spanner/CockroachDB use them over Paxos/Raft groups, which removes the blocking coordinator problem).",
+  "level": 3,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-value-objects",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What are value objects?",
+  "a": "DDD building blocks defined **by their values, not by identity**: two `Money{100, \"USD\"}` are the same thing; an entity like `User` has an ID and stays itself when its fields change.\n\nProperties:\n- **Immutable** — operations return new values (`m.Add(other)`).\n- **Equality by value** — in Go, a comparable struct works with `==` directly and can be a map key.\n- **Self-validating** — constructed via a function that enforces invariants, so an invalid value can't exist.\n\n```go\ntype Email struct{ v string }\n\nfunc NewEmail(s string) (Email, error) {\n    if !strings.Contains(s, \"@\") {\n        return Email{}, ErrInvalidEmail\n    }\n    return Email{v: strings.ToLower(s)}, nil\n}\n```\n\nExamples: Money, Email, Address, DateRange, Coordinates. They remove \"primitive obsession\" (passing raw `string`/`float64` around) and centralize validation. Money should use integer minor units or a decimal type, never `float64`.",
+  "level": 2,
+  "asked": [
+   "Sarafan"
+  ],
+  "n": 1
+ },
+ {
+  "id": "architecture-what-not-to-cache",
+  "cat": "architecture",
+  "kind": "theory",
+  "q": "What kinds of data are better off not being cached?",
+  "a": "- **Data that must be strongly consistent**: balances, stock during checkout, permissions/security decisions right after revocation — stale reads cause real damage.\n- **Frequently changing data** with a low read/write ratio: invalidation churn outweighs hits.\n- **Rarely read or unique data** (one-off reports, long tail keys): low hit ratio, just burns memory.\n- **Cheap-to-compute** data: if the DB query is already fast, the cache adds complexity and staleness for nothing.\n- **Sensitive data** (secrets, PII, card data) — especially in shared caches, logs, or CDNs; compliance may forbid it.\n- **Huge objects** that evict everything else.\n- **Personalized responses** in shared HTTP/CDN caches (risk of leaking one user's data to another) — use `Cache-Control: private`/`no-store`.\n\nRule: cache when the read/write ratio is high, staleness is acceptable and bounded, and the source is expensive.",
+  "level": 2,
+  "asked": [
+   "VK"
+  ],
+  "n": 1
+ }
+]

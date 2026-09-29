@@ -3,11 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Code } from '../components/Code'
 import { buildSession, exportDeck, importDeck, isDue, mastered, record, resetDeck, useDeck, type Deck, type Grade } from '../lib/srs'
 import { Md } from './Md'
-import data from './questions.json'
+import { allQuestions } from './data'
 import { categories, kindLabel, type Kind, type Question } from './types'
 import './bank.css'
 
-const all = data as Question[]
+const all = allQuestions
 const catBy = Object.fromEntries(categories.map((c) => [c.slug, c]))
 const groups = [...new Set(categories.map((c) => c.group))]
 const companies = new Set(all.flatMap((q) => q.asked)).size

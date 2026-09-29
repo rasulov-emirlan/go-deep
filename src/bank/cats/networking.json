@@ -1,0 +1,512 @@
+[
+ {
+  "id": "networking-http-message-structure",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is HTTP, and what do an HTTP request and response consist of?",
+  "a": "HTTP is a stateless, text-based (in 1.x) application-layer request/response protocol, normally over TCP (HTTP/3 over QUIC/UDP).\n\n**Request:**\n1. Start line: method, target, version — `GET /users/42?x=1 HTTP/1.1`\n2. Headers: `Host` (mandatory in 1.1), `Content-Type`, `Authorization`, `Accept`, …\n3. Empty line (CRLF)\n4. Optional body (length given by `Content-Length` or `Transfer-Encoding: chunked`)\n\n**Response:**\n1. Status line: `HTTP/1.1 200 OK`\n2. Headers: `Content-Type`, `Content-Length`, `Cache-Control`, `Set-Cookie`, …\n3. Empty line, then body.\n\n```text\nPOST /api/orders HTTP/1.1\nHost: shop.example\nContent-Type: application/json\nContent-Length: 15\n\n{\"item_id\": 42}\n```\n\nCommon methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`. In HTTP/2 and /3 the same semantics are encoded as binary frames with pseudo-headers (`:method`, `:path`, `:status`), but the model is identical.",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "Digital Spirit",
+   "FrogStudio",
+   "Ozon"
+  ],
+  "n": 6
+ },
+ {
+  "id": "networking-http-versions",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "How do HTTP/1.1, HTTP/2 and HTTP/3 differ? Which is typically used?",
+  "a": "- **HTTP/1.1** (1997): text protocol, persistent keep-alive connections, but **one request at a time per connection** → head-of-line blocking; browsers open ~6 connections per host. Pipelining exists but is effectively unused.\n- **HTTP/2** (2015): same semantics, **binary framing**; many concurrent **streams multiplexed** over one TCP connection; HPACK header compression; stream priorities; flow control. Server push existed but browsers dropped it. Remaining problem: **TCP-level head-of-line blocking** — one lost packet stalls all streams.\n- **HTTP/3** (2022): HTTP over **QUIC** on UDP. Streams are independent at the transport layer (no TCP HOL), TLS 1.3 built in, 1-RTT/0-RTT setup, **connection migration** via connection IDs (Wi-Fi → LTE without reconnecting), QPACK compression.\n\nTypically used: browsers negotiate h2 or h3 with CDNs/edges (via ALPN / `Alt-Svc`); internal service-to-service traffic is still a lot of HTTP/1.1 plus HTTP/2 for gRPC.\n\nIn Go: `net/http` does HTTP/2 automatically over TLS (and h2c via `http.Protocols` since 1.24); HTTP/3 needs `quic-go`.\n\nGotcha: HTTP/2 over a lossy mobile network can be slower than several HTTP/1.1 connections — exactly what HTTP/3 fixes.",
+  "level": 2,
+  "asked": [
+   "DCloud",
+   "IT One",
+   "Sovkombank",
+   "X5 Group"
+  ],
+  "n": 5
+ },
+ {
+  "id": "networking-jwt",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is a JWT, what does it consist of, and how is its authenticity verified?\nFollow-up: what problems come with using JWTs?",
+  "a": "A JWT is a compact, URL-safe, **signed** token carrying claims: `header.payload.signature`, each part base64url-encoded.\n\n- **Header:** `alg` (e.g. `HS256`, `RS256`, `EdDSA`), `typ`, often `kid` (key id).\n- **Payload:** claims — `sub`, `exp`, `iat`, `nbf`, `iss`, `aud`, plus custom ones. It is **encoded, not encrypted**: anyone can read it.\n- **Signature:** `sign(base64url(header) + \".\" + base64url(payload), key)`.\n\n**Verification:** recompute/verify the signature with the shared secret (HMAC) or the issuer's public key (RSA/ECDSA/EdDSA, typically from a JWKS endpoint by `kid`), then validate `exp`/`nbf`, `iss`, `aud`. Only then trust the claims.\n\nProblems:\n- **Revocation:** stateless tokens stay valid until `exp`; need short TTLs + refresh tokens or a denylist.\n- **Algorithm attacks:** accepting `alg: none` or HS/RS confusion — pin the expected algorithm.\n- Sensitive data in the readable payload; token size bloats every request.\n- Theft via XSS if stored in `localStorage`; key rotation needs `kid` + JWKS.",
+  "level": 2,
+  "asked": [
+   "A7",
+   "Velme"
+  ],
+  "n": 5
+ },
+ {
+  "id": "networking-url-to-response-flow",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What happens when you type a URL in the browser (or run `curl https://example.com`) and press Enter?\nFollow-up: how does the response travel back?",
+  "a": "1. **Parse the URL:** scheme, host, port (443 default for https), path. Browser checks HSTS and its cache.\n2. **DNS:** browser/OS cache → `/etc/hosts` → recursive resolver → root → TLD → authoritative server → A/AAAA record (with TTL).\n3. **TCP handshake** to the IP (SYN, SYN-ACK, ACK) — or QUIC over UDP for HTTP/3. Packets go via the default gateway (ARP for its MAC), NAT, routers.\n4. **TLS handshake:** SNI + ALPN, certificate validation, key exchange.\n5. **HTTP request** `GET / HTTP/2` with `Host`, headers, cookies.\n6. **Server side:** CDN / load balancer / reverse proxy (nginx, Envoy) terminates TLS, routes to an app instance, which may hit caches, databases, other services.\n7. **Response back:** the app returns status + headers + body; it flows back through the proxy (compression, headers) and the same TCP/QUIC connection — split into segments, routed hop by hop, reassembled and acked by the client's TCP stack, decrypted by TLS.\n8. **Browser** parses HTML, fetches CSS/JS/images (reusing connections), builds DOM/CSSOM, renders. `curl` just prints the body.\n\nInterviewers often zoom into any step — be ready to go deeper on DNS, TLS or load balancing.",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "EyesOfWonder",
+   "MaxGroup",
+   "Velme"
+  ],
+  "n": 5
+ },
+ {
+  "id": "networking-rest-vs-rpc-grpc",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "REST vs RPC/gRPC: what's the difference, and why would you pick gRPC?\nFollow-up: besides speed, what fundamental problem does gRPC solve?",
+  "a": "**REST** models the API as *resources* addressed by URLs and manipulated with uniform HTTP verbs (`GET /orders/42`). **RPC** models it as *remote function calls* (`OrderService.GetOrder(id)`); gRPC is Google's RPC framework over HTTP/2 with Protobuf.\n\n- **Contract:** gRPC starts from a strongly typed `.proto` schema; clients and servers are generated, so the contract is enforced at compile time. REST contracts (OpenAPI) are optional and often drift.\n- **Encoding:** binary Protobuf vs usually JSON text — smaller, faster to (un)marshal.\n- **Transport:** HTTP/2 multiplexing, bidirectional **streaming**, deadlines and cancellation propagated across hops, standard status codes and metadata.\n- **Evolution:** field numbers give well-defined backward/forward compatibility rules.\n\nSo the non-speed answer: gRPC solves **contract management between many internal services** — one source of truth, generated clients in every language, safe schema evolution.\n\nGotcha: REST still wins for public/browser APIs (gRPC needs gRPC-Web or a gateway), HTTP caching, human debuggability (`curl`), and loose coupling. Typical split: gRPC east-west, REST/JSON at the edge.",
+  "level": 2,
+  "asked": [
+   "InDrive",
+   "Ozon",
+   "ZeBrains"
+  ],
+  "n": 4
+ },
+ {
+  "id": "networking-tcp-vs-udp",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What's the difference between TCP and UDP, and when would you use each?\nFollow-up: why does HTTP use TCP, and what modern protocol runs over UDP?",
+  "a": "- **TCP:** connection-oriented (3-way handshake), reliable, **ordered** byte stream; retransmissions, acks, flow control (receive window) and congestion control. Cost: handshake latency, head-of-line blocking, per-connection state.\n- **UDP:** connectionless datagrams; no delivery, ordering or duplicate guarantees, no congestion control; tiny 8-byte header; message boundaries preserved; supports broadcast/multicast.\n\nUse TCP for correctness-critical streams: HTTP/1–2, databases, SSH, SMTP. Use UDP where latency beats completeness or the app does its own reliability: DNS, VoIP/video (RTP), online games, DHCP, NTP, syslog, SNMP, WireGuard, **QUIC**.\n\nWhy HTTP historically sits on TCP beyond \"guaranteed delivery\": it needs an **ordered byte stream** (messages larger than a datagram), connection state for keep-alive, congestion control to be a good network citizen, and TLS was designed for streams. Also middleboxes/firewalls traditionally allowed TCP.\n\nModern UDP example: **QUIC** (HTTP/3) — reimplements reliability, congestion control and TLS 1.3 in user space over UDP, with independent streams, avoiding TCP's HOL blocking and kernel ossification.",
+  "level": 1,
+  "asked": [
+   "FrogStudio",
+   "IT One",
+   "MaxGroup",
+   "Ozon"
+  ],
+  "n": 4
+ },
+ {
+  "id": "networking-application-protocols-tcp-udp",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "Which application protocols run over TCP, and which over UDP?\nAlso: which transport protocols do you know, and which UDP-based protocols are common in corporate networks?",
+  "a": "Transport: **TCP**, **UDP**, QUIC (user-space transport over UDP), SCTP (telecom).\n\nOver **TCP:** HTTP/1.1, HTTP/2 (and gRPC), TLS, SSH, FTP, SMTP/IMAP/POP3, database protocols (PostgreSQL, MySQL, Redis), Kafka, AMQP, MQTT, LDAP, RDP, BGP, WebSocket.\n\nOver **UDP:** DNS (falls back to TCP for large responses/zone transfers), DHCP, NTP, SNMP, syslog, TFTP, RTP/VoIP (SIP often UDP), QUIC → HTTP/3, WireGuard/IPsec (NAT-T), mDNS, some games/streaming, RADIUS, Kerberos (often).\n\nWhy UDP in corporate networks: DHCP (clients have no IP yet — broadcast), DNS (one small query/response, no handshake cost), NTP (latency-sensitive timestamps), SNMP and syslog (lightweight monitoring where occasional loss is acceptable), VPN tunnels (avoid TCP-over-TCP meltdown), VoIP (real-time, retransmits are useless).\n\nGotcha: \"UDP = unreliable\" doesn't mean the application is — DNS retries, QUIC and RTP-with-FEC build their own guarantees.",
+  "level": 1,
+  "asked": [
+   "Avito",
+   "Ozon"
+  ],
+  "n": 3
+ },
+ {
+  "id": "networking-dns",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "How does DNS resolution work?",
+  "a": "DNS maps names to records (A/AAAA → IP, CNAME alias, MX mail, TXT, NS, SRV).\n\nResolution of `api.example.com`:\n1. Application → OS **stub resolver**: checks `/etc/hosts` and local cache (nscd/systemd-resolved).\n2. Stub asks a **recursive resolver** (ISP, 8.8.8.8, 1.1.1.1, CoreDNS in k8s).\n3. On a cache miss the recursive resolver walks the hierarchy: **root** servers → referral to `.com` **TLD** servers → referral to `example.com`'s **authoritative** name servers → answer.\n4. The answer is cached at every level for its **TTL**.\n\nTransport: UDP port 53 by default, TCP for large responses/zone transfers; DoH/DoT encrypt it.\n\nGotchas for backend engineers:\n- Low TTLs are needed for failover but raise load and latency; clients/pools that cache IPs forever ignore DNS changes (long-lived connections).\n- In Kubernetes, `ndots:5` causes several search-domain queries per lookup — use FQDNs with a trailing dot for external hosts.\n- Go has a pure-Go resolver and a cgo one (`GODEBUG=netdns=go|cgo`).",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "IT One",
+   "VK"
+  ],
+  "n": 3
+ },
+ {
+  "id": "networking-grpc-basics",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is gRPC and what is it built on?",
+  "a": "gRPC is an RPC framework: you describe services and messages in a `.proto` file, `protoc` generates client stubs and server interfaces, and calls look like local method calls.\n\nIt is built on:\n- **HTTP/2** as transport — one long-lived TCP connection, multiplexed streams, header compression (HPACK), flow control. Each RPC is an HTTP/2 stream; method is `POST /package.Service/Method`.\n- **Protocol Buffers** as the default IDL and binary wire format.\n- **Trailers** carry `grpc-status`/`grpc-message`, so status arrives after a streamed body.\n\nFour call types: unary, server streaming, client streaming, bidirectional streaming. Built-ins: deadlines (propagated via `grpc-timeout`), cancellation, metadata, interceptors (auth, logging, tracing), pluggable load balancing and name resolution, TLS/mTLS.\n\nGotchas: because connections are long-lived, L4 load balancers pin all traffic to one backend — use client-side LB or an L7 proxy (Envoy). Browsers can't speak raw gRPC (need gRPC-Web/Connect). Always set deadlines; the default is none.",
+  "level": 2,
+  "asked": [
+   "Amtech"
+  ],
+  "n": 3
+ },
+ {
+  "id": "networking-http-methods-idempotency",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "Why do HTTP methods like GET, PUT, POST, PATCH, DELETE exist, and what does idempotency mean for them?\nFollow-up: can you delete data with a GET request?",
+  "a": "Methods express **intent** so that clients, caches, proxies and retries can behave correctly without knowing your API.\n\n- `GET` — read; **safe** (no side effects) and idempotent; cacheable.\n- `POST` — create / non-idempotent action; the server chooses the resource id.\n- `PUT` — **replace** the resource at a known URI with the full representation; idempotent.\n- `PATCH` — partial update; not idempotent in general (e.g. \"increment counter\"), though it can be.\n- `DELETE` — remove; idempotent (second call changes nothing, even if it returns 404).\n\n**Idempotent** = repeating the same request N times leaves the server in the same state as doing it once. It matters because networks fail: clients, proxies and gRPC/HTTP libraries retry idempotent requests safely. For `POST` (e.g. payments) you add an **Idempotency-Key** header and store results per key.\n\nCan GET delete? Technically yes — nothing stops the handler. But it's wrong: crawlers, prefetchers, link previews and caches assume GET is safe and will trigger it; it's also a CSRF vector.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Avito",
+   "IT One"
+  ],
+  "n": 3
+ },
+ {
+  "id": "networking-http-status-codes",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "Why do HTTP status codes exist, and which ones do you know?",
+  "a": "Status codes give a **machine-readable outcome** so clients, proxies, caches, retry logic and monitoring can react without parsing the body.\n\nClasses:\n- **1xx** informational — `100 Continue`, `101 Switching Protocols` (WebSocket).\n- **2xx** success — `200 OK`, `201 Created`, `202 Accepted` (async), `204 No Content`.\n- **3xx** redirection — `301`/`308` permanent, `302`/`307` temporary, `304 Not Modified` (cache).\n- **4xx** client error — `400` bad request, `401` unauthenticated, `403` forbidden, `404`, `405`, `409 Conflict`, `412`, `422` validation, `429 Too Many Requests`.\n- **5xx** server error — `500`, `502 Bad Gateway`, `503 Unavailable`, `504 Gateway Timeout`.\n\nWhy it matters operationally: retries are generally safe on 502/503/504/429 (respect `Retry-After`) but not on 4xx; SLO error rates are usually computed on 5xx.\n\nGotchas: `401` vs `403` (who are you vs you can't); `307/308` preserve the method while `301/302` may turn POST into GET; don't return `200` with `{\"error\": …}` — it hides failures from every layer.",
+  "level": 1,
+  "asked": [
+   "Avito",
+   "Digital Spirit"
+  ],
+  "n": 3
+ },
+ {
+  "id": "networking-https-tls",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is TLS, and what is HTTPS for? Is HTTPS just HTTP over TLS?",
+  "a": "**TLS** is a protocol that gives a byte stream three properties: **confidentiality** (encryption), **integrity** (tampering is detected via AEAD), and **authentication** of the server (and optionally the client, mTLS) through X.509 certificates signed by a trusted CA.\n\n**HTTPS** is essentially yes — HTTP semantics carried inside a TLS session, default port 443. The HTTP messages themselves are unchanged; what changes:\n- The client verifies the server's certificate chain and hostname (SNI tells the server which cert to present).\n- ALPN in the handshake negotiates `h2` vs `http/1.1`.\n- For HTTP/3 it's not \"TCP+TLS\" anymore: TLS 1.3 is built into QUIC over UDP.\n\nWhy: without it anyone on the path (Wi-Fi, ISP, proxy) can read passwords/tokens, inject content, or impersonate the site. Also required for HTTP/2 in browsers, secure cookies, service workers, and HSTS.\n\nGotcha: HTTPS protects the transport only — it says nothing about whether the server is trustworthy or the app is secure; the hostname is still visible via SNI (unless ECH) and DNS.",
+  "level": 1,
+  "asked": [
+   "Avito",
+   "Sovkombank"
+  ],
+  "n": 3
+ },
+ {
+  "id": "networking-service-communication-experience",
+  "cat": "networking",
+  "kind": "behavioral",
+  "q": "What have you used for service-to-service communication besides REST? Which protocols have you worked with?",
+  "a": "Typical list with when to use each:\n- **gRPC** (HTTP/2 + protobuf): typed contracts, codegen, streaming, deadlines and metadata propagation; ideal for internal sync calls.\n- **Message brokers**: Kafka (event streams, replay, ordering per partition), RabbitMQ/NATS (task queues, routing, request-reply); for async decoupling and load levelling.\n- **WebSockets / SSE** for pushing to clients; **GraphQL** for flexible client-facing aggregation.\n- Lower level: TCP/UDP, HTTP/1.1 vs HTTP/2 vs HTTP/3 (QUIC), TLS/mTLS, DNS.\n\nExplain the choice criteria: sync vs async, latency, coupling, delivery guarantees, schema evolution (protobuf field numbers, Avro + schema registry). Pitfall: naming technologies without explaining trade-offs such as gRPC's need for L7 load balancing.",
+  "level": 2,
+  "asked": [
+   "IT One",
+   "MaxGroup"
+  ],
+  "n": 3
+ },
+ {
+  "id": "networking-sockets",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What are sockets, and what kinds are there?",
+  "a": "A socket is an OS endpoint for communication, exposed to the process as a **file descriptor**; identified (for IP) by protocol + local/remote address and port.\n\nKinds:\n- By domain: **AF_INET/AF_INET6** (network), **AF_UNIX** (Unix domain sockets — local IPC through a filesystem path, faster than loopback TCP; Docker's `/var/run/docker.sock`, Postgres local connections).\n- By type: **SOCK_STREAM** (TCP — reliable byte stream), **SOCK_DGRAM** (UDP — datagrams), **SOCK_RAW** (raw IP, e.g. ping), SOCK_SEQPACKET.\n- By role: **listening** socket (`socket` → `bind` → `listen` → `accept`) and **connected** sockets returned by `accept` — one per client.\n\nIn Go: `net.Listen(\"tcp\", \":8080\")`, `net.Dial`, `net.ListenPacket(\"udp\", …)`, `net.Listen(\"unix\", path)`. Under the hood sockets are non-blocking and registered with the **netpoller** (epoll/kqueue), so goroutine code looks blocking but threads aren't.\n\nGotcha: each connection costs a fd — watch `ulimit -n`.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "networking-tls-handshake-asymmetric",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "How does TLS establish encryption? What is asymmetric encryption, and why can't an attacker decrypt traffic even with the public key?",
+  "a": "TLS uses **asymmetric crypto only to agree on keys and authenticate**, then switches to fast **symmetric** encryption (AES-GCM / ChaCha20-Poly1305).\n\nTLS 1.3 handshake (1-RTT):\n1. **ClientHello:** supported ciphers, random, an ephemeral (EC)DHE **key share**, SNI, ALPN.\n2. **ServerHello:** chosen cipher + its own ephemeral key share. Both sides now compute the same shared secret via Diffie-Hellman; handshake keys are derived with HKDF.\n3. Server sends (encrypted) its **certificate** and a **CertificateVerify** signature over the transcript with its private key, then `Finished`.\n4. Client validates the chain to a trusted CA, hostname, and signature; sends `Finished`. Application data flows with session keys.\n\n**Asymmetric encryption:** a key pair where what one key does only the other undoes; the public key can be shared, the private key never leaves the server.\n\nWhy the public key doesn't help an attacker: deriving the private key from it is computationally infeasible (factoring / discrete log), and with ephemeral ECDHE the session key is never sent at all — the attacker sees only public DH shares. That also gives **forward secrecy**: stealing the server's private key later can't decrypt recorded sessions (unlike old RSA key exchange in TLS 1.2).",
+  "level": 2,
+  "asked": [
+   "DCloud",
+   "EyesOfWonder"
+  ],
+  "n": 2
+ },
+ {
+  "id": "networking-websocket-basics",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is a WebSocket and how is the connection established?\nFollow-up: have you written WebSocket servers?",
+  "a": "A WebSocket is a persistent, full-duplex, message-oriented channel over a single TCP connection — both sides can push at any time, unlike HTTP request/response.\n\n**Handshake:** it starts as an HTTP/1.1 `GET` with `Connection: Upgrade`, `Upgrade: websocket`, `Sec-WebSocket-Key` and `Sec-WebSocket-Version: 13`. The server replies `101 Switching Protocols` with `Sec-WebSocket-Accept = base64(SHA1(key + fixed GUID))`. After that the TCP connection carries WebSocket **frames** (text, binary, ping/pong, close); client-to-server frames are masked. Over TLS it's `wss://`. (HTTP/2 and HTTP/3 have an extended-CONNECT variant.)\n\nIn Go: `github.com/coder/websocket` or `gorilla/websocket`; run one reader goroutine and one writer goroutine per connection.\n\nGotchas when building servers: only one concurrent writer per conn (serialize writes), heartbeats via ping/pong to detect dead peers, read limits and deadlines, backpressure for slow clients, and sticky routing/pub-sub (e.g. Redis) when you scale to many instances because the connection is stateful.",
+  "level": 1,
+  "asked": [
+   "IT One"
+  ],
+  "n": 2
+ },
+ {
+  "id": "networking-access-refresh-tokens",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "How do access and refresh tokens work together?",
+  "a": "**Access token:** short-lived (minutes), sent on every API call (`Authorization: Bearer …`), usually a JWT validated statelessly by services.\n**Refresh token:** long-lived (days/weeks), sent only to the auth server's token endpoint to obtain a new access token; stored server-side (or as a hashed record) so it can be revoked.\n\nWhy two: short access TTL limits the damage of a leaked token and bounds the revocation problem of stateless JWTs, while the refresh token keeps the user logged in without re-entering credentials.\n\nBest practices:\n- **Rotation:** each refresh issues a new refresh token and invalidates the old one; reuse of an old one signals theft → revoke the whole token family.\n- Store the refresh token in an `HttpOnly`, `Secure`, `SameSite` cookie (web) or secure storage (mobile), never `localStorage`.\n- Bind to a device/session; revoke on logout/password change.\n\nGotcha: refresh races — two tabs refreshing concurrently with rotation can make one fail; allow a short grace window or serialize refresh on the client.",
+  "level": 2,
+  "asked": [
+   "Kvando"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-binary-data-as-text",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "Can you send binary data as text? How?",
+  "a": "Yes — by **encoding** it into a text-safe alphabet:\n\n- **Base64** (`encoding/base64`): 3 bytes → 4 ASCII chars, ~33% overhead. Use base64url (`-`/`_`, no padding) in URLs and JWTs. Go's `encoding/json` automatically base64-encodes `[]byte` fields.\n- **Hex**: 2 chars per byte, 100% overhead, but readable (hashes, ids).\n- Base32/Base85 for special cases.\n\nBut you often shouldn't: HTTP bodies are already binary-safe — send `application/octet-stream`, use `multipart/form-data` for file uploads, or a binary format like Protobuf/gRPC. Text encoding makes sense when the carrier is text-only: JSON fields, URLs, headers, email (MIME), environment variables.\n\nGotchas: base64 is encoding, not encryption; large blobs inside JSON inflate memory (whole payload decoded in RAM) — prefer streaming uploads or pre-signed object-storage URLs.",
+  "level": 1,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-cdn-vs-reverse-proxy",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is a CDN, and how does it differ from a reverse proxy?",
+  "a": "A **CDN** is a geographically distributed network of edge servers (PoPs) that cache and serve content close to users. Users are routed to the nearest PoP via anycast or GeoDNS; on a cache miss the edge fetches from the origin. Benefits: lower latency, offloaded origin, DDoS absorption, TLS termination at the edge, often WAF and image optimization.\n\nA **reverse proxy** (nginx, HAProxy, Envoy) sits in front of your servers, usually in one location: TLS termination, routing, load balancing, compression, rate limiting, sometimes caching.\n\nDifference: a CDN *is* a fleet of reverse proxies, but globally distributed and operated by a provider, optimized for caching at the edge; a reverse proxy is a single-site building block for routing to your backends. You typically use both: CDN → your LB/reverse proxy → app.\n\nGotchas: cache keys and `Cache-Control`/`Vary` must be right or you leak personalized responses; invalidation (purge) and versioned asset URLs matter.",
+  "level": 1,
+  "asked": [
+   "EyesOfWonder"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-debug-requests-not-arriving",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "A partner (e.g. Bitrix) gets 500 errors after your change, but your logs show their requests never arrived. How do you troubleshoot?",
+  "a": "If your service never saw the request, **the 500 is produced somewhere in front of it**, so walk the path hop by hop from the client inward.\n\n1. **Get facts from the caller**: the exact URL, method, timestamps, response body and headers (the `Server` header often reveals nginx, a gateway or a CDN), and a request id. Reproduce with `curl -v` from outside.\n2. **DNS and TLS**: does the hostname resolve to the right place? Is the certificate valid? Did a changed domain or certificate break the handshake?\n3. **Edge**: check the load balancer, ingress (nginx/Traefik) and API gateway logs.\n   - 502/503 means no healthy upstream: pods failing readiness, wrong service port or selector after your deploy.\n   - A 500 may come from an ingress rewrite rule, a body-size limit, or an auth plugin.\n4. **Your change itself**: a renamed route or path prefix, changed port or env, new auth middleware rejecting them, a `Content-Type` or schema change, CORS, the HTTP method. Also check whether they hit an old URL.\n5. **Network policy and firewall**: IP allowlists, k8s NetworkPolicy, WAF rules.\n6. **Logging gaps**: maybe the request did arrive but failed before your logging middleware ran (panic, body parsing) or is logged somewhere else. Add access logs at the edge and middleware that logs before any handler.\n\nThen roll back if in doubt, fix, and add a synthetic check or contract test for that integration.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "networking-expose-service-publicly",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "You wrote a Go service — how do you make it publicly reachable? And how could a friend reach an app running on your home computer?",
+  "a": "**For a real service:**\n- Listen on `0.0.0.0:port`, not `127.0.0.1` (a classic container bug).\n- Run it on a host with a public IP (VM) or in a container platform; in Kubernetes: `Deployment` → `Service` → `Ingress`/`LoadBalancer`.\n- Point a **DNS** record at the public IP/LB, terminate **TLS** (Let's Encrypt, cloud certs) at a reverse proxy/LB, open the firewall/security group only for 80/443.\n- Add health checks, graceful shutdown, rate limits.\n\n**Home computer:** it's usually behind NAT with a private IP (192.168.x.x), so outsiders can't reach it directly.\n- Same LAN: friend uses your private IP:port (check local firewall and the bind address).\n- Over the internet: **port forwarding** on the router (router's public IP → your machine:port) — fails behind CGNAT; dynamic DNS for a changing IP.\n- Easier/safer: a **tunnel** (Cloudflare Tunnel, ngrok, Tailscale Funnel) or a VPN/mesh (Tailscale/WireGuard) — no open inbound ports.\n\nGotcha: exposing a dev app directly to the internet without auth/TLS is how things get owned.",
+  "level": 1,
+  "asked": [
+   "Amtech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-hashing-vs-encryption",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "How does hashing differ from encryption? Give examples of algorithms.",
+  "a": "- **Encryption** is reversible with a key: confidentiality. Symmetric — AES-GCM, ChaCha20-Poly1305; asymmetric — RSA, ECIES; key agreement — (EC)DH.\n- **Hashing** is a one-way, fixed-size digest with no key: integrity/fingerprinting. SHA-256, SHA-3, BLAKE2/3; non-crypto hashes (xxHash, FNV, CRC32) are for hash tables and checksums, not security.\n\nRelated tools:\n- **HMAC** (e.g. HMAC-SHA256) = keyed hash → integrity **and** authenticity (JWT HS256, webhook signatures).\n- **Digital signatures** (RSA-PSS, ECDSA, Ed25519) = hash + private key → anyone with the public key can verify.\n- **Password hashing** — bcrypt, scrypt, Argon2id: deliberately slow and salted. Never store passwords with plain SHA-256 (fast → brute-forceable) and never \"encrypt\" them (reversible).\n\nGotchas: MD5 and SHA-1 are broken for collision resistance; base64 is encoding, neither hashing nor encryption.",
+  "level": 1,
+  "asked": [
+   "RealIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-http-handler-proxy-filter",
+  "cat": "networking",
+  "kind": "code",
+  "q": "Write an HTTP handler that calls an external service and returns its data filtered by the request's query parameters.\nParse query parameters, call the upstream, filter the result by those parameters, and return JSON.",
+  "a": "Key points the interviewer checks: input validation with 400s, a timeout derived from `r.Context()`, a shared `http.Client`, checking the upstream status, closing/limiting the body, mapping upstream failures to 502, and correct `Content-Type`.\n\n```go\ntype Product struct {\n\tID       int     `json:\"id\"`\n\tCategory string  `json:\"category\"`\n\tPrice    float64 `json:\"price\"`\n}\n\ntype Handler struct {\n\tclient  *http.Client\n\tbaseURL string\n}\n\nfunc (h *Handler) Products(w http.ResponseWriter, r *http.Request) {\n\tq := r.URL.Query()\n\tcategory := q.Get(\"category\")\n\tmaxPrice := -1.0\n\tif s := q.Get(\"max_price\"); s != \"\" {\n\t\tv, err := strconv.ParseFloat(s, 64)\n\t\tif err != nil || v < 0 {\n\t\t\thttp.Error(w, \"invalid max_price\", http.StatusBadRequest)\n\t\t\treturn\n\t\t}\n\t\tmaxPrice = v\n\t}\n\n\tctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)\n\tdefer cancel()\n\treq, err := http.NewRequestWithContext(ctx, http.MethodGet, h.baseURL+\"/products\", nil)\n\tif err != nil {\n\t\thttp.Error(w, err.Error(), http.StatusInternalServerError)\n\t\treturn\n\t}\n\tresp, err := h.client.Do(req)\n\tif err != nil {\n\t\thttp.Error(w, \"upstream unavailable\", http.StatusBadGateway)\n\t\treturn\n\t}\n\tdefer resp.Body.Close()\n\tif resp.StatusCode != http.StatusOK {\n\t\tio.Copy(io.Discard, resp.Body)\n\t\thttp.Error(w, \"upstream error\", http.StatusBadGateway)\n\t\treturn\n\t}\n\tvar all []Product\n\tif err := json.NewDecoder(io.LimitReader(resp.Body, 10<<20)).Decode(&all); err != nil {\n\t\thttp.Error(w, \"bad upstream payload\", http.StatusBadGateway)\n\t\treturn\n\t}\n\n\tout := make([]Product, 0, len(all))\n\tfor _, p := range all {\n\t\tif category != \"\" && p.Category != category {\n\t\t\tcontinue\n\t\t}\n\t\tif maxPrice >= 0 && p.Price > maxPrice {\n\t\t\tcontinue\n\t\t}\n\t\tout = append(out, p)\n\t}\n\tw.Header().Set(\"Content-Type\", \"application/json\")\n\tjson.NewEncoder(w).Encode(out)\n}\n```\n\nRegister with `mux.HandleFunc(\"GET /products\", h.Products)` (Go 1.22 method patterns). Test with `httptest.NewServer` as the fake upstream and `httptest.NewRecorder`. Better still: push the filter to the upstream as query params if it supports them, and cache upstream responses if they're shared.",
+  "level": 2,
+  "asked": [
+   "Tehzor"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-http-headers",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What HTTP headers do you know, and what are they for?",
+  "a": "Headers are key–value metadata about the message. Useful groups:\n\n- **Routing/identity:** `Host`, `User-Agent`, `X-Forwarded-For` / `Forwarded`, `X-Request-ID` / `traceparent` (tracing).\n- **Content:** `Content-Type`, `Content-Length`, `Content-Encoding` (gzip/br), `Transfer-Encoding: chunked`.\n- **Negotiation:** `Accept`, `Accept-Encoding`, `Accept-Language`.\n- **Auth/state:** `Authorization`, `Cookie`, `Set-Cookie` (with `HttpOnly`, `Secure`, `SameSite`).\n- **Caching:** `Cache-Control`, `ETag` + `If-None-Match`, `Last-Modified` + `If-Modified-Since`, `Vary`, `Expires`.\n- **Connection:** `Connection: keep-alive/close`, `Upgrade`.\n- **CORS:** `Origin`, `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`.\n- **Security:** `Strict-Transport-Security`, `Content-Security-Policy`, `X-Content-Type-Options`.\n- **Rate limiting / retries:** `Retry-After`, `RateLimit-*`.\n- **Idempotency:** `Idempotency-Key`.\n\nGotcha: header names are case-insensitive; Go canonicalizes them (`http.CanonicalHeaderKey`), and HTTP/2 requires lowercase on the wire.",
+  "level": 1,
+  "asked": [
+   "Ozon"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-http-server-internals-go",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "How is Go's standard library HTTP server structured internally?",
+  "a": "- `http.Server.ListenAndServe` creates a `net.Listener`; `Serve` loops on `Accept()`.\n- **One goroutine per connection** (`go c.serve(ctx)`) — cheap thanks to the Go scheduler and the netpoller: blocking reads park the goroutine while epoll/kqueue waits on the fd.\n- For HTTP/1.1 the conn goroutine reads requests sequentially (keep-alive), builds `*http.Request` and a `response` (`ResponseWriter` with a buffered writer), and calls `Handler.ServeHTTP`. Handlers run **in that connection goroutine**.\n- TLS connections negotiate ALPN; `h2` is handed to the bundled `http2` server, which runs a goroutine per stream so requests on one connection are concurrent.\n- Routing is just a `Handler`; `ServeMux` supports method and wildcard patterns since Go 1.22 (`\"GET /users/{id}\"`).\n- A panic in a handler is recovered per connection (logged, connection closed); `http.ErrAbortHandler` suppresses the log.\n- `r.Context()` is canceled when the client disconnects or the request completes.\n\nGotchas: the default server has **no timeouts** — set `ReadHeaderTimeout`, `ReadTimeout`, `WriteTimeout`, `IdleTimeout`, and use `Shutdown(ctx)` for graceful draining.",
+  "level": 3,
+  "asked": [
+   "MaxGroup"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-http-timeouts",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "Why do we need timeouts on HTTP requests, and why do we profile/measure them?",
+  "a": "Without timeouts one slow dependency stalls everything: goroutines, connections and memory pile up waiting on it, the caller's own clients time out, and a partial outage **cascades** through the system. Go's `http.Client` and `http.Server` have **no timeouts by default**.\n\nSet them at every layer:\n- Client: `http.Client.Timeout` or, better, a per-request `context.WithTimeout` so deadlines propagate; plus dial/TLS/response-header timeouts on the Transport.\n- Server: `ReadHeaderTimeout` (slowloris), `ReadTimeout`, `WriteTimeout`, `IdleTimeout`; `http.TimeoutHandler` for handler budgets.\n- A **deadline budget**: downstream timeouts must be shorter than upstream ones, or you do work nobody waits for.\n\nWhy measure: you choose timeouts from observed latency (e.g. slightly above upstream p99.9), not guesses. Histograms of request duration and timeout counts show which hop eats the budget; tracing shows where. Too short → false failures and retry storms; too long → resource exhaustion. Combine with retries (only idempotent, with backoff + jitter) and circuit breakers.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "networking-http-transport-config",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is `http.Transport` for, and why would you configure it?",
+  "a": "`http.Transport` is the `http.Client`'s `RoundTripper`: it dials connections, does TLS and HTTP/2 negotiation, proxies, and **pools keep-alive connections**. `http.Client` adds redirects, cookies and the overall `Timeout`.\n\nWhy configure it (the default is tuned for browsers, not high-RPS services):\n- `MaxIdleConnsPerHost` defaults to **2** — under load to one backend you constantly open/close connections, get TIME_WAIT buildup and port exhaustion. Raise it (e.g. 100) along with `MaxIdleConns`.\n- `MaxConnsPerHost` to cap concurrency to a fragile upstream.\n- Timeouts: `DialContext` with a dial timeout, `TLSHandshakeTimeout`, `ResponseHeaderTimeout`, `IdleConnTimeout`.\n- `TLSClientConfig` for mTLS/custom CAs; `Proxy`; `ForceAttemptHTTP2` when using a custom dialer.\n\nRules: create **one Transport/Client and reuse it** (it's goroutine-safe); a new Transport per request defeats pooling and leaks idle conns. Always drain and close `resp.Body`, or the connection isn't returned to the pool.",
+  "level": 2,
+  "asked": [
+   "MaxGroup"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-keep-alive",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is keep-alive?",
+  "a": "Two different things share the name:\n\n- **HTTP keep-alive (persistent connections):** reuse one TCP (+TLS) connection for multiple requests instead of reconnecting each time — saves handshakes (1 RTT TCP + 1–2 RTT TLS) and avoids slow start. Default in HTTP/1.1 (`Connection: close` to opt out). In Go, `http.Transport` pools idle connections — but only if you **read the body to EOF and close it**; otherwise the connection can't be reused.\n- **TCP keepalive:** kernel sends empty probes on an idle connection to detect a dead peer and keep NAT/firewall state alive. Off by default at the OS level for most sockets with ~2 h timers; Go's `net.Dialer`/`ListenConfig` enable it with 15 s defaults (`KeepAlive`/`KeepAliveConfig`).\n\nGotchas: idle connections held by the server vs load balancer timeouts must be ordered (LB idle timeout > server's), or you get sporadic `connection reset`/502s; keep-alive also makes load unevenly sticky after scaling out.",
+  "level": 1,
+  "asked": [
+   "MaxGroup"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-latency-vs-throughput",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What are latency and throughput (bandwidth)?",
+  "a": "- **Latency:** time for one unit of work to complete — e.g. a packet's one-way delay or a request's round-trip time (RTT). Measured in ms; report **percentiles** (p50/p95/p99), not averages.\n- **Bandwidth:** the maximum data rate a link can carry (bits/s). **Throughput:** the rate actually achieved (requests/s, MB/s).\n\nThey're independent: a satellite link has high bandwidth but high latency; a local loopback has both good. For TCP they interact through the **bandwidth-delay product** — to fill a link you need `bandwidth × RTT` bytes in flight, so high-latency links need large windows.\n\nIn services, Little's law ties them: `concurrency = throughput × latency`. Batching usually raises throughput at the cost of latency; adding parallelism raises throughput until a bottleneck, after which latency explodes (queueing).\n\nGotcha: tail latency compounds in fan-out — if a request calls 100 backends, the p99 of each becomes roughly the median of the whole.",
+  "level": 1,
+  "asked": [
+   "MaxGroup"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-long-lived-tcp-connections",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What's dangerous about long-lived TCP connections?",
+  "a": "- **Uneven load balancing:** L4 balancers balance connections, not requests. After scale-out, new pods get nothing while old ones keep the long-lived connections (classic gRPC/HTTP/2 issue). Fix: client-side LB, L7 proxy, or `MaxConnectionAge` to periodically recycle.\n- **Silent death:** a peer or middlebox (NAT, firewall, LB) drops state after an idle timeout; the next write hangs or gets RST. Need TCP keepalive or app-level heartbeats (HTTP/2 PING, WebSocket ping) and read/write deadlines.\n- **Resource exhaustion:** each holds a file descriptor, kernel buffers, and in Go a goroutine or two; slow or malicious clients (slowloris) can pin them. Need limits and timeouts.\n- **Stale config:** DNS changes, rotated certificates or credentials aren't picked up until reconnect.\n- **Deploys/draining:** rolling updates must gracefully close them (GOAWAY, close frames) or clients see errors.\n- Head-of-line blocking if everything is multiplexed over one TCP connection.",
+  "level": 2,
+  "asked": [
+   "MaxGroup"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-mtu",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is MTU (maximum transmission unit)?",
+  "a": "MTU is the largest IP packet a link can carry in one frame — 1500 bytes on standard Ethernet (9000 with jumbo frames). With IPv4+TCP headers (20+20) that leaves an **MSS** of 1460 bytes of payload, negotiated in the TCP handshake.\n\nIf a packet exceeds the path MTU: IPv4 routers may fragment it (unless DF is set), IPv6 routers never fragment. **Path MTU Discovery** sends DF packets and relies on ICMP \"fragmentation needed / packet too big\" replies to shrink the size.\n\nWhy it matters in practice:\n- Tunnels/overlays (VPN, VXLAN in Kubernetes, WireGuard) add headers, lowering the effective MTU (e.g. 1450/1420). If ICMP is blocked, you get a **PMTU black hole**: small requests work, large responses/TLS handshakes hang.\n- UDP protocols (DNS, QUIC) keep datagrams small to avoid fragmentation — QUIC assumes ≥1200 bytes.\n- Fragmentation hurts performance and loses the whole packet if one fragment drops.",
+  "level": 2,
+  "asked": [
+   "MaxGroup"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-nginx-reverse-proxy",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "When a request reaches a remote server, what typically greets it first? Tell me about nginx.",
+  "a": "Usually not your app directly but a **reverse proxy / load balancer** — often nginx (or Envoy, HAProxy, Traefik, a cloud LB, or a Kubernetes Ingress controller which is frequently nginx).\n\nnginx is an event-driven web server/reverse proxy: a master process plus a few worker processes, each running an epoll-based event loop handling thousands of connections without a thread per connection.\n\nTypical roles:\n- **TLS termination** and HTTP/2/3 to clients.\n- **Reverse proxy & load balancing** (`proxy_pass`, `upstream` with round-robin/least_conn/ip_hash, health checks).\n- Serving **static files** efficiently (`sendfile`).\n- Routing by host/path, rewrites/redirects.\n- **Rate limiting** (`limit_req`), connection limits, request size limits, buffering slow clients so app workers aren't tied up.\n- Caching (`proxy_cache`), gzip/brotli, security headers.\n\nGotcha: behind a proxy your app sees the proxy's IP — use `X-Forwarded-For`/`X-Real-IP`, trusting them only from the proxy.",
+  "level": 1,
+  "asked": [
+   "Amtech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-openapi-oneof-parsing",
+  "cat": "networking",
+  "kind": "code",
+  "q": "How do you parse a JSON body with a `kind` discriminator and a `oneOf` `entity` into per-kind Go structs? What's the security concern?\nThe body looks like `{\"kind\": \"dog\", \"entity\": {...}}`, where the shape of `entity` depends on `kind`.",
+  "a": "Decode in **two phases**: first the envelope with `entity` as `json.RawMessage` (bytes kept undecoded), then switch on `kind` and decode the raw bytes into the concrete struct. A custom `UnmarshalJSON` on the envelope does the same thing.\n\n```go\ntype Envelope struct {\n\tKind   string          `json:\"kind\"`\n\tEntity json.RawMessage `json:\"entity\"`\n}\n\nfunc decodeStrict(data []byte, v any) error {\n\tdec := json.NewDecoder(bytes.NewReader(data))\n\tdec.DisallowUnknownFields()\n\treturn dec.Decode(v)\n}\n\nfunc parse(body []byte) (any, error) {\n\tvar env Envelope\n\tif err := decodeStrict(body, &env); err != nil {\n\t\treturn nil, err\n\t}\n\tswitch env.Kind {\n\tcase \"cat\":\n\t\tvar c Cat\n\t\tif err := decodeStrict(env.Entity, &c); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\treturn c, nil\n\tcase \"dog\":\n\t\tvar d Dog\n\t\tif err := decodeStrict(env.Entity, &d); err != nil {\n\t\t\treturn nil, err\n\t\t}\n\t\treturn d, nil\n\tdefault:\n\t\treturn nil, fmt.Errorf(\"unknown kind %q\", env.Kind)\n\t}\n}\n```\n\nSecurity concerns:\n- **Never map `kind` to arbitrary types** (reflection or a registry the client can steer) — use a closed allowlist `switch`.\n- **Mass assignment:** Go's decoder silently ignores unknown fields and fills any exported matching field — so a client can set `IsAdmin`/`OwnerID` if the struct has it. Use dedicated request DTOs and `DisallowUnknownFields`.\n- **DoS:** cap body size with `http.MaxBytesReader`; `kind` must be validated before costly work.\n- Duplicate keys and case-insensitive field matching in `encoding/json` v1 enable parser-differential tricks between a gateway validator and your service (`encoding/json/v2` is stricter).",
+  "level": 2,
+  "asked": [
+   "CloudX"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-osi-model",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is the OSI model, and where do TCP/UDP and HTTP sit in it?",
+  "a": "OSI is a 7-layer reference model for network communication:\n\n1. **Physical** — bits on wire/radio.\n2. **Data link** — frames within a local network, MAC addresses (Ethernet, Wi-Fi), switches.\n3. **Network** — routing between networks, IP addresses (IP, ICMP), routers.\n4. **Transport** — end-to-end between processes, ports: **TCP, UDP** (QUIC is effectively here too).\n5. **Session** — session management (rarely distinct in practice).\n6. **Presentation** — encoding, compression, encryption (TLS is often placed here, though it's debatable).\n7. **Application** — **HTTP**, DNS, SMTP, gRPC.\n\nThe real internet uses the simpler **TCP/IP model**: link, internet, transport, application — OSI 5–7 collapse into \"application\".\n\nPractical relevance: \"L4 vs L7 load balancer\" — L4 routes TCP/UDP connections by IP:port without looking inside; L7 understands HTTP and can route by path/headers, retry, and terminate TLS.",
+  "level": 1,
+  "asked": [
+   "RealIT"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-protocol-mobile-vs-desktop-clients",
+  "cat": "networking",
+  "kind": "design",
+  "q": "Mobile shows compact user cards, desktop shows richer data on the same entities. Which protocol/API style would you choose, and why?",
+  "a": "There is no single right protocol — the interviewer wants trade-off reasoning. A strong answer:\n\n- **Problem:** two clients need different *shapes* of the same data. One fat REST endpoint over-fetches on mobile (slow networks, battery); many thin endpoints cause under-fetching and chatty round-trips.\n- **Options:**\n  - **BFF (Backend-for-Frontend):** a thin API per client type that aggregates internal gRPC services and returns exactly what that UI needs. Simple, cacheable, each team owns its BFF.\n  - **GraphQL:** client selects fields; one schema serves both. Great for varied UIs; costs: query complexity limits, caching is harder, N+1 on resolvers.\n  - **REST with sparse fieldsets** (`?fields=id,name,avatar`) or projections — cheapest if variation is small.\n  - **gRPC** internally between BFF and services; for mobile it's viable (gRPC on iOS/Android works) but not for browsers without gRPC-Web.\n- **Recommendation:** REST/JSON (or GraphQL if UIs diverge a lot) at the edge via BFFs, gRPC behind them.\n\nPitfall: choosing gRPC-to-mobile just \"because it's fast\" without considering proxies, debuggability, and web clients.",
+  "level": 2,
+  "asked": [
+   "InDrive"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-rest-endpoint-naming",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "Is `/api/v1/create-user` a good REST endpoint?",
+  "a": "No — it puts a **verb in the URL**. In REST, URLs name resources and the HTTP method expresses the action:\n\n- Create: `POST /api/v1/users` → `201 Created` + `Location: /api/v1/users/42`\n- Read: `GET /api/v1/users/42`; list: `GET /api/v1/users?limit=50&cursor=…`\n- Update: `PUT` / `PATCH /api/v1/users/42`\n- Delete: `DELETE /api/v1/users/42`\n\nConventions: plural nouns, lowercase kebab-case, nesting for ownership (`/users/42/orders`), filtering/sorting via query params. `/v1` versioning in the path is fine and common.\n\nNuance worth mentioning: non-CRUD actions are allowed as sub-resources or controller-style endpoints when modeling them as resources is forced — e.g. `POST /orders/42/cancel` or Google AIP's `POST /users/42:activate`. The problem with `create-user` is that it duplicates what `POST /users` already means.",
+  "level": 1,
+  "asked": [
+   "ZeBrains"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-rest-principles",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is REST? Is it a standalone protocol or does it run on top of something?",
+  "a": "REST (Representational State Transfer) is an **architectural style**, not a protocol. It's usually implemented on top of HTTP, but it's defined by constraints:\n\n- **Client–server** separation.\n- **Stateless:** each request carries all context (auth token etc.); no server-side session needed.\n- **Cacheable:** responses declare cacheability.\n- **Uniform interface:** resources identified by URIs, manipulated via representations (JSON), standard methods with standard semantics, self-descriptive messages, HATEOAS (links) — the last is rarely done in practice.\n- **Layered system:** proxies/CDNs/gateways can be inserted transparently.\n- (Optional) code on demand.\n\nSo \"REST API\" in practice means: resource-oriented URLs (`/users/42/orders`), HTTP verbs for actions, status codes for outcomes, JSON bodies. HTTP itself is the protocol (over TCP/TLS or QUIC). Most \"REST\" APIs are really \"HTTP+JSON\" APIs at Richardson maturity level 2.",
+  "level": 1,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-tcp-acks",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "How do you know your TCP packets arrived? Is there an acknowledgment per packet, or one for all?",
+  "a": "TCP acknowledges **bytes, not packets**. Each segment has a sequence number; the receiver sends a **cumulative ACK** = \"next byte I expect\", which confirms everything before it.\n\n- Not strictly one ACK per segment: **delayed ACKs** typically ack every second segment or after ~40 ms, and ACKs piggyback on data going the other way.\n- The sender keeps up to a **window** of unacknowledged bytes in flight (min of receiver window and congestion window) — it doesn't wait per packet.\n- Losses are detected by **retransmission timeout** or **3 duplicate ACKs** (fast retransmit). **SACK** (selective ack) lets the receiver report received out-of-order ranges so only the gaps are resent.\n\nFrom the application's point of view: a successful `write()` only means the kernel buffered the data — not that the peer received or processed it. For end-to-end confirmation you need an application-level ack (HTTP response, Kafka `acks`, etc.).",
+  "level": 2,
+  "asked": [
+   "IT One"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-tcp-checksum",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "What is a checksum, and how is it used in TCP?",
+  "a": "A checksum is a small value computed from data so the receiver can detect accidental corruption.\n\nTCP uses a **16-bit one's-complement sum** over the TCP header, payload and a pseudo-header (source/destination IP, protocol, length). The sender writes it into the header; the receiver recomputes it and **silently drops** the segment on mismatch — the missing ACK then triggers retransmission. UDP has the same checksum (optional in IPv4, mandatory in IPv6).\n\nLimitations:\n- It's weak: it catches random bit flips but misses some multi-bit errors (e.g. swapped 16-bit words). Ethernet's CRC32 and TLS's AEAD MAC provide stronger protection on the way.\n- It's not security — anyone can recompute it. Integrity against attackers needs HMAC/AEAD (TLS).\n- NICs usually offload checksum computation, which is why tcpdump on the sender may show \"incorrect\" checksums.\n\nApplications that care (Kafka record CRC32C, storage systems) add their own checksums end-to-end.",
+  "level": 2,
+  "asked": [
+   "DCloud"
+  ],
+  "n": 1
+ },
+ {
+  "id": "networking-websocket-concurrent-writes-race",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "In a high-load WebSocket service, two services/goroutines send to the same client at the same time. What can go wrong?\nFollow-up: what happens if this race isn't handled?",
+  "a": "It's a **race condition on the connection**, not a duplicate. A WebSocket connection supports at most one concurrent writer: a message is written as one or more frames, and two unsynchronized writers can interleave bytes of different frames.\n\nConsequences:\n- Corrupted frames → the client gets a protocol error and closes the connection (1002), or garbage payloads.\n- With `gorilla/websocket`, concurrent `WriteMessage` calls panic (\"concurrent write to websocket connection\").\n- Reordering: even without corruption, message order between the two producers is undefined, which breaks clients expecting e.g. state then delta.\n- Data races on shared buffers/state, visible under `-race`.\n\nFixes:\n- One **writer goroutine per connection** reading from a buffered `chan []byte`; everyone else sends to the channel (also gives you backpressure: drop or disconnect slow clients when the buffer is full).\n- Or guard writes with a `sync.Mutex`.\n- Across multiple instances, route messages for a user through one owner (pub/sub keyed by connection), and add sequence numbers if ordering matters.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "networking-xss-escaping",
+  "cat": "networking",
+  "kind": "theory",
+  "q": "How do you protect against XSS? Is it better to escape data on input or on output?",
+  "a": "XSS = attacker-controlled data ends up executed as script in another user's browser (stored, reflected, or DOM-based).\n\nDefense:\n- **Contextual output encoding** — escape at render time for the exact context: HTML body, attribute, JS string, URL, CSS. Go's `html/template` does this automatically (never use `text/template` for HTML, avoid `template.HTML` on user data). React/Vue escape by default; avoid `dangerouslySetInnerHTML`/`v-html`.\n- **Sanitize** when you must accept HTML (allowlist sanitizer like bluemonday).\n- **Content-Security-Policy** with nonces, no `unsafe-inline` — limits damage.\n- `HttpOnly` cookies so scripts can't steal sessions; `X-Content-Type-Options: nosniff`; correct `Content-Type` on JSON APIs.\n\n**Output, not input.** On input you don't know the eventual context (HTML vs JSON vs SQL vs CSV), escaping there corrupts data (`&amp;amp;` double-encoding) and misses data that arrived through other paths. Do **validation** on input (type, length, format), **encoding** on output for the specific sink.",
+  "level": 2,
+  "asked": [
+   "VK"
+  ],
+  "n": 1
+ }
+]

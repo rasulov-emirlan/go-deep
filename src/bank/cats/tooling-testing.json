@@ -1,0 +1,215 @@
+[
+ {
+  "id": "tooling-testing-profiling-pprof",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "How do you profile a Go application, and what can you see in pprof?\nFollow-ups: have you done profiling in practice? What tools do you know? Tell me about tracing and optimization.",
+  "a": "Tools: **pprof** (sampling profiles), **go tool trace** (execution tracer), benchmarks (`go test -bench -benchmem`, `-cpuprofile/-memprofile`), plus continuous profilers (Pyroscope, Parca, Datadog) and OS-level `perf`/eBPF.\n\nGetting profiles: `runtime/pprof` in code, or expose `/debug/pprof` on an internal port:\n\n```go\nimport (\n\t\"log\"\n\t\"net/http\"\n\t_ \"net/http/pprof\"\n)\n\nfunc main() {\n\tgo func() {\n\t\tlog.Println(http.ListenAndServe(\"localhost:6060\", nil))\n\t}()\n\t// ... the service itself\n}\n```\n\nThen `go tool pprof -http=:8081 http://host:6060/debug/pprof/profile?seconds=30`.\n\nWhat you can see:\n- **cpu**: where CPU time goes (flame graph, `top`, `list Func`).\n- **heap**: `inuse_space/objects` (what's live now, for leaks) versus `alloc_space/objects` (allocation churn that drives GC).\n- **goroutine**: stacks of all goroutines, the first thing to check for goroutine leaks.\n- **block / mutex**: time waiting on channels/locks (enable with `runtime.SetBlockProfileRate` / `SetMutexProfileFraction`).\n- **trace**: scheduler latency, GC pauses, syscalls, goroutine timelines. Use it when the problem is latency, not CPU.\n\nWorkflow: measure first (metrics show a p99 or RSS problem) → profile → fix the top item → confirm with a benchmark and `-base` diff. Typical wins: fewer allocations (preallocate, `sync.Pool`, avoid `[]byte`↔`string` copies), less lock contention, and **PGO** (`default.pgo` from a production CPU profile, often 2-14% for free).",
+  "level": 2,
+  "asked": [
+   "DCloud",
+   "Data Driven Labs",
+   "Digital Spirit",
+   "SeniorSoft",
+   "WMX"
+  ],
+  "n": 7
+ },
+ {
+  "id": "tooling-testing-how-to-test-code",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "How would you test this code? What kinds of tests would you write, and how?\nOften asked right after a live-coding task (\"now write tests for Process\"); also \"do you catch bugs before or after deploy?\"",
+  "a": "Start from behaviour, not implementation: list the contract (inputs, outputs, errors, side effects), then cover it at the cheapest level that proves it.\n\n1. **Unit tests** for pure logic: table-driven, one case per branch plus edge cases (empty input, nil, boundaries, duplicate keys, context cancellation, error paths).\n2. **Dependencies behind interfaces** (repo, HTTP client, clock) replaced with hand-written fakes or generated mocks, so you can force errors and timeouts.\n3. **Integration tests** for the parts that talk to real infrastructure (SQL, Kafka, Redis) using testcontainers or docker-compose, behind a build tag or `-short` skip.\n4. **Concurrency**: run with `-race`, use `testing/synctest` (Go 1.25) for time-dependent code instead of `time.Sleep`.\n5. A few **e2e/smoke tests** after deploy, plus canary + metrics/alerts, because some bugs only show in production.\n\nTest observable behaviour (\"given this document, Process returns X and stores Y\") rather than which private method was called; behaviour tests survive refactoring. Most bugs should be caught before merge (CI: tests, `go vet`, linters, race), and the rest by staged rollout and monitoring after deploy.",
+  "level": 1,
+  "asked": [
+   "Kuper",
+   "VK"
+  ],
+  "n": 4
+ },
+ {
+  "id": "tooling-testing-dev-tools",
+  "cat": "tooling-testing",
+  "kind": "behavioral",
+  "q": "Which day-to-day tools do you use: IDE, Postman vs cURL, the shell for diagnostics and scripting?",
+  "a": "A light fluency check. Answer with what you use and why:\n- **IDE**: GoLand (refactoring, debugger, DB tools) or VS Code + gopls; know how to use the debugger (Delve), not just prints.\n- **Postman/Insomnia vs cURL**: Postman for collections, environments and sharing with QA; **cURL** for quick checks, scripts, reproducing issues on a server, and \"copy as cURL\" from the browser. Also `grpcurl` for gRPC, `httpie`, `jq`.\n- **Shell**: `kubectl logs/exec/port-forward`, `psql`, `grep/awk/jq` over logs, `ss`/`netstat`, `dig`, `top`, `curl -v` for TLS/DNS issues, small bash scripts for repetitive tasks.\n\nPitfall: being unable to debug without a GUI — on a prod box or in a pod, you only have the shell.",
+  "level": 1,
+  "n": 3,
+  "asked": []
+ },
+ {
+  "id": "tooling-testing-race-detector",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "How does the Go race detector (-race) work, and does it find all data races?\nFollow-ups: have you used it in practice? Why can't you always build with -race?",
+  "a": "`-race` instruments every memory access and sync operation at compile time and links in ThreadSanitizer (TSan). At runtime it keeps **vector clocks** per goroutine and **shadow memory** per 8-byte word recording recent accesses. Sync operations (mutexes, channels, `sync/atomic`, `WaitGroup`) establish **happens-before** edges. If two accesses to the same address from different goroutines, at least one a write, are not ordered by happens-before, it reports a DATA RACE with both stacks.\n\nIt does **not** find all races:\n- It's **dynamic**: it only sees races on code paths that actually execute concurrently during that run. No false positives, but many false negatives, so tests need real concurrency.\n- Shadow history is bounded (a few recent accesses per word), so old accesses can be forgotten.\n- It doesn't detect logical races (check-then-act with correct locking), deadlocks or races in non-instrumented code (cgo/assembly).\n\nWhy not always on: roughly **2-20x CPU slowdown and 5-10x memory**, plus a goroutine limit (8128 in old versions, relaxed in newer ones). Practice: always `go test -race ./...` in CI, and optionally a race-built canary or staging binary under realistic load.",
+  "level": 2,
+  "asked": [
+   "DCloud",
+   "WMX"
+  ],
+  "n": 3
+ },
+ {
+  "id": "tooling-testing-test-types-on-project",
+  "cat": "tooling-testing",
+  "kind": "behavioral",
+  "q": "What kinds of tests have you written or used on your projects? Do you use end-to-end tests?",
+  "a": "What they're checking: whether you actually own quality, or just \"QA tests it\". They want concrete test types, where each one lived in the pipeline, and why you picked that mix.\n\nStructure:\n- **Context**: the service and its risk (money, data, integrations).\n- **Mix**: e.g. table-driven unit tests for domain logic, integration tests against Postgres/Kafka in testcontainers, contract tests for APIs between teams, a thin e2e/smoke suite on staging after deploy.\n- **Pipeline**: what runs on every PR (unit, `-race`, linters), what runs nightly or pre-release (e2e, load tests).\n- **Result**: a bug class you caught, coverage or flakiness you improved, how long CI takes.\n\nOn e2e: they're valuable for critical user flows (checkout, login) but slow, flaky and expensive, so keep them few and push most checks down the pyramid.\n\nPitfall: saying \"we had 90% coverage\" with nothing else. Coverage isn't quality. Talk about which failures the tests actually prevented.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "InDrive"
+  ],
+  "n": 3
+ },
+ {
+  "id": "tooling-testing-mocks",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "What are mocks, and what role do they play in unit testing?",
+  "a": "A mock is a test double that stands in for a real dependency (DB, HTTP client, queue) and lets the test **control its responses and verify how it was called**. The main purpose is isolation: you test your unit's logic without real infrastructure, and you can easily trigger rare paths like errors, timeouts or empty results.\n\nKinds of doubles: **stub/fake** (returns canned data or has a simple in-memory implementation) versus **mock** (also asserts expectations such as \"Get was called once with id=42\").\n\nIn Go the prerequisite is depending on a small interface, defined where it's **consumed**:\n\n```go\ntype UserRepo interface {\n\tGet(ctx context.Context, id int64) (User, error)\n}\n\ntype Service struct{ repo UserRepo }\n\nfunc (s *Service) Name(ctx context.Context, id int64) (string, error) {\n\tu, err := s.repo.Get(ctx, id)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\treturn u.Name, nil\n}\n\ntype fakeRepo struct {\n\tuser User\n\terr  error\n}\n\nfunc (f fakeRepo) Get(context.Context, int64) (User, error) { return f.user, f.err }\n\nfunc TestServiceName_NotFound(t *testing.T) {\n\ts := &Service{repo: fakeRepo{err: ErrNotFound}}\n\tif _, err := s.Name(context.Background(), 42); err != ErrNotFound {\n\t\tt.Fatalf(\"want ErrNotFound, got %v\", err)\n\t}\n}\n```\n\nGenerated mocks: gomock (`go.uber.org/mock`), mockery, minimock.\n\nPitfall: over-mocking. If a test asserts every internal call, a refactor that changes nothing observable still breaks it. Mock at system boundaries, assert outcomes, and back the mocks with integration tests against the real thing.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "InDrive"
+  ],
+  "n": 2
+ },
+ {
+  "id": "tooling-testing-testing-libraries-mocks",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "Which libraries do you use for unit tests and mocks in Go?",
+  "a": "The standard `testing` package is enough for most things: table-driven tests, `t.Run` subtests, `t.Parallel`, `t.Cleanup`, `t.Context()` (1.24), benchmarks with `b.Loop()` (1.24), fuzzing (`go test -fuzz`), `testing/synctest` for fake time (1.25).\n\nCommon additions:\n- **testify**: `require`/`assert` for readable assertions, `suite`. `require` stops the test on failure, `assert` keeps going.\n- **Mocks**: `go.uber.org/mock` (gomock, maintained fork of golang/mock), **mockery** (generates testify mocks), **minimock** (popular in Russian companies, typed and generated).\n- **Integration**: `testcontainers-go`, `sqlmock` for database/sql, `httptest` for HTTP, `miniredis`.\n- **Tooling**: `gotestsum` for readable output, `go test -cover`/`-coverprofile`.\n\nOpinion worth voicing: for small interfaces, hand-written fakes are often clearer than generated mocks. Generated mocks encourage over-specifying call order, which makes tests brittle.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "ZeBrains"
+  ],
+  "n": 2
+ },
+ {
+  "id": "tooling-testing-testing-pyramid",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "What is the testing pyramid?",
+  "a": "The testing pyramid is a heuristic for balancing test types:\n\n- **Base (most tests): unit tests.** Fast (ms), cheap, deterministic, pinpoint the failure.\n- **Middle: integration/component/contract tests.** Real DB, broker or HTTP between a few components. Slower, catch wiring and serialization issues.\n- **Top (few tests): e2e/UI tests.** A whole system through its public interface. Highest confidence per test, but slow, flaky and expensive to debug.\n\nThe idea is to push each check to the lowest level that can prove it, so CI stays fast and failures are easy to localize. The anti-pattern is the \"ice-cream cone\": mostly manual and e2e testing with few unit tests.\n\nNuance for backend microservices: many teams use a \"testing diamond/honeycomb\", with more weight on service-level integration tests (service + real Postgres in a container). Much of the risk sits at the boundaries, and these tests are now cheap thanks to testcontainers. Add contract tests (e.g. Pact) between services instead of wide e2e suites.",
+  "level": 1,
+  "asked": [
+   "Avito"
+  ],
+  "n": 2
+ },
+ {
+  "id": "tooling-testing-unit-tests-in-go",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "What is a unit test, and how do you write unit tests in Go?",
+  "a": "A unit test checks one small unit of behaviour (a function or type) in isolation: fast, deterministic, no network/DB/disk, with dependencies replaced by fakes.\n\nIn Go: a file `x_test.go` in the same package (white-box) or in `package x_test` (black-box), with functions `func TestXxx(t *testing.T)`. You run them with `go test ./...`. The idiomatic form is **table-driven**:\n\n```go\nfunc TestAbs(t *testing.T) {\n\ttests := []struct {\n\t\tname string\n\t\tin   int\n\t\twant int\n\t}{\n\t\t{\"positive\", 5, 5},\n\t\t{\"zero\", 0, 0},\n\t\t{\"negative\", -3, 3},\n\t}\n\tfor _, tt := range tests {\n\t\tt.Run(tt.name, func(t *testing.T) {\n\t\t\tt.Parallel()\n\t\t\tif got := Abs(tt.in); got != tt.want {\n\t\t\t\tt.Errorf(\"Abs(%d) = %d, want %d\", tt.in, got, tt.want)\n\t\t\t}\n\t\t})\n\t}\n}\n```\n\nUseful tools: `t.Fatalf` vs `t.Errorf` (stop vs continue), `t.Helper()`, `t.Cleanup`, `t.TempDir()`, `-run` to filter, `-count=1` to bypass the cache, `-race`, `-shuffle=on`.\n\nGotcha: since Go 1.22 each loop iteration gets its own `tt`, so the old `tt := tt` copy before `t.Parallel()` is no longer needed.",
+  "level": 1,
+  "asked": [
+   "InDrive",
+   "Sovkombank"
+  ],
+  "n": 2
+ },
+ {
+  "id": "tooling-testing-unit-vs-integration",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "What are integration tests, and when should you use them instead of unit tests?",
+  "a": "Integration tests check that several components work together with **real** dependencies: your repository against a real Postgres, a consumer against real Kafka, a handler + middleware + DB. Unit tests check one unit's logic with dependencies faked.\n\nUse **unit tests** for business rules, branching, calculations, edge cases and error handling. They're fast and precise.\n\nUse **integration tests** where mocks would lie:\n- SQL queries, migrations, transactions, isolation behaviour, constraints.\n- Serialization/protocols (JSON, protobuf, Kafka headers), config wiring.\n- Interaction with external systems through their real client libraries.\n\nHow in Go: `testcontainers-go` or docker-compose in CI to spin up dependencies; separate them with a build tag (`//go:build integration`) or `testing.Short()`; isolate data per test (a transaction rolled back, a unique schema, truncation); run them in parallel packages carefully.\n\nRule of thumb: mock what you don't own only at the boundary, and prove the boundary itself with integration tests. A green unit test around a mocked SQL query proves nothing about the SQL.",
+  "level": 1,
+  "asked": [
+   "Andersen",
+   "Tehzor"
+  ],
+  "n": 2
+ },
+ {
+  "id": "tooling-testing-git-merge-vs-rebase",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "How does git merge differ from git rebase?",
+  "a": "Both integrate changes from one branch into another, but they shape history differently.\n\n- **merge** creates a merge commit with two parents. The existing history is preserved exactly as it happened. It's non-destructive and safe on shared branches, but it produces a non-linear graph with \"merge noise\".\n- **rebase** replays your commits on top of the new base, creating **new commits with new hashes**. You get a linear history that's easy to read, bisect and review, but history is rewritten.\n\nRule: rebase your **local/private** branches (e.g. `git pull --rebase`, `git rebase -i` to squash fixups before a PR). Never rebase commits that others have based work on. After rebasing a pushed branch you need `git push --force-with-lease`.\n\nRelated: **squash merge** (a common PR strategy) collapses a branch into one commit on main. Conflicts: a merge resolves them once, while a rebase may make you resolve them per replayed commit (`git rerere` helps).",
+  "level": 1,
+  "asked": [
+   "Kvando"
+  ],
+  "n": 1
+ },
+ {
+  "id": "tooling-testing-git-undo-pushed-commit",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "You committed to the wrong branch and already pushed it. How do you get rid of that commit?",
+  "a": "It depends on whether others may have pulled the branch.\n\n**Shared branch (safe default):** don't rewrite history. Use `git revert <sha>` to create a new commit that undoes it, then push. History stays linear for everyone.\n\n**Your own feature branch, nobody pulled:** rewrite it.\n```text\ngit switch correct-branch\ngit cherry-pick <sha>              # move the work where it belongs\ngit switch wrong-branch\ngit reset --hard <sha>~1           # drop it locally\ngit push --force-with-lease        # never plain --force\n```\n\nNotes:\n- `--force-with-lease` refuses to overwrite if the remote moved since your last fetch, so you won't delete a teammate's commits.\n- Protected branches (`main`) forbid force-push, so there it has to be `revert`.\n- If the commit contained **secrets**, removing it from the branch isn't enough. It lives on in forks, caches and CI logs. Rotate the secret first.\n- `git reflog` can recover anything you reset by mistake.",
+  "level": 1,
+  "asked": [
+   "Kvando"
+  ],
+  "n": 1
+ },
+ {
+  "id": "tooling-testing-go-sum",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "What is go.sum for?",
+  "a": "`go.sum` stores **cryptographic hashes** of every module version the build depends on (directly or transitively): an `h1:` hash of the module's file tree and a separate hash of its `go.mod`. It isn't a lockfile. Versions are chosen by `go.mod` through Minimal Version Selection. `go.sum` guarantees **integrity**: when a module is downloaded again (on CI, by a teammate, from a proxy) the go command verifies the bytes match, so a tampered or re-tagged version fails the build.\n\nThe first time a hash is seen, it's also checked against the **checksum database** (`sum.golang.org`, a transparency log). Everyone therefore gets the same content for `v1.2.3`, even if the author force-pushes the tag.\n\nPractice: commit it, let `go mod tidy` maintain it, and don't hand-edit it. Merge conflicts are resolved by taking both sides and running `go mod tidy`. Lines for modules you no longer use are harmless but `tidy` removes them. See also `GONOSUMDB`/`GOPRIVATE` for private modules that the public sumdb can't know.",
+  "level": 1,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "tooling-testing-go-version-whats-new",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "What's the current Go version, and what changed in recent releases (1.25, 1.26)?",
+  "a": "Go ships two releases a year (February and August). You should know the one you run. Highlights worth naming:\n\n**Go 1.25 (Aug 2025)**\n- **Container-aware GOMAXPROCS**: on Linux the runtime respects the cgroup CPU limit and updates it dynamically, so there's no need for `automaxprocs`.\n- `sync.WaitGroup.Go(func())`, which removes the `Add(1)`/`defer Done()` boilerplate.\n- `testing/synctest` is GA: tests with fake time in a \"bubble\".\n- Experimental **Green Tea GC** (`GOEXPERIMENT=greenteagc`) and **encoding/json/v2** (`GOEXPERIMENT=jsonv2`).\n- `runtime/trace.FlightRecorder`, new vet checks (`waitgroup`, `hostport`), and \"core types\" removed from the spec.\n\n**Go 1.26 (Feb 2026)**\n- **Green Tea GC on by default**: better locality when scanning small objects, roughly 10-40% less GC CPU on GC-heavy services.\n- `new(expr)`, e.g. `new(42)` or `p := new(time.Now())`.\n- `errors.AsType[T]`, generic types that refer to themselves, and a rewritten `go fix` with modernizers.\n\nEarlier ones worth knowing: 1.22 per-iteration loop variables and `for range n`; 1.23 range-over-func iterators; 1.24 Swiss-table maps, generic type aliases, `testing.B.Loop`, `os.Root`.",
+  "level": 2,
+  "asked": [
+   "SeniorSoft"
+  ],
+  "n": 1
+ },
+ {
+  "id": "tooling-testing-goprivate",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "What is GOPRIVATE?",
+  "a": "`GOPRIVATE` is a comma-separated list of module path glob patterns (e.g. `GOPRIVATE=gitlab.company.com/*,github.com/myorg/*`) that tells the go command those modules are private. It's shorthand for setting both:\n\n- `GONOPROXY`: fetch them **directly from VCS** (git) instead of through `GOPROXY` (proxy.golang.org can't see them, and you don't want private paths leaking to it).\n- `GONOSUMDB`: don't check them against the public checksum database `sum.golang.org`. The sumdb can't have their hashes, and the lookup would leak the module name.\n\nIt's typically combined with git auth: `~/.netrc` or `git config url.\"git@gitlab.company.com:\".insteadOf \"https://gitlab.company.com/\"` in CI, or a corporate proxy (Athens, Artifactory) with `GOPROXY=https://goproxy.corp,direct`.\n\nSet it persistently with `go env -w GOPRIVATE=...`. Gotcha: `go.sum` still records hashes for private modules, so local integrity checking keeps working. Only the public sumdb lookup is skipped.",
+  "level": 1,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "tooling-testing-httptest",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "What is the net/http/httptest package, and what is it for?",
+  "a": "`net/http/httptest` provides utilities for testing HTTP code without a real network deployment:\n\n- `httptest.NewRecorder()` is a `ResponseWriter` that records status, headers and body. Combined with `httptest.NewRequest` you can call a handler directly as a plain function.\n- `httptest.NewServer(handler)` / `NewTLSServer` starts a real server on a loopback port. It's used to test **clients** (your API client, retries, timeouts) against a fake upstream, or to run a full middleware stack.\n\n```go\nfunc TestHandler(t *testing.T) {\n\treq := httptest.NewRequest(http.MethodGet, \"/user?id=1\", nil)\n\trec := httptest.NewRecorder()\n\tHandler(rec, req)\n\tif rec.Code != http.StatusOK {\n\t\tt.Fatalf(\"status = %d\", rec.Code)\n\t}\n\n\tsrv := httptest.NewServer(http.HandlerFunc(Handler))\n\tdefer srv.Close()\n\tresp, err := http.Get(srv.URL + \"/user\")\n\tif err != nil {\n\t\tt.Fatal(err)\n\t}\n\tdefer resp.Body.Close()\n\tio.Copy(io.Discard, resp.Body)\n\tif resp.StatusCode != http.StatusBadRequest {\n\t\tt.Fatalf(\"status = %d\", resp.StatusCode)\n\t}\n}\n```\n\nUse the recorder for fast handler unit tests and the server when you need real connections (timeouts, TLS, redirects, client code). Always `defer srv.Close()`. Since Go 1.23 `NewRequestWithContext` is also available for tests that need a context.",
+  "level": 1,
+  "asked": [
+   "Sovkombank"
+  ],
+  "n": 1
+ },
+ {
+  "id": "tooling-testing-profiling-in-production",
+  "cat": "tooling-testing",
+  "kind": "theory",
+  "q": "How safe is it to capture CPU/memory profiles in production? Have you used continuous profiling (e.g. Pyroscope)?",
+  "a": "Generally safe, which is why pprof is designed for production, but know the costs:\n\n- **CPU profile**: SIGPROF sampling at 100 Hz, only while a profile is being collected. Overhead is typically a few percent for those N seconds.\n- **Heap profile**: always on (samples about one allocation per 512 KB, `runtime.MemProfileRate`). Fetching it is cheap.\n- **Goroutine profile**: needs a short stop-the-world. With hundreds of thousands of goroutines the `debug=2` dump can pause noticeably.\n- **Block/mutex**: off by default. Enable with a sampling rate, not \"record everything\".\n- **Execution trace**: heavier but much cheaper since Go 1.21 (~1-2%). Go 1.25's `trace.FlightRecorder` keeps a rolling in-memory window you can dump on an incident.\n\nPrecautions: never expose `/debug/pprof` publicly (it leaks internals and allows cheap DoS). Use an internal port or auth, and limit concurrency and duration.\n\n**Continuous profiling** (Pyroscope/Grafana, Parca): an agent (Grafana Alloy scraping pprof endpoints, the Go SDK pushing, or eBPF) collects low-rate profiles from all instances all the time. You get flame graphs over time, filtered by labels (service, version, pod), and diffs between releases. It's great for \"what changed after deploy\" and for feeding PGO. The cost is a small, constant overhead plus storage.",
+  "level": 2,
+  "asked": [
+   "Data Driven Labs"
+  ],
+  "n": 1
+ }
+]

@@ -1,0 +1,159 @@
+[
+ {
+  "id": "memory-gc-how-gc-works",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "How does Go's garbage collector work, what's its algorithm, and how does it affect performance?\nFollow-ups: does it clean up objects in sync.Pool? What do too many pointers cost?",
+  "a": "Go's GC is a **concurrent, non-generational, non-compacting tri-color mark-and-sweep** collector.\n\nCycle:\n1. Short **STW** to enable the write barrier (sweep termination).\n2. **Concurrent mark**: starting from roots (stacks, globals), objects go white → grey → black. A hybrid (Yuasa + Dijkstra) **write barrier** keeps mutator writes from hiding live objects. It takes ~25% of GOMAXPROCS as background workers, plus **mark assists** that make heavily allocating goroutines help out.\n3. Short **STW** mark termination.\n4. **Concurrent sweep**: lazily reclaims white objects span by span.\n\nPacing: `GOGC=100` triggers the next cycle when the heap grows by 100% over the live heap. `GOMEMLIMIT` adds a soft total-memory cap. Since **Go 1.26** the **Green Tea** collector is default: it marks small objects span by span (page-local, better cache behaviour, vectorized scanning) and cuts GC CPU by roughly 10–40%.\n\nPerformance impact: CPU for marking (proportional to live pointerful heap), latency from mark assists and write barriers, and memory headroom (about 2× live heap by default). STW pauses are usually well under 1 ms.\n\n**sync.Pool**: yes, pools are cleared by GC. Since 1.13, items move to a \"victim\" cache on one GC and are dropped on the next, so pooled objects survive at most about 2 cycles. Don't use a pool as a cache.\n\n**Many pointers**: more escapes and heap objects, and every pointer must be traced. Pointer-free objects live in noscan spans and aren't traversed. Prefer `[]T` over `[]*T` and IDs over pointer graphs.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "Crtex",
+   "Digital Spirit",
+   "FrogStudio",
+   "RealIT",
+   "X5 Group",
+   "X5 Tech"
+  ],
+  "n": 8
+ },
+ {
+  "id": "memory-gc-escape-analysis",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "What is escape analysis, when does it run, and what makes a value escape to the heap?\nFollow-ups: where do pointed-to values, struct fields and slices passed to functions live, and can you force a slice onto the heap?",
+  "a": "Escape analysis is a **compile-time** pass (after inlining) that decides for each allocation whether it can live on the goroutine's stack or must go to the heap. The compiler decides, not the programmer and not the runtime. Inspect it with `go build -gcflags='-m -m'`.\n\nA value escapes when it may outlive its frame, or its size isn't known:\n- a pointer to it is returned, stored in a global or heap object, or sent on a channel;\n- it's captured by a closure or goroutine that outlives the call;\n- it's converted to an interface and passed to code the compiler can't see through (`fmt.Println(x)` arguments escape);\n- `make([]T, n)` with non-constant `n`, or it's too big (>64 KB for implicit allocations). Since Go 1.25 small variable-size makes can get a stack buffer.\n\nDetails interviewers probe:\n- **A pointer doesn't imply the heap.** `p := &x` that never leaves the function stays on the stack.\n- **Struct fields** are stored inline inside the struct, wherever the struct lives. Pointer fields point elsewhere.\n- **Slice passed to a function**: the 3-word header (ptr, len, cap) is copied by value (in registers or on the stack). The backing array's location is decided separately.\n- **Forcing the heap**: return the slice, store it globally, or use a non-constant size.\n- **append**: when capacity is exceeded, a new, larger array is allocated, usually on the heap if the size is dynamic or it escapes, and data is copied.\n\nShort-lived struct from a pointer-returning constructor that just gets logged: if the constructor is inlinable and the pointer doesn't escape, it stays on the stack. Otherwise return it **by value**, and avoid passing it as `any` to a logger in hot paths (that forces an escape).",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "CloudX",
+   "Plata",
+   "T-Bank"
+  ],
+  "n": 6
+ },
+ {
+  "id": "memory-gc-goroutine-stack",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "What's the initial goroutine stack size, how does it grow, and what happens when recursion exhausts it?\nFollow-ups: what determines a goroutine's size, and what's the difference between allocating and evacuating (copying) a stack?",
+  "a": "A goroutine starts with a **2 KB** stack (since Go 1.4). Since Go 1.19 the runtime may start new goroutines with the **average** observed stack size to avoid repeated growth.\n\nIt's contiguous and **growable**: every function prologue compares SP against the stack guard. If the frame won't fit, `morestack` allocates a new stack **twice as large**, **copies** the old one over, adjusts every pointer into the stack, and frees the old one. That copying is what's often called stack \"evacuation\", as opposed to allocating new objects on the heap. It's O(stack size) but amortized, and it's why Go can't allow pointers from the heap into stacks. The GC **shrinks** a stack by half when a goroutine uses less than a quarter of it.\n\nSo a goroutine's size is mostly its current stack (driven by call depth and frame sizes) plus the `g` struct (~400 B) and whatever heap objects it keeps alive.\n\nDeep recursion: the stack keeps doubling up to the max, **1 GB on 64-bit** (250 MB on 32-bit; adjustable with `debug.SetMaxStack`). Then:\n\n```text\nruntime: goroutine stack exceeds 1000000000-byte limit\nfatal error: stack overflow\n```\n\nThis is a fatal error, **not a recoverable panic**. Guard recursion depth or convert it to an explicit loop with a stack.",
+  "level": 2,
+  "asked": [
+   "RealIT",
+   "Tehzor",
+   "ViTech"
+  ],
+  "n": 4
+ },
+ {
+  "id": "memory-gc-stack-vs-heap",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "What are the stack and the heap in Go, and how is each cleaned up?\nFollow-ups: how does allocation work, and what happens to a stack frame when a function returns?",
+  "a": "- **Stack**: per-goroutine, contiguous, LIFO. Each call pushes a frame (locals, spills, return address). Allocation is just moving the stack pointer, and cleanup is free: on return the SP moves back and the frame's memory is simply reused by the next call, without zeroing or GC. Goroutine stacks start at ~2 KB and grow by copying.\n- **Heap**: shared by all goroutines, for values whose lifetime isn't bounded by one call. Freed only by the **garbage collector** (concurrent mark-sweep).\n\nWho decides: the **compiler's escape analysis** puts a variable on the stack if it can prove no reference outlives the frame, otherwise on the heap. See it with `go build -gcflags=-m`. `new`/`make`/`&T{}` don't imply heap.\n\nHeap allocation is a TCMalloc-like design: objects ≤32 KB are served from ~68 **size classes** via a per-P `mcache` (no lock), refilled from `mcentral`, which gets spans from `mheap`. Tiny pointer-free objects (<16 B) are packed together, and large objects get dedicated spans straight from `mheap`. Memory comes from the OS in 64 MB arenas and is returned by the background scavenger.\n\nWhy it matters: stack allocation is nearly free and creates no GC work. Heap allocation costs allocator time plus future marking. Stacks aren't collected, but they are scanned as GC roots and shrunk by the GC if mostly unused.",
+  "level": 1,
+  "asked": [
+   "Digital Spirit",
+   "Magnit",
+   "T-Bank",
+   "Tutu"
+  ],
+  "n": 4
+ },
+ {
+  "id": "memory-gc-leak-diagnosis",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "How do memory leaks happen in Go, and how do you find the source in production?\nScenario: a service's memory grows until it crashes, restarts, and grows again.",
+  "a": "In a GC'd language a \"leak\" means memory stays **reachable** by mistake (it relates to pointers only in that something still references it), or goroutines never exit.\n\nCommon causes:\n- **Goroutine leaks**: blocked on channels, locks or network calls without timeouts. Each keeps its stack and referenced data.\n- Unbounded caches, maps or global registries. Maps never shrink after deletes.\n- Sub-slices or substrings pinning huge backing arrays (`buf[:10]` of a 100 MB slice).\n- Unclosed `resp.Body`, forgotten `Ticker.Stop`, per-request `time.After` pre-1.23, cgo or off-heap memory, finalizers keeping objects alive.\n\nDiagnosis:\n1. **Metrics**: RSS vs `go_memstats_heap_inuse_bytes` vs `go_goroutines`. If the heap and goroutine count grow together, it's a goroutine leak. If RSS grows but the heap doesn't, look at cgo, fragmentation or the scavenger.\n2. **pprof** (`net/http/pprof`): take two heap profiles minutes apart and diff them with `go tool pprof -base old.pb.gz new.pb.gz` using `inuse_space`. Use the goroutine profile (`?debug=2`) to see where goroutines are parked.\n3. `GODEBUG=gctrace=1` to check whether the live heap after GC keeps rising.\n4. Continuous profiling (Pyroscope/Parca) to catch it in prod. Reproduce with load tests; `goleak` in tests.\n\nMitigate while fixing: set `GOMEMLIMIT` below the container limit and alert on growth. Restarts only hide the problem.",
+  "level": 2,
+  "asked": [
+   "InDrive",
+   "Magnit"
+  ],
+  "n": 2
+ },
+ {
+  "id": "memory-gc-reduce-gc-pressure",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "How do you reduce GC load (the number and cost of GC cycles) and overall memory consumption in Go?",
+  "a": "GC cost is roughly proportional to **allocation rate** (how often cycles trigger) × **live heap with pointers** (how much to mark). So allocate less, keep fewer pointers, and tune the pacer.\n\nAllocate less (measure first with `pprof -alloc_space`, `go test -benchmem`, `-gcflags=-m`):\n- Preallocate: `make([]T, 0, n)`, `make(map[K]V, n)`, `strings.Builder.Grow`.\n- Reuse buffers: `sync.Pool` for hot, short-lived objects; `slices.Clip`/`clear()` and reuse.\n- Avoid unneeded escapes: return values instead of pointers for small structs, avoid `any` boxing and closures in hot paths, avoid `[]byte`↔`string` round-trips.\n\nMake the heap cheaper to scan: prefer values and pointer-free structs (`[]T` over `[]*T`, IDs instead of pointers). Pointer-free memory is marked \"noscan\" and isn't traversed.\n\nTune:\n- `GOGC` (default 100): higher means fewer cycles but more memory.\n- `GOMEMLIMIT` (1.19+): a soft memory cap; lets you run with `GOGC=off` or a high GOGC safely. This replaces the old \"ballast\" trick.\n\nReduce footprint: order struct fields to cut padding, use smaller types, stream instead of loading everything, copy small sub-slices/substrings out of huge buffers, rebuild maps after mass deletes (maps don't shrink).\n\nGo 1.26's Green Tea GC lowers GC CPU by itself, but allocation discipline still matters most.",
+  "level": 2,
+  "n": 2,
+  "asked": []
+ },
+ {
+  "id": "memory-gc-arenas",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "What are memory arenas in Go, how do they work, and why would you use them?",
+  "a": "The term means two different things.\n\n1. **The `arena` experiment** (Go 1.20, `GOEXPERIMENT=arenas`): you allocate many objects in one region and free them **all at once, manually**:\n\n```go\na := arena.NewArena()\ndefer a.Free()\np := arena.New[Msg](a)\ns := arena.MakeSlice[byte](a, 0, 4096)\n```\n\nWhy: request-scoped object graphs (e.g. decoding a big protobuf) cost almost nothing to allocate and create no GC work, since the whole region is released in one call. Use-after-free is caught by unmapping memory, so it faults rather than silently corrupting. Google saw up to ~15% CPU savings in some services.\n\nStatus: the proposal is **on hold**, the API may be removed, and it doesn't compose well with the rest of the language. It isn't recommended for production. Alternatives: `sync.Pool`, reusable buffers, allocation reduction, `GOGC`/`GOMEMLIMIT` tuning.\n\n2. **Heap arenas inside the runtime**: the Go heap is mapped from the OS in chunks of 64 MB on 64-bit Linux, with metadata (`heapArena`) recording span ownership and pointer bitmaps for the GC. You don't control these directly.",
+  "level": 3,
+  "asked": [
+   "Crtex"
+  ],
+  "n": 1
+ },
+ {
+  "id": "memory-gc-lazy-allocation",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "How does memory allocation work when a large amount is requested? (lazy allocation)",
+  "a": "Large allocations are **lazy at the OS level**: Go reserves address space, and physical memory appears only when pages are touched.\n\nIn the Go runtime, objects larger than 32 KB skip the size-class caches and get a dedicated span of whole pages directly from `mheap`. The heap grows by mapping more address space (arenas of 64 MB on 64-bit Linux) with `mmap`.\n\nIn the OS, `mmap` returns anonymous memory without backing it. Physical pages are assigned on the **first write** via page faults (demand paging); overcommit lets allocations exceed free RAM. Fresh pages come zeroed from the kernel, so the runtime can skip zeroing them (`needzero` is false for fresh spans).\n\nConsequences:\n- `make([]byte, 1<<30)` returns quickly and RSS grows only as you write into it. VSZ and RSS diverge.\n- The OOM kill can happen later, on touch, not at allocation time.\n- Freed memory isn't instantly returned: the background **scavenger** releases idle pages with `madvise` (`MADV_DONTNEED`), paced by `GOMEMLIMIT` and heap goals. `debug.FreeOSMemory()` forces it.\n\nGotcha: the GC counts the whole allocation toward the heap goal immediately, even if its pages aren't resident yet.",
+  "level": 3,
+  "asked": [
+   "Crtex"
+  ],
+  "n": 1
+ },
+ {
+  "id": "memory-gc-map-growth-old-memory",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "When a map grows (is rebuilt into a larger one), what happens to the old storage and its memory?",
+  "a": "The old storage becomes **garbage** once nothing points to it, and the GC frees it later. How the switch happens depends on the version:\n\n- **Go 1.24+ (Swiss tables)**: a map is a directory of independent tables (up to 1024 slots each). When one table exceeds its load factor, **only that table** is rebuilt: it's doubled, or split into two tables when at max size. Entries are rehashed in one step, and the old table's groups are dropped for the GC. Growth is spread across tables, so no single insert rehashes the whole map.\n- **Before 1.24 (buckets)**: when the load factor exceeded 6.5 (or there were too many overflow buckets), a bucket array 2× larger was allocated and entries were **evacuated incrementally**. Each write or delete moved a bucket or two, `oldbuckets` stayed referenced until evacuation finished, and then it became garbage. Memory temporarily held both arrays.\n\nGotcha: **maps never shrink**. Deleting all keys (or `clear(m)`) keeps the allocated tables/buckets. For a map that spiked in size, copy the survivors into a new map and drop the old one to release memory. The GC frees the old storage only if no iterator or reference still holds it.",
+  "level": 3,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1
+ },
+ {
+  "id": "memory-gc-oom-behavior",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "If a service leaks memory, what happens when memory runs out? How does swap change this?",
+  "a": "It depends on who hits the limit first:\n- **In a container / Kubernetes**: the cgroup memory limit is hit, the kernel **OOM killer** sends SIGKILL, and the pod shows `OOMKilled` / exit code 137 and restarts. There's no graceful shutdown, no defers, no final logs. Kubernetes nodes usually run without swap.\n- **Bare host without swap**: Linux overcommits, so allocations \"succeed\" until pages are touched. Then the OOM killer picks a victim, often the biggest process.\n- **With swap enabled**: first the system starts **swapping**. Latency explodes and GC gets far worse, since marking touches swapped-out pages. The service may thrash for a long time before being killed. A slow death is often worse than a quick restart.\n- **Go runtime itself** fails an `mmap`: `fatal error: runtime: out of memory`. That's not recoverable with `recover`.\n\nMitigations: `GOMEMLIMIT` set ~10% below the container limit, so the GC works harder before the kernel kills (watch for GC death spirals; the GC CPU share is capped around 50%), memory alerts, and fixing the leak (pprof heap diffs). Restarts are only a band-aid.",
+  "level": 2,
+  "asked": [
+   "FrogStudio"
+  ],
+  "n": 1
+ },
+ {
+  "id": "memory-gc-struct-alignment",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "How does struct field alignment affect memory layout in Go, and how can you optimize it?",
+  "a": "Each field is aligned to its type's alignment (int64/pointers: 8 bytes on 64-bit, int32: 4, bool: 1), and the struct's size is rounded up to its largest alignment. **The compiler doesn't reorder fields**, so declaration order decides the padding:\n\n```go\ntype Bad struct {\n\ta bool  // 1 + 7 padding\n\tb int64 // 8\n\tc bool  // 1 + 7 padding\n} // unsafe.Sizeof = 24\n\ntype Good struct {\n\tb int64\n\ta bool\n\tc bool // + 6 padding\n} // 16\n```\n\nOptimizing: order fields from largest to smallest alignment. Check with `unsafe.Sizeof`/`Alignof`/`Offsetof`, or let the `fieldalignment` analyzer (golang.org/x/tools) suggest an order.\n\nIt matters for structs held in large slices or maps (millions of elements), hot structs where fitting in fewer cache lines matters, and fewer bytes for the allocator and GC.\n\nRelated tricks:\n- **False sharing**: pad hot, independently updated fields (e.g. per-worker counters) to separate 64-byte cache lines.\n- 64-bit atomics on 32-bit platforms need 8-byte alignment. Use `atomic.Int64`, which guarantees it.\n- A zero-size field placed **last** in a struct gets padded, so put `struct{}` fields first.\n\nDon't sacrifice readability for a few bytes in structs that exist once.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "memory-gc-weak-pointers",
+  "cat": "memory-gc",
+  "kind": "theory",
+  "q": "What are weak references, and does Go have them?",
+  "a": "A **weak reference** points to an object without keeping it alive. If only weak references remain, the GC may collect the object, and the weak reference then reports \"gone\".\n\nGo has them since **1.24**: the `weak` package.\n\n```go\nwp := weak.Make(obj)     // obj is *T\n// ...\nif p := wp.Value(); p != nil {\n\tuse(p) // still alive; p is a strong pointer again\n} else {\n\t// collected\n}\n```\n\nWeak pointers made from the same pointer compare equal, so they work as map keys.\n\nUses: **canonicalization/interning caches** (the `unique` package, 1.23, is built on this), memoization caches that shouldn't pin memory, and observer registries. Pair them with `runtime.AddCleanup` (1.24, the preferred replacement for `SetFinalizer`) to delete the stale map entry when the object dies.\n\nGotchas: `Value()` can return nil at any moment after the last strong reference disappears, so always check it. Cleanups run asynchronously on a separate goroutine and aren't guaranteed to run before exit. Don't use weak pointers as a general cache-eviction policy; they drop entries at GC time, not by LRU or size.",
+  "level": 3,
+  "asked": [
+   "Magnit"
+  ],
+  "n": 1
+ }
+]

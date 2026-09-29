@@ -1,0 +1,361 @@
+[
+ {
+  "id": "messaging-order-analytics-async-redesign",
+  "cat": "messaging",
+  "kind": "design",
+  "q": "CreateOrder synchronously calls a slow AnalyticsService.TrackOrder, so the user waits. How would you redesign it?\n`OrderService.CreateOrder` waits for `AnalyticsService.TrackOrder` (which you may not be able to modify) before replying. Expected direction: Kafka and a transactional outbox.\nFollow-ups: why Kafka — could you do without it? Will the call into analytics be idempotent?",
+  "a": "Analytics isn't needed to answer the user, so take it **off the critical path**.\n\nDesign:\n1. `CreateOrder` writes the order **and** an `OrderCreated` row into an `outbox` table in one DB transaction, then returns to the user immediately.\n2. A relay (polling with `SKIP LOCKED` or Debezium CDC) publishes outbox rows to a Kafka topic keyed by `order_id`.\n3. An analytics consumer (a small adapter if `AnalyticsService` can't be modified) reads the topic and calls `TrackOrder`, with **rate limiting**, retries with backoff, and a DLQ — so a slow analytics service only grows consumer lag, never user latency.\n\nWhy Kafka vs no Kafka: the minimal version needs no broker — the outbox relay itself can call `TrackOrder` asynchronously (or a DB-backed job queue). Kafka earns its place when **several consumers** need order events (analytics, notifications, loyalty, search), when you want replay, and to buffer spikes. Don't introduce it unless you can defend it.\n\n**Idempotency:** no, not automatically. The outbox relay and Kafka give **at-least-once**, so `TrackOrder` may be called twice. Pass a stable event id/`order_id` and dedupe in the consumer (processed-events table or upsert) or make analytics counting idempotent.\n\nTrade-off: analytics becomes eventually consistent; you need monitoring of outbox backlog and consumer lag.",
+  "level": 2,
+  "asked": [
+   "Kuper",
+   "Ozon"
+  ],
+  "n": 7
+ },
+ {
+  "id": "messaging-transactional-outbox",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "How do you write to the database and publish to Kafka consistently? Explain the transactional outbox pattern.",
+  "a": "The problem is a **dual write**: DB commit and Kafka publish are two separate systems without a shared transaction. Commit-then-publish loses the event if the process crashes in between; publish-then-commit emits events for data that was rolled back.\n\n**Transactional outbox:**\n1. In the **same DB transaction** as the business change, insert a row into an `outbox` table (id, aggregate/key, type, payload, created_at, status).\n2. A separate **relay** reads unsent outbox rows and publishes them to Kafka, then marks them sent (or deletes them).\n3. Either polling (`SELECT … FOR UPDATE SKIP LOCKED LIMIT n`) or **CDC** — Debezium tailing the WAL/binlog — does the relay.\n\nProperties: atomic with the business data, but **at-least-once** delivery (relay can crash after publish, before marking) → consumers must be idempotent (dedupe by event id). Ordering: publish per aggregate in `id` order with the aggregate id as Kafka key.\n\nAlternatives: CDC directly on business tables; Kafka transactions only cover Kafka-to-Kafka; 2PC/XA is not supported by Kafka and is slow. The inverse problem (consume + write DB) is solved by an **inbox** table for dedup.\n\nGotchas: outbox table growth (clean up/partition), relay lag monitoring, and a single relay being a bottleneck.",
+  "level": 2,
+  "asked": [
+   "Kuper",
+   "Plata",
+   "RSHB",
+   "RealIT",
+   "Tehzor"
+  ],
+  "n": 7
+ },
+ {
+  "id": "messaging-delivery-guarantees-exactly-once",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What delivery guarantees exist (at-most-once, at-least-once, exactly-once)? What does Kafka give you, and how do you achieve exactly-once?\nFollow-up: why is at-least-once not a gold standard?",
+  "a": "- **At-most-once:** commit offset/ack before processing; a crash loses messages, never duplicates.\n- **At-least-once:** process, then commit; a crash causes redelivery → **duplicates**, never loss (if the producer uses `acks=all` + retries). Kafka's practical default.\n- **Exactly-once:** each message's effect happens once.\n\nKafka provides: idempotent producer (no duplicates from producer retries within a partition/session) and **transactions** — atomic writes to several partitions plus committing consumer offsets in the same transaction (`read_committed` consumers). That's exactly-once for **Kafka → Kafka** pipelines (Kafka Streams `exactly_once_v2`).\n\nFor side effects outside Kafka (DB, emails, payments) true exactly-once *delivery* is impossible; you build **effectively-once processing**: at-least-once delivery + **idempotent consumers** — dedup table keyed by message id in the same DB transaction as the effect, idempotent upserts, or storing offsets in the DB with the results. Producer side: transactional outbox.\n\nWhy at-least-once isn't a gold standard: it only moves the problem — duplicates will happen (rebalances, retries, relay crashes), and non-idempotent handlers double-charge, double-send, double-count. It also says nothing about ordering after retries.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "Magnit",
+   "SpaceIT",
+   "WMX",
+   "X5 Tech"
+  ],
+  "n": 5
+ },
+ {
+  "id": "messaging-kafka-core-entities",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What are the main entities in Kafka? What advantages does it have as a message queue?",
+  "a": "Entities:\n- **Broker** — a server storing data; a **cluster** of brokers with a **controller** (KRaft).\n- **Topic** — a named stream of records; split into **partitions** — ordered, append-only logs; each record has an **offset**.\n- **Replica / leader / follower / ISR** — copies of a partition for fault tolerance.\n- **Record** — key, value, headers, timestamp.\n- **Producer** — writes; chooses partition by key.\n- **Consumer** and **consumer group** — consumers in a group split partitions among themselves; each group has its own committed **offsets** (stored in `__consumer_offsets`).\n- Retention (time/size) and **compaction** (keep latest per key); segments on disk.\n\nAdvantages:\n- Very high throughput (sequential disk I/O, page cache, zero-copy, batching, compression).\n- **Durable, replayable log:** messages aren't deleted on consume; new consumers can read from the beginning.\n- Horizontal scaling via partitions; independent consumer groups for fan-out.\n- Per-key ordering, replication, and ecosystem (Connect, Streams, Schema Registry).\n\nDownsides: no per-message ack/routing/priorities like RabbitMQ, ordering only per partition, operational weight.",
+  "level": 1,
+  "asked": [
+   "Magnit",
+   "Plata",
+   "X5 Tech"
+  ],
+  "n": 3
+ },
+ {
+  "id": "messaging-kafka-partitioning",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "How are Kafka messages distributed across partitions, and how do you choose the number of partitions?\nFollow-up: have you set a partition key on the producer?",
+  "a": "**Assignment:** the producer's partitioner decides.\n- **With a key:** `murmur2(key) % numPartitions` — same key → same partition → **ordering per key** (e.g. key = `order_id`).\n- **Without a key:** the sticky partitioner (Kafka ≥2.4) fills a batch for one partition, then switches — good batching, roughly even spread. (franz-go/Sarama/segmentio have their own defaults — check which hash your client uses if you mix languages; they differ.)\n- Or an explicit partition / custom partitioner.\n\n**How many partitions:** partitions are the unit of parallelism — max active consumers in a group = number of partitions.\n- `partitions ≥ target throughput / per-consumer throughput` (and / per-partition producer throughput), with headroom for growth (e.g. 2–3×).\n- Too many costs: more open files, longer leader elections and rebalances, more memory on brokers and clients, higher end-to-end latency.\n\nGotchas: **increasing** partitions later changes `hash % N` → keys move to new partitions and per-key ordering breaks during the transition; you can't decrease partitions. Hot keys create skewed partitions — choose a high-cardinality key or salt it.",
+  "level": 2,
+  "asked": [
+   "Crtex",
+   "DCloud"
+  ],
+  "n": 3
+ },
+ {
+  "id": "messaging-message-brokers",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What message brokers do you know, and why use a broker between services?",
+  "a": "A broker decouples producers from consumers in time and load: the producer publishes and moves on; consumers process at their own pace, can be scaled, and can be down temporarily without losing messages.\n\nCommon ones:\n- **Kafka** — distributed append-only log; partitions give ordering + parallelism, consumer groups, retention and replay; great for event streaming and high throughput.\n- **RabbitMQ** — classic AMQP broker with exchanges/queues/routing keys, acks, per-message routing, DLX; good for task queues and complex routing.\n- **NATS / JetStream**, **Redis Streams**, cloud **SQS/SNS**, **Google Pub/Sub**.\n\nThings to discuss: delivery semantics (at-most/at-least/effectively-once), ordering (per partition/key), acknowledgements and redelivery, dead-letter queues, back-pressure, consumer idempotency, and schema evolution of messages.",
+  "level": 1,
+  "n": 3,
+  "asked": [
+   "Plata",
+   "RSHB"
+  ]
+ },
+ {
+  "id": "messaging-behavioral-brokers-experience",
+  "cat": "messaging",
+  "kind": "behavioral",
+  "q": "Which message brokers (Kafka, RabbitMQ, …) have you worked with?",
+  "a": "What they're checking: real hands-on depth vs buzzwords, and whether you understand *why* the broker was used. Expect immediate drill-down into partitions, consumer groups, delivery guarantees, and failure handling.\n\nStructure:\n1. Name the broker(s) and the **use case** in one line (\"Kafka for order events consumed by 4 services, ~5k msg/s\").\n2. Your **role**: producer/consumer code, client library (franz-go, Sarama, segmentio/kafka-go, amqp091-go), topic design (keys, partitions), configs you tuned.\n3. A **problem you solved**: consumer lag, duplicate processing (idempotency/outbox), poison messages (DLQ), rebalance storms, schema changes.\n4. What you'd do differently.\n\nPitfall: listing Kafka, RabbitMQ, NATS and SQS without being able to explain offsets, acks or why a given one was chosen — interviewers treat each named technology as an invitation to go deep.",
+  "level": 1,
+  "asked": [
+   "Amtech",
+   "Plata"
+  ],
+  "n": 2
+ },
+ {
+  "id": "messaging-choosing-a-broker",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What would guide your choice of message broker? When would you choose a managed queue like Amazon SQS over Kafka or RabbitMQ?",
+  "a": "Decision criteria:\n- **Semantics:** log with replay and multiple independent consumer groups (Kafka) vs task queue with per-message ack/retry/delay (RabbitMQ, SQS).\n- **Ordering:** per key (Kafka partitions, SQS FIFO message groups) or none needed.\n- **Throughput & retention:** sustained high volume and days of history → Kafka.\n- **Routing needs:** complex routing → RabbitMQ exchanges.\n- **Delivery guarantees** and dedup support, latency requirements.\n- **Operations:** who runs it? Team skills, managed offerings, cost, cloud lock-in.\n- **Ecosystem:** connectors, CDC, stream processing.\n\n**SQS** fits when you're on AWS and want a queue with **zero operations**: fully managed, scales automatically, pay per request, visibility timeout + redrive to a DLQ, standard (at-least-once, best-effort order) or FIFO (ordering per group, 5-minute dedup window). Pair with SNS for fan-out.\n\nSQS downsides: no replay/retention beyond 14 days, no consumer groups (fan-out needs SNS), polling latency/cost, message size limit (1 MiB; bigger → S3 pointer), AWS lock-in. Pick Kafka (or MSK) for event streaming; SQS/RabbitMQ for work queues.",
+  "level": 2,
+  "asked": [
+   "EyesOfWonder",
+   "Velme"
+  ],
+  "n": 2
+ },
+ {
+  "id": "messaging-idempotent-consumer-dedup",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "How do you implement message deduplication on the consumer side?\nRelated: a user unknowingly submits the same request five times — what solves this?",
+  "a": "Both are solved by **idempotency keys**: a stable unique id per logical operation, checked atomically with the effect.\n\nConsumer side (inbox pattern):\n```sql\nBEGIN;\nINSERT INTO processed_messages (message_id) VALUES ($1)\nON CONFLICT DO NOTHING;\n-- if 0 rows inserted: duplicate → skip, commit\n-- else: apply business change in the same transaction\nCOMMIT;\n```\n- The key comes from the producer (event id, `order_id` + version), never generated by the consumer.\n- The dedup record and the effect must commit **in the same transaction**; otherwise a crash in between breaks it.\n- Or make the effect naturally idempotent: upserts, `UPDATE … WHERE version = $n`, set semantics.\n- Expire dedup records after a window longer than the max redelivery horizon.\n\nClient side (API): client generates an `Idempotency-Key` (UUID) per user action; the server stores key → status/response; repeats return the stored response (or 409 while in progress). Also disable the button and use a unique constraint on the business key as a last line of defense.\n\nGotcha: an in-memory/Redis `SETNX` without tying it to the DB transaction leaves windows where the key is set but the work failed.",
+  "level": 2,
+  "asked": [
+   "Andersen",
+   "Plata"
+  ],
+  "n": 2
+ },
+ {
+  "id": "messaging-kafka-consumer-lag",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What is consumer lag and how do you fix it? What if you already have 4 partitions and 4 consumers — or a single worker?",
+  "a": "**Consumer lag** = latest offset in a partition − the group's committed offset; how far behind consumers are. Monitor per partition (Burrow, kafka-exporter, `kafka-consumer-groups.sh --describe`) and alert on growth/time-lag, not absolute values.\n\nFixes, first find the bottleneck (profile, traces):\n- **Scale out:** more consumers — only up to the partition count; beyond that add partitions (mind key remapping).\n- **With partitions = consumers (or a single worker), parallelize inside the consumer:** a worker pool per partition that keeps **per-key ordering** by hashing keys to workers, committing offsets only up to the lowest fully processed offset.\n- **Batch processing:** bulk DB inserts, batched external calls; tune `fetch.min.bytes`, `max.poll.records`, `fetch.max.wait.ms`.\n- Make processing cheaper: remove synchronous calls, cache lookups, async I/O, avoid per-message commits (commit periodically / async).\n- Fix skew: hot keys concentrate load on one partition.\n- Move slow/failed messages to retry topics so they don't block.\n\nGotchas: long processing > `max.poll.interval.ms` gets the consumer kicked out → rebalance loop; and parallel processing complicates offset commits (don't commit ahead of unfinished messages).",
+  "level": 2,
+  "asked": [
+   "Magnit",
+   "Plata"
+  ],
+  "n": 2
+ },
+ {
+  "id": "messaging-kafka-consumers-vs-partitions",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "How does the number of Kafka consumers relate to the number of partitions? Can you always just add consumers?\nFollow-up: what if there are more consumers than partitions, or more partitions than consumers?",
+  "a": "Within one **consumer group**, each partition is assigned to **exactly one** consumer at a time; one consumer may own several partitions.\n\n- **Consumers > partitions:** the extras sit **idle** (hot standby). Adding consumers beyond the partition count doesn't increase throughput.\n- **Partitions > consumers:** some consumers handle multiple partitions — works, just less parallelism.\n- **Equal:** maximum parallelism for that group.\n- Different consumer groups are independent: each group gets all messages.\n\nSo you can't always scale by adding consumers:\n- Capped at the partition count; raising partitions remaps keys (breaks per-key ordering during transition) and can't be undone.\n- Every join/leave triggers a **rebalance** (use cooperative-sticky assignment / static membership to reduce stop-the-world pauses).\n- The bottleneck may be downstream (DB, external API) — more consumers just hammer it harder.\n- Hot partitions (skewed keys) don't benefit.",
+  "level": 1,
+  "asked": [
+   "Magnit",
+   "ViTech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "messaging-kafka-vs-rabbitmq",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What are the fundamental differences between Kafka and RabbitMQ?\nFollow-up: which would you pick for (1) publishing change events, (2) creating jobs for sibling services?",
+  "a": "- **Model:** Kafka is a distributed, partitioned **log** — messages stay for the retention period, consumers track their own offsets, can replay. RabbitMQ is a **message broker with queues** — messages are routed through exchanges to queues and deleted once acked.\n- **Consumption:** Kafka is pull, parallelism = partitions, ordering per partition. RabbitMQ pushes to consumers with prefetch, competing consumers on a queue, per-message ack/nack/requeue, TTL, priorities, delayed/dead-letter exchanges.\n- **Routing:** RabbitMQ has rich routing (direct, topic, fanout, headers exchanges). Kafka: topic + key only.\n- **Throughput/scale:** Kafka handles millions of msg/s and long retention; RabbitMQ has lower latency at modest volumes and simpler setup. (RabbitMQ Streams and quorum queues narrow the gap.)\n\nThe two tasks:\n1. **Change events** (many consumers, possibly future ones, replay, ordering by entity) → **Kafka**.\n2. **Jobs for other services** (task queue: one worker per job, per-message acks, retries, delays, priorities) → **RabbitMQ** (or a job queue).\n\nGotcha: using Kafka as a task queue suffers from head-of-line blocking per partition and no per-message retry.",
+  "level": 2,
+  "asked": [
+   "Amtech",
+   "ViTech"
+  ],
+  "n": 2
+ },
+ {
+  "id": "messaging-pub-sub",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What is pub/sub?",
+  "a": "Publish/subscribe is a messaging pattern where **publishers** send messages to a **topic/channel** without knowing who receives them, and every **subscriber** interested in that topic gets its own copy.\n\nContrast with a **point-to-point queue**: each message is processed by exactly one of the competing consumers.\n\nExamples: Kafka topics with multiple consumer groups (each group is a subscriber; within a group it's queue-like), RabbitMQ fanout/topic exchanges binding a queue per subscriber, Google Pub/Sub, SNS, Redis Pub/Sub, NATS.\n\nBenefits: loose coupling, fan-out, adding consumers without touching publishers.\n\nGotchas: delivery semantics differ wildly — Redis Pub/Sub and core NATS are fire-and-forget (offline subscribers miss messages), while Kafka/Google Pub/Sub are durable. Subscribers must handle duplicates and out-of-order delivery; schema changes affect all subscribers you may not even know about.",
+  "level": 1,
+  "asked": [
+   "MascotGames",
+   "RSHB"
+  ],
+  "n": 2
+ },
+ {
+  "id": "messaging-schema-evolution-contracts",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "A producer changed its contract and consumers can't parse its JSON. How do you prevent this, and what can replace JSON?\nContext: which contract formats (JSON, Protobuf, Avro) did you use in Kafka?",
+  "a": "Root cause: an **implicit, unversioned contract**. Fixes, from process to tooling:\n\n- **Schema-first formats:** Protobuf or Avro (or JSON Schema) with a **Schema Registry** (Confluent/Apicurio). Producers register the schema; the registry enforces a **compatibility mode** (backward/forward/full) and rejects breaking changes at deploy/CI time. Messages carry a schema id.\n- **Evolution rules:** only add optional fields with defaults; never reuse or renumber Protobuf field numbers (use `reserved`); don't change types; rename via add-new/deprecate-old.\n- **Consumer tolerance:** ignore unknown fields (tolerant reader), handle missing ones.\n- **Versioning:** a new topic or a `version` field/header for truly breaking changes; run old and new in parallel and migrate consumers.\n- **Contract tests** (Pact or schema checks in CI) between producer and consumer repos.\n\nTrade-offs: Protobuf — compact, typed, codegen, great for Go; Avro — schema travels with the registry, strong evolution story, popular in the Kafka/data ecosystem; JSON — human-readable but no enforcement. Whatever you choose, bad messages must not block the partition (DLQ).",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 2
+ },
+ {
+  "id": "messaging-basket-handler-code-review",
+  "cat": "messaging",
+  "kind": "output",
+  "q": "Review this `AddItemAndOrder` basket handler. What issues do you see?\nIt adds/updates an item, recalculates the total, and treats `req.Count == 0` as checkout — setting status to ordered, publishing to the broker, then saving.",
+  "code": "func (bs *BasketServer) AddItemAndOrder(ctx context.Context, req *AddItemRequest) (*EmptyResponse, error) {\n\t// Load the user's basket\n\tbasket, err := bs.repo.Load(ctx, req.UserID)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\n\t// If the basket is already ordered, no changes are allowed\n\tif basket.Status == \"ordered\" {\n\t\treturn nil, fmt.Errorf(\"basket is already ordered and cannot be modified\")\n\t}\n\n\t// Flag to decide whether a new item needs to be added\n\tfound := false\n\n\t// Iterate over all basket items\n\tfor i, item := range basket.Items {\n\t\t// Check whether an item with the same ProductID already exists\n\t\tif item.ProductID == req.ProductID {\n\t\t\t// If found, update its quantity and price\n\t\t\tbasket.Items[i].Count += req.Count\n\t\t\tbasket.Items[i].Price = req.Price\n\n\t\t\tfound = true\n\t\t\tbreak\n\t\t}\n\t}\n\n\t// If the item is new, add it to the basket\n\tif !found {\n\t\tbasket.Items = append(basket.Items, BasketItem{\n\t\t\tBasketID:  basket.ID,\n\t\t\tProductID: req.ProductID,\n\t\t\tCount:     req.Count,\n\t\t\tPrice:     req.Price,\n\t\t})\n\t}\n\n\t// Recalculate the basket total\n\tvar total uint64 = 0\n\tfor _, item := range basket.Items {\n\t\ttotal += item.Count * item.Price\n\t}\n\tbasket.Total = total\n\n\t// If the request implies checking out the basket\n\tif req.Count == 0 {\n\t\tbasket.Status = \"ordered\"\n\t\t// Send a message to the broker\n\t\tif err := bs.producer.SendMessage(ctx, *basket); err != nil {\n\t\t\treturn nil, fmt.Errorf(\"error notifying broker: %w\", err)\n\t\t}\n\t}\n\n\t// Save the basket\n\tif err := bs.repo.Save(ctx, basket); err != nil {\n\t\treturn nil, err\n\t}\n\n\treturn &EmptyResponse{}, nil\n}",
+  "a": "Compiling it against the task's types (where `SendMessage` takes `*Basket`) fails first:\n\n```text\n./main.go:79:42: cannot use *basket (variable of struct type Basket) as *Basket value in argument to bs.producer.SendMessage\n```\n\nIssues:\n1. **Compile error:** `SendMessage(ctx, *basket)` passes a value where `*Basket` is expected — should be `basket`.\n2. **`Count == 0` as \"checkout\" is an invented protocol:** the spec says add *and* order. It also means a zero-count request appends a `Count: 0` item to the basket.\n3. **Publish before save (dual write):** if `Save` fails, consumers have already been told the order exists. Swapping the order still loses events on a crash between the two → use a **transactional outbox**.\n4. **Race:** load–modify–save without a transaction/row lock or version check; two concurrent requests can both pass the `ordered` check.\n5. Errors: `fmt.Errorf` without a sentinel/gRPC status (`codes.FailedPrecondition`), no input validation, possible `uint64` overflow in `Count*Price`.\n6. Updating `Price` on an existing item silently reprices earlier quantity — clarify business rules.\n7. Noise: comments restating code, `var total uint64 = 0`.",
+  "level": 2,
+  "asked": [
+   "SeniorSoft"
+  ],
+  "n": 1,
+  "verified": true
+ },
+ {
+  "id": "messaging-consumer-batching-scheme",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "How would you design a consumer's processing scheme: batching, batch size, timeouts?",
+  "a": "Typical design: accumulate messages into a batch and flush on **whichever comes first — size or time**.\n\n- **Batch size:** bound by downstream efficiency (e.g. 500–5000 rows per bulk insert) and memory; also by bytes, not just count.\n- **Flush interval:** caps added latency (e.g. 100 ms–1 s) so a quiet topic still flushes.\n- **Commit offsets only after the batch is durably processed** → at-least-once; make the batch write idempotent (upsert by message id) so a redelivered batch is harmless.\n- **Timeouts:** per-batch processing deadline via context, well under `max.poll.interval.ms`, so the consumer isn't evicted; keep polling (or pause partitions) while a batch is in flight.\n- **Partial failures:** split the batch/retry per message, route poison messages to a DLQ instead of failing the whole batch forever.\n- **Graceful shutdown/rebalance:** on partition revocation, flush or discard the in-flight batch for those partitions before committing.\n\nGo sketch: a loop with `select` on the message channel and a `time.Ticker`, appending to a slice and flushing when `len(batch) == max` or the ticker fires. Tune with metrics: batch fill ratio, flush latency, lag.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "messaging-document-stream-processor",
+  "cat": "messaging",
+  "kind": "code",
+  "q": "Implement a processor for out-of-order, duplicated document updates from a queue, merging versions per URL.\nPer Url, output Text/FetchTime from the latest version and PubDate/FirstFetchTime from the earliest version seen so far.\nMessages may be out of order and duplicated; (Url, FetchTime) is unique; returning nil means nothing is written downstream.",
+  "code": "package main\n\ntype Document struct {\n\tURL            string\n\tPubDate        uint64\n\tFetchTime      uint64\n\tText           string\n\tFirstFetchTime *uint64\n}\n\ntype Processor interface {\n\tProcess(doc *Document) (*Document, error)\n}",
+  "a": "Keep per-URL state of the **earliest** and **latest** versions seen (by `FetchTime`). Each message updates `first` if its FetchTime is lower, `last` if higher; the output combines them. Duplicates and stale messages change nothing → return `nil` (no downstream write), which also makes the processor **idempotent** under at-least-once delivery.\n\n```go\ntype Document struct {\n\tURL            string\n\tPubDate        uint64\n\tFetchTime      uint64\n\tText           string\n\tFirstFetchTime *uint64\n}\n\ntype state struct {\n\tfirst Document\n\tlast  Document\n}\n\ntype Store interface {\n\tGet(url string) (state, bool, error)\n\tPut(url string, s state) error\n}\n\ntype Processor struct {\n\tmu    sync.Mutex\n\tstore Store\n}\n\nfunc (p *Processor) Process(doc *Document) (*Document, error) {\n\tp.mu.Lock()\n\tdefer p.mu.Unlock()\n\n\tst, ok, err := p.store.Get(doc.URL)\n\tif err != nil {\n\t\treturn nil, err\n\t}\n\tif !ok {\n\t\tst = state{first: *doc, last: *doc}\n\t} else {\n\t\tchanged := false\n\t\tif doc.FetchTime < st.first.FetchTime {\n\t\t\tst.first, changed = *doc, true\n\t\t}\n\t\tif doc.FetchTime > st.last.FetchTime {\n\t\t\tst.last, changed = *doc, true\n\t\t}\n\t\tif !changed {\n\t\t\treturn nil, nil\n\t\t}\n\t}\n\tif err := p.store.Put(doc.URL, st); err != nil {\n\t\treturn nil, err\n\t}\n\n\tfirst := st.first.FetchTime\n\treturn &Document{\n\t\tURL:            doc.URL,\n\t\tPubDate:        st.first.PubDate,\n\t\tFetchTime:      st.last.FetchTime,\n\t\tText:           st.last.Text,\n\t\tFirstFetchTime: &first,\n\t}, nil\n}\n```\n\nRun on inputs with FetchTime 2, 1, 3, 3 (duplicate) the outputs were `PubDate/FetchTime/Text/First` = `20 2 v2 2`, `10 2 v2 1`, `10 3 v3 1`, then `nil`.\n\nScaling discussion: only store what's needed (first's PubDate+FetchTime, last's Text+FetchTime). Partition the input topic by `Url` so one consumer owns a URL — then the global mutex becomes per-partition and no cross-instance locking is needed. The state store must be durable (Redis/Cassandra/RocksDB state store) and updated with CAS or per-key serialization; commit input offsets only after the state write and output publish (at-least-once is fine because processing is idempotent). Old URL state can be TTL-evicted.",
+  "level": 3,
+  "asked": [
+   "VK"
+  ],
+  "n": 1
+ },
+ {
+  "id": "messaging-encoding-json-pitfalls",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What problems can arise when (un)marshaling with the standard `encoding/json` package, e.g. for messages from Kafka?",
+  "a": "- **Silent acceptance:** unknown fields are ignored and missing fields become zero values — a renamed field on the producer side turns into `0`/`\"\"` with no error. Use `DisallowUnknownFields` where appropriate, pointer/`omitzero` fields to distinguish \"absent\" from zero, and explicit validation.\n- **Numbers:** decoding into `any` yields `float64` — int64 IDs above 2^53 lose precision. Use typed structs or `Decoder.UseNumber()`.\n- **Case-insensitive** key matching and duplicate keys (last wins) in v1 — surprising and exploitable.\n- **Performance:** reflection-based, allocation-heavy; hot consumers often switch to code-generated (easyjson) or faster libraries (sonic, goccy/go-json), or to `encoding/json/v2` (experimental, `GOEXPERIMENT=jsonv2` since Go 1.25).\n- `[]byte` becomes base64; `time.Time` must be RFC 3339; `nil` slice marshals as `null`, empty as `[]`; unexported fields are skipped; `NaN`/`Inf` fail to marshal.\n- `json.Decoder` on a stream reads ahead — don't reuse the underlying reader.\n\nFor inter-service contracts, JSON has **no schema** — the real problem is contract drift, which is why schemas (Protobuf/Avro + Schema Registry) are preferred.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "messaging-grpc-vs-kafka",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What's the difference between services interacting via gRPC versus via Kafka?",
+  "a": "- **gRPC — synchronous request/response (commands, queries).** The caller knows the callee, waits for an answer, and gets errors immediately. Tight temporal coupling: if the callee is down or slow, the caller is too. Low latency, simple to reason about, easy tracing.\n- **Kafka — asynchronous events via a durable log.** The producer publishes facts (\"OrderCreated\") without knowing consumers; consumers read at their own pace, can be added later, can replay history. Loose coupling in time and space, buffers load spikes, fan-out to many consumers.\n\nCosts of Kafka: eventual consistency, no immediate answer (request/reply over Kafka is awkward), at-least-once delivery → idempotent consumers, ordering only per partition, operational complexity, harder debugging.\n\nRule of thumb: use gRPC when you need an answer now to continue (check stock, authorize payment); use Kafka for notifying others that something happened, integrating many downstream consumers, analytics, and for work that can happen later. Mixing both is normal — often with the outbox pattern bridging DB writes and events.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "messaging-inmemory-broker",
+  "cat": "messaging",
+  "kind": "code",
+  "q": "Implement an in-memory message broker: send(topic, []byte) and receive(topic).\nMessages may be sent before any reader exists; each message is delivered exactly once; many goroutines may write to and read from the same topic concurrently.",
+  "a": "Each topic is a FIFO buffer guarded by a mutex; `Receive` blocks until a message arrives. The wake-up uses a \"broadcast channel\": `Send` closes the topic's current `ready` channel and replaces it, so all waiters wake and re-check under the lock (a closed channel never loses a wake-up, unlike `sync.Cond` it composes with `ctx.Done()` in a `select`). Popping under the lock guarantees each message goes to exactly one receiver.\n\n```go\ntype topic struct {\n\tmsgs  [][]byte\n\tready chan struct{}\n}\n\ntype Broker struct {\n\tmu     sync.Mutex\n\ttopics map[string]*topic\n}\n\nfunc NewBroker() *Broker { return &Broker{topics: make(map[string]*topic)} }\n\nfunc (b *Broker) topic(name string) *topic {\n\tt, ok := b.topics[name]\n\tif !ok {\n\t\tt = &topic{ready: make(chan struct{})}\n\t\tb.topics[name] = t\n\t}\n\treturn t\n}\n\nfunc (b *Broker) Send(name string, msg []byte) {\n\tb.mu.Lock()\n\tdefer b.mu.Unlock()\n\tt := b.topic(name)\n\tt.msgs = append(t.msgs, msg)\n\tclose(t.ready)\n\tt.ready = make(chan struct{})\n}\n\nfunc (b *Broker) Receive(ctx context.Context, name string) ([]byte, error) {\n\tfor {\n\t\tb.mu.Lock()\n\t\tt := b.topic(name)\n\t\tif len(t.msgs) > 0 {\n\t\t\tmsg := t.msgs[0]\n\t\t\tt.msgs[0] = nil\n\t\t\tt.msgs = t.msgs[1:]\n\t\t\tb.mu.Unlock()\n\t\t\treturn msg, nil\n\t\t}\n\t\tready := t.ready\n\t\tb.mu.Unlock()\n\n\t\tselect {\n\t\tcase <-ready:\n\t\tcase <-ctx.Done():\n\t\t\treturn nil, ctx.Err()\n\t\t}\n\t}\n}\n```\n\nVerified with 3 writers × 100 messages and 4 readers under `-race`: 300 unique messages, 0 duplicates.\n\nDiscussion points: a per-topic lock (or `sync.Map` of topics) reduces contention; a buffered channel per topic is simpler but has a fixed capacity (senders block when full, violating \"send without readers\"); thundering-herd wake-ups can be avoided with a per-waiter channel queue; unbounded memory needs a limit/backpressure; \"exactly once\" here means no duplicate hand-off — there's no ack/redelivery if a reader crashes after receiving.",
+  "level": 2,
+  "asked": [
+   "Cloud.ru"
+  ],
+  "n": 1
+ },
+ {
+  "id": "messaging-kafka-connect-vs-go-consumer",
+  "cat": "messaging",
+  "kind": "behavioral",
+  "q": "Did you use a Kafka connector or write the consumer directly in Go? Why?",
+  "a": "Both are valid; the choice depends on how much **logic** sits between Kafka and the sink.\n\n- **Kafka Connect** (e.g. Debezium source, JDBC/ClickHouse/S3 sinks): no code, config-driven, built-in offset management, scaling and retries — good for straight data movement or CDC.\n- **Custom Go consumer** (franz-go, kafka-go, confluent-kafka-go): needed when you validate, enrich, deduplicate or route messages, or need custom batching and error handling.\n\nFor a Go consumer, show you know the essentials: consumer groups and partition assignment; **commit offsets after processing** (at-least-once) with idempotent writes; batching; dead-letter topic for poison messages; graceful shutdown with rebalance handling; monitoring **consumer lag**. Pitfall: auto-commit before processing, which silently loses messages on crash.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "messaging-kafka-consumer-group-multiple-topics",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "Can a consumer group read from multiple topics?",
+  "a": "Yes. A consumer can `subscribe` to a list of topics or a regex pattern (e.g. `orders\\..*`), and the group coordinator assigns partitions **from all subscribed topics** across the group's members. Each (group, topic, partition) has its own committed offset.\n\nDetails:\n- Assignment strategies (range, round-robin, sticky, cooperative-sticky) decide how partitions of different topics are spread; with range, partition 0 of every topic goes to the same consumer (useful for co-partitioned joins).\n- Pattern subscriptions pick up new matching topics on metadata refresh.\n- Ordering is only per partition — nothing is guaranteed across topics.\n\nGotcha: mixing a high-volume and a low-volume/critical topic in one group means they share consumers and rebalances; a slow handler for one topic delays the other. Often better as separate groups or separate consumers.",
+  "level": 1,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "messaging-kafka-pull-model",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "Is Kafka a push or a pull model?",
+  "a": "**Pull.** Consumers poll brokers (`Fetch` requests) for batches starting from an offset they control; brokers don't push.\n\nWhy: consumers control their own pace (natural backpressure — a slow consumer just lags instead of being overwhelmed), can batch efficiently, rewind/replay by resetting offsets, and brokers stay simple (no per-consumer delivery state beyond committed offsets).\n\nThe downside of naive pull — busy polling an empty topic — is solved with **long polling**: `fetch.min.bytes` and `fetch.max.wait.ms` make the broker hold the request until data arrives or the wait expires.\n\nContrast: RabbitMQ is primarily push (`basic.consume` with a prefetch limit for backpressure); SQS is pull with long polling. Producers, of course, push to Kafka.",
+  "level": 1,
+  "asked": [
+   "X5 Tech"
+  ],
+  "n": 1
+ },
+ {
+  "id": "messaging-kafka-replication-fault-tolerance",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "How does Kafka achieve fault tolerance with partitions and replication, and when would you use Kafka together with a database?",
+  "a": "Each partition has a **leader** and followers on other brokers (`replication.factor`, typically 3). Producers and (by default) consumers talk to the leader; followers fetch from it. The **ISR** (in-sync replicas) are followers that are caught up.\n\n- `acks=all` + `min.insync.replicas=2` with RF=3: a write is acknowledged only when at least 2 replicas have it — survives one broker loss without data loss, and refuses writes (not loses them) if too few replicas are in sync.\n- On leader failure the controller (KRaft in modern Kafka, no ZooKeeper since 4.0) elects a new leader from the ISR; `unclean.leader.election.enable=false` prevents electing a stale replica (availability vs durability trade-off).\n- Idempotent producer (`enable.idempotence`, default on) avoids duplicates from producer retries.\n- Racks awareness spreads replicas across AZs.\n\n**With a database:** Kafka is a log, not a query engine. Typical combos: DB as the source of truth + outbox/CDC to publish changes; Kafka as the ingestion buffer and DB (or ClickHouse/Elastic) as materialized views for queries; event sourcing with DB projections. Need consistency between them → outbox on the write side, idempotent upserts (inbox) on the consume side.",
+  "level": 3,
+  "asked": [
+   "DCloud"
+  ],
+  "n": 1
+ },
+ {
+  "id": "messaging-kafka-retention-unconsumed",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "Can there be problems if messages weren't read, e.g. consumers disconnected for a while?",
+  "a": "In Kafka, messages aren't removed when consumed — they're removed by **retention** (`retention.ms`, default 7 days, or `retention.bytes`), regardless of whether anyone read them. So:\n\n- **Data loss:** if consumers are down longer than retention, old segments are deleted before being read. On return, the committed offset is out of range and `auto.offset.reset` decides: `earliest` jumps to the oldest remaining message (a gap), `latest` skips everything (silent loss), `none` fails.\n- **Committed offsets expire** too (`offsets.retention.minutes`, default 7 days for an empty group) — the group then falls back to `auto.offset.reset`.\n- **Catch-up storm:** a huge backlog floods downstream DBs on restart; rate-limit consumption.\n- **Stale data:** processing hours-old events (e.g. notifications) may be harmful — check event timestamps.\n- Disk usage grows on brokers if retention is size-unbounded.\n\nIn RabbitMQ unconsumed messages accumulate in queues (memory/disk pressure, flow control blocks publishers; TTL/max-length policies drop them).\n\nMitigation: lag alerting, retention sized to your recovery time, DLQ/replay tooling.",
+  "level": 2,
+  "asked": [
+   "Plata"
+  ],
+  "n": 1
+ },
+ {
+  "id": "messaging-outbox-relay-concurrency",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "With an outbox relay running on several workers, how do you prevent multiple workers from picking up and sending the same record?",
+  "a": "Make claiming a row atomic in the database:\n\n```sql\nWITH batch AS (\n    SELECT id FROM outbox\n    WHERE sent_at IS NULL\n    ORDER BY id\n    LIMIT 100\n    FOR UPDATE SKIP LOCKED\n)\nUPDATE outbox o SET sent_at = now()\nFROM batch WHERE o.id = batch.id\nRETURNING o.id, o.key, o.payload;\n```\n\n`FOR UPDATE SKIP LOCKED` lets each worker lock a different batch without blocking on others. Either publish inside the transaction and commit after the broker acks (a crash rolls back → retried), or use a lease: `status='processing', locked_until = now() + interval '30s'` so rows from a dead worker become claimable again.\n\nAlternatives:\n- **Partition the work:** worker `i` handles `hash(key) % N == i` — also preserves per-key ordering, which `SKIP LOCKED` across workers does not.\n- **Leader election** (advisory lock `pg_try_advisory_lock`, k8s lease) — one active relay.\n- CDC (Debezium) instead of polling.\n\nWhatever you do, duplicates are still possible (crash after publish, before commit), so consumers must deduplicate by event id — the lock only reduces duplicates, it can't give exactly-once.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "messaging-poison-message-handling",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "An invalid JSON message arrives from Kafka. What do you do with the error?",
+  "a": "Don't crash and don't retry forever — a malformed message is a **poison pill**: retrying it can never succeed and, because Kafka is ordered per partition, it blocks everything behind it.\n\nStandard handling:\n1. **Classify errors:** permanent (deserialization, validation) vs transient (DB down, timeout).\n2. Permanent → log with topic/partition/offset/key, increment a metric, publish the raw bytes + error to a **dead-letter topic** (DLQ), then **commit the offset** and move on.\n3. Transient → retry with backoff (in-process, or via retry topics with delays), and stop consuming/pausing the partition rather than skipping data.\n4. **Alert** on DLQ growth; have tooling to inspect and replay DLQ messages after a fix.\n\nGotchas: committing the offset before the DLQ write succeeds loses the message; skipping silently hides a broken producer; if strict ordering per key matters, parking one message may require parking subsequent ones for the same key. Prevention is upstream: schema registry and compatibility checks.",
+  "level": 2,
+  "n": 1,
+  "asked": []
+ },
+ {
+  "id": "messaging-rabbitmq-lazy-queues",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What is a lazy queue in RabbitMQ, and what are its advantages?",
+  "a": "A **lazy queue** (`x-queue-mode=lazy`, classic queues) writes messages to **disk as early as possible** and loads them into RAM only when consumers need them, instead of keeping as much as possible in memory.\n\nAdvantages:\n- Supports **very long queues** (millions of messages, consumers down for hours) without memory pressure.\n- Predictable memory usage; avoids the memory alarm that **blocks all publishers** cluster-wide.\n- No big pauses from paging large amounts of RAM to disk under pressure.\n\nCost: higher disk I/O and somewhat higher latency/lower throughput when queues are short.\n\nCurrent state: since RabbitMQ 3.12, classic queues behave lazily by default (the `lazy` mode is ignored), and **quorum queues** (the recommended replicated type) and **streams** already keep messages on disk. So on modern versions the answer is \"it's the default behavior now\" — the concept still explains why queue depth doesn't blow up RAM.",
+  "level": 2,
+  "asked": [
+   "Andersen"
+  ],
+  "n": 1
+ },
+ {
+  "id": "messaging-throughput-patterns",
+  "cat": "messaging",
+  "kind": "theory",
+  "q": "What design patterns do you use to handle message throughput between services?",
+  "a": "- **Partitioning / sharding** by key for parallelism with per-key ordering.\n- **Competing consumers** (worker pools) and in-consumer parallelism with key-affinity.\n- **Batching** on producer (`linger.ms`, `batch.size`, compression) and consumer (bulk writes).\n- **Backpressure:** bounded buffers/channels, pausing partitions, prefetch limits in RabbitMQ; reject with 429/503 at the edge.\n- **Load leveling** via a queue between a spiky producer and a steady consumer.\n- **Rate limiting** calls to fragile downstreams (token bucket), **circuit breaker** + retry with exponential backoff and jitter.\n- **Retry topics & DLQ** so slow/failing messages don't block the main flow.\n- **Claim check:** put large payloads in object storage, send a reference.\n- **Outbox/inbox** for reliable production and idempotent consumption.\n- **Autoscaling** consumers on lag (KEDA).\n\nMeasure first: lag, processing time per message, and downstream saturation tell you which pattern applies.",
+  "level": 2,
+  "asked": [
+   "DCloud"
+  ],
+  "n": 1
+ }
+]
