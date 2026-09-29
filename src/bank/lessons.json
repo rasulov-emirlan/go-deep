@@ -319,6 +319,310 @@
   "profiling#traces": [
    "Profiling & observability",
    "Follow one request"
+  ],
+  "clocks#two": [
+   "Clocks & ordering",
+   "Every machine has two clocks"
+  ],
+  "clocks#skew": [
+   "Clocks & ordering",
+   "Timestamps can’t order events"
+  ],
+  "clocks#logical": [
+   "Clocks & ordering",
+   "Logical clocks track cause and effect"
+  ],
+  "clocks#hybrid": [
+   "Clocks & ordering",
+   "Hybrid clocks stay close to real time"
+  ],
+  "clocks#truetime": [
+   "Clocks & ordering",
+   "TrueTime: wait out the uncertainty"
+  ],
+  "consistency#models": [
+   "Consistency models & CAP",
+   "What each model allows"
+  ],
+  "consistency#lag": [
+   "Consistency models & CAP",
+   "Replica lag and time going backwards"
+  ],
+  "consistency#cap": [
+   "Consistency models & CAP",
+   "What CAP and PACELC really say"
+  ],
+  "consistency#quorum": [
+   "Consistency models & CAP",
+   "Quorums fall short, and how to test"
+  ],
+  "replication#leader": [
+   "Replication & quorums",
+   "Ack early or ack late"
+  ],
+  "replication#quorum": [
+   "Replication & quorums",
+   "Quorums: W + R > N"
+  ],
+  "replication#repair": [
+   "Replication & quorums",
+   "How stale copies catch up"
+  ],
+  "replication#conflicts": [
+   "Replication & quorums",
+   "When two writers disagree"
+  ],
+  "replication#kafka": [
+   "Replication & quorums",
+   "Kafka: leader plus ISR"
+  ],
+  "consensus#majority": [
+   "Consensus & Raft",
+   "Why a majority decides"
+  ],
+  "consensus#election": [
+   "Consensus & Raft",
+   "One leader per term"
+  ],
+  "consensus#log": [
+   "Consensus & Raft",
+   "Replicating, repairing and committing the log"
+  ],
+  "consensus#reads": [
+   "Consensus & Raft",
+   "Fresh reads and changing the cluster"
+  ],
+  "locks#ttl": [
+   "Locks, leases & fencing",
+   "A lock with a timeout can have two owners"
+  ],
+  "locks#fencing": [
+   "Locks, leases & fencing",
+   "Make the storage say no"
+  ],
+  "locks#leases": [
+   "Locks, leases & fencing",
+   "Leases: proving you are still alive"
+  ],
+  "locks#kinds": [
+   "Locks, leases & fencing",
+   "Which lock do you need"
+  ],
+  "locks#redlock": [
+   "Locks, leases & fencing",
+   "The Redlock debate"
+  ],
+  "failure-detection#silence": [
+   "Failure detection & partitions",
+   "A timeout is only a guess"
+  ],
+  "failure-detection#swim": [
+   "Failure detection & partitions",
+   "Gossip on a ring of nodes"
+  ],
+  "failure-detection#partial": [
+   "Failure detection & partitions",
+   "Half-broken is worse than broken"
+  ],
+  "failure-detection#split": [
+   "Failure detection & partitions",
+   "Two leaders at once"
+  ],
+  "failure-detection#k8s": [
+   "Failure detection & partitions",
+   "How long until my pod moves?"
+  ],
+  "sharding#mod": [
+   "Sharding & consistent hashing",
+   "hash mod N reshuffles everything"
+  ],
+  "sharding#ring": [
+   "Sharding & consistent hashing",
+   "The ring, and why it needs vnodes"
+  ],
+  "sharding#others": [
+   "Sharding & consistent hashing",
+   "Rendezvous, jump, Maglev, fixed slots"
+  ],
+  "sharding#move": [
+   "Sharding & consistent hashing",
+   "Moving data while it is live"
+  ],
+  "sharding#cost": [
+   "Sharding & consistent hashing",
+   "Hot keys and cross-shard work"
+  ],
+  "dist-transactions#twopc": [
+   "Sagas, 2PC & outbox",
+   "2PC and the stuck participant"
+  ],
+  "dist-transactions#saga": [
+   "Sagas, 2PC & outbox",
+   "Undo with new transactions"
+  ],
+  "dist-transactions#saga-edges": [
+   "Sagas, 2PC & outbox",
+   "Late cancels and leaky isolation"
+  ],
+  "dist-transactions#outbox": [
+   "Sagas, 2PC & outbox",
+   "Publishing events without a dual write"
+  ],
+  "dist-transactions#idempotency": [
+   "Sagas, 2PC & outbox",
+   "Safe retries and what exactly-once covers"
+  ],
+  "resilience#deadlines": [
+   "Timeouts, retries & breakers",
+   "One budget, passed down"
+  ],
+  "resilience#retries": [
+   "Timeouts, retries & breakers",
+   "Helpful, then lethal"
+  ],
+  "resilience#breaker": [
+   "Timeouts, retries & breakers",
+   "Fail fast, then probe"
+  ],
+  "resilience#overload": [
+   "Timeouts, retries & breakers",
+   "Queues, shedding, hedging"
+  ],
+  "resilience#meta": [
+   "Timeouts, retries & breakers",
+   "It stays broken after the trigger"
+  ],
+  "tcp#queues": [
+   "TCP edge cases",
+   "Queues, TIME_WAIT and port limits"
+  ],
+  "tcp#close": [
+   "TCP edge cases",
+   "Close is not one thing"
+  ],
+  "tcp#timing": [
+   "TCP edge cases",
+   "Timers, stalls and silent peers"
+  ],
+  "dns-lb#dns": [
+   "DNS & load balancers",
+   "DNS is a stack of caches"
+  ],
+  "dns-lb#grpc": [
+   "DNS & load balancers",
+   "One connection, all the load"
+  ],
+  "dns-lb#timeouts": [
+   "DNS & load balancers",
+   "Who closes first"
+  ],
+  "tls-quic#resume": [
+   "TLS & QUIC edge cases",
+   "Resumption, 0-RTT and replay"
+  ],
+  "tls-quic#certs": [
+   "TLS & QUIC edge cases",
+   "Certificates that break in production"
+  ],
+  "tls-quic#path": [
+   "TLS & QUIC edge cases",
+   "Below TLS: packets and QUIC"
+  ],
+  "syscalls#wall": [
+   "Syscalls & kernel mode",
+   "Why user and kernel are split"
+  ],
+  "syscalls#door": [
+   "Syscalls & kernel mode",
+   "What one syscall physically does"
+  ],
+  "syscalls#cost": [
+   "Syscalls & kernel mode",
+   "What a crossing costs"
+  ],
+  "syscalls#go": [
+   "Syscalls & kernel mode",
+   "How Go leaves the P behind"
+  ],
+  "virtual-memory#translate": [
+   "Virtual memory",
+   "Every address is translated"
+  ],
+  "virtual-memory#faults": [
+   "Virtual memory",
+   "Memory is handed out on first touch"
+  ],
+  "virtual-memory#numbers": [
+   "Virtual memory",
+   "RSS, promises, and who gets killed"
+  ],
+  "virtual-memory#go": [
+   "Virtual memory",
+   "Go on top of the kernel's memory"
+  ],
+  "os-scheduling#tasks": [
+   "Threads & CPU scheduling",
+   "A thread is a task that shares more"
+  ],
+  "os-scheduling#sched": [
+   "Threads & CPU scheduling",
+   "What a switch costs and who runs next"
+  ],
+  "os-scheduling#futex": [
+   "Threads & CPU scheduling",
+   "A lock enters the kernel only when contended"
+  ],
+  "os-scheduling#limits": [
+   "Threads & CPU scheduling",
+   "A CPU limit is a time budget"
+  ],
+  "os-io#wait": [
+   "I/O: page cache & epoll",
+   "Three ways to wait for I/O"
+  ],
+  "os-io#go": [
+   "I/O: page cache & epoll",
+   "Go parks sockets but blocks a thread on files"
+  ],
+  "os-io#cache": [
+   "I/O: page cache & epoll",
+   "write() is a promise to the page cache"
+  ],
+  "os-io#copies": [
+   "I/O: page cache & epoll",
+   "Copies and descriptors"
+  ],
+  "containers#process": [
+   "Containers under the hood",
+   "A container is a process in a costume"
+  ],
+  "containers#limits": [
+   "Containers under the hood",
+   "When a limit is hit: who dies"
+  ],
+  "containers#pid1": [
+   "Containers under the hood",
+   "PID 1 is not a normal process"
+  ],
+  "containers#k8s": [
+   "Containers under the hood",
+   "Kubernetes: what requests and limits do"
+  ],
+  "cpu-caches#wall": [
+   "CPU caches & memory ordering",
+   "The memory wall"
+  ],
+  "cpu-caches#misses": [
+   "CPU caches & memory ordering",
+   "Misses you can avoid"
+  ],
+  "cpu-caches#sharing": [
+   "CPU caches & memory ordering",
+   "Sharing is expensive"
+  ],
+  "cpu-caches#order": [
+   "CPU caches & memory ordering",
+   "Ordering, NUMA and vCPUs"
   ]
  },
  "links": {

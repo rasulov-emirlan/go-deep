@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 
-const topics = ['scheduler', 'maps', 'gc', 'memory-layout', 'slices', 'interfaces', 'defer', 'generics', 'channels', 'sync', 'memory-model', 'patterns', 'indexes', 'transactions', 'mongo-vs-postgres', 'kafka', 'queues', 'http', 'scaling', 'profiling']
+const topics = ['scheduler', 'maps', 'gc', 'memory-layout', 'slices', 'interfaces', 'defer', 'generics', 'channels', 'sync', 'memory-model', 'patterns', 'indexes', 'transactions', 'mongo-vs-postgres', 'kafka', 'queues', 'http', 'scaling', 'profiling', 'clocks', 'consistency', 'replication', 'consensus', 'locks', 'failure-detection', 'sharding', 'dist-transactions', 'resilience', 'tcp', 'dns-lb', 'tls-quic', 'syscalls', 'virtual-memory', 'os-scheduling', 'os-io', 'containers', 'cpu-caches']
 const pages = [{ path: '/', text: 'Watch' }, { path: '/challenges', text: 'Remove duplicates, keep order' }, { path: '/playground', text: 'Open in Go Playground' }, ...topics.map((s) => ({ path: '/' + s, text: 'Asked in real interviews' }))]
 
 for (const p of pages)
@@ -162,4 +162,13 @@ test('question links to the section that animates it, scrolled into view', async
   const [tab] = await Promise.all([context.waitForEvent('page'), link.click()])
   await expect(tab).toHaveURL(/\/slices#append$/)
   await expect(tab.locator('#append')).toBeInViewport()
+})
+
+test('flow diagram steps forward and draws arrows', async ({ page }) => {
+  await page.goto('/tcp')
+  const flow = page.locator('figure.flow').first()
+  await expect(flow.getByText('1/')).toBeVisible()
+  await flow.getByRole('button', { name: 'Next →' }).click()
+  await expect(flow.getByText('2/')).toBeVisible()
+  await expect(flow.locator('svg')).toBeVisible()
 })
