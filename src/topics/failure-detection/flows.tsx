@@ -294,7 +294,7 @@ export const gray: FlowDef = {
       ],
     },
     {
-      caption: 'Fix: probe the path users take. This probe is a real `/order` request, so the stuck pool shows up and the node is ejected.',
+      caption: 'Fix: probe the path users take. A real `/order` probe times out on the stuck pool, so the node is ejected.',
       add: [{ t: 'msg', id: 'pr', y: 334, y2: 350, from: 'M', to: 'N', text: 'GET /order', tone: 'red', lost: true }],
       set: { mbox: { tone: 'red', text: 'eject' } },
       stop: {
@@ -444,13 +444,15 @@ export const splitBrain: FlowDef = {
         { t: 'box', id: 'P2', x: 40, y: 30, w: 150, h: 64, tone: 'grey', dashed: true, label: 'frozen', text: 'P (term 1)' },
         { t: 'box', id: 'N', x: 370, y: 30, w: 150, h: 64, label: 'leader', text: 'N (term 2)' },
         { t: 'box', id: 'db', x: 190, y: 200, w: 180, h: 60, label: 'storage', text: 'seen term 2' },
-        { t: 'line', id: 'nw', x1: 445, y1: 98, x2: 340, y2: 196, arrow: true, text: 'write t2' },
+        { t: 'line', id: 'nw', x1: 445, y1: 98, x2: 340, y2: 196, arrow: true },
+        txt('nwt', 462, 150, 'write t2'),
       ],
     },
     {
       caption: 'P wakes still believing it leads, and writes. Storage has seen term 2 and refuses term 1: a fencing token.',
       add: [
-        { t: 'line', id: 'pw2', x1: 115, y1: 98, x2: 220, y2: 196, arrow: true, tone: 'red', text: 'write t1' },
+        { t: 'line', id: 'pw2', x1: 115, y1: 98, x2: 220, y2: 196, arrow: true, tone: 'red' },
+        txt('pwt', 100, 150, 'write t1', 'red'),
         cross('pw2x', 178, 168),
       ],
       set: { P2: { tone: 'red', label: 'wakes', dashed: false } },
@@ -483,12 +485,12 @@ export const stonith: FlowDef = {
     },
     {
       caption: 'Instead, a 90 s network blip: both sides see the other as dead and send power-off, but delivery is delayed, so both stay active (GitHub, Dec 2012).',
-      set: { A: { tone: 'ink', text: 'alive' }, B: { text: 'alive' } },
-      add: [{ t: 'line', id: 'a2b', x1: 164, y1: 122, x2: 396, y2: 122, arrow: true, tone: 'red', text: 'power off' }],
+      set: { A: { tone: 'ink', text: 'alive' }, B: { text: 'alive' }, b2a: { dashed: true } },
+      add: [{ t: 'line', id: 'a2b', x1: 164, y1: 122, x2: 396, y2: 122, arrow: true, tone: 'red', dashed: true, text: 'power off' }],
     },
     {
       caption: 'When the network recovers, both are shot at once. Some pairs lost both nodes; recovery took about 5 hours.',
-      set: { A: { tone: 'grey', text: 'off' }, B: { tone: 'grey', text: 'off' } },
+      set: { A: { tone: 'grey', text: 'off' }, B: { tone: 'grey', text: 'off' }, b2a: { dashed: false }, a2b: { dashed: false } },
       stop: {
         title: 'Fencing can misfire',
         edge: true,

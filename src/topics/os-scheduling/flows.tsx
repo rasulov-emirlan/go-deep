@@ -44,8 +44,8 @@ export const clone: FlowDef = {
       },
     },
     {
-      caption: 'Go starts every OS thread (an M) with exactly these flags. `os/exec` uses `CLONE_VFORK|CLONE_VM`, then `exec` replaces the program.',
-      add: [text('gm', 280, 228, 'Go M: clone(VM|FS|FILES|SIGHAND|THREAD)', { size: 13, tone: 'red' }), text('gx', 280, 250, 'os/exec: clone(VFORK|VM), then exec', { size: 13, tone: 'grey' })],
+      caption: 'Without cgo, Go starts every OS thread (an M) with these flags plus `CLONE_SYSVSEM`. `os/exec` uses `CLONE_VFORK|CLONE_VM`, then `exec` replaces the program.',
+      add: [text('gm', 280, 228, 'Go M: clone(VM|FS|FILES|SIGHAND|SYSVSEM|THREAD)', { size: 13, tone: 'red' }), text('gx', 280, 250, 'os/exec: clone(VFORK|VM), then exec', { size: 13, tone: 'grey' })],
       set: { p2: { text: 'M (thread)' } },
     },
   ],
@@ -126,18 +126,18 @@ export const switchCost: FlowDef = {
   h: 262,
   steps: [
     {
-      caption: 'Two tasks hand a token back and forth through a pipe, pinned to one CPU. Each hand-off, with its context switch, took about 1.8 µs (measured).',
+      caption: 'Two tasks hand a token back and forth through a pipe, pinned to one CPU. Each hand-off, with its context switch, took about 1.5–2 µs (measured on one VM).',
       add: [
         text('r1', 10, 25, 'one CPU', { anchor: 'start', tone: 'grey' }),
         box('a1', 10, 36, 80, 46, 'A', { label: 'CPU 0' }),
         box('b1', 95, 40, 80, 40, 'B'),
         box('a2', 180, 40, 80, 40, 'A'),
         box('b2', 265, 40, 80, 40, 'B'),
-        text('h1', 355, 66, 'hand-off ≈ 1.8 µs', { anchor: 'start', tone: 'red' }),
+        text('h1', 355, 66, 'hand-off ≈ 1.5–2 µs', { anchor: 'start', tone: 'red' }),
       ],
     },
     {
-      caption: 'Pinned to two CPUs, the same hand-off took 12.5 µs. The other CPU has to be woken with an interrupt, and inside a VM that costs extra.',
+      caption: 'Pinned to two CPUs, the same hand-off took 13–17 µs, with noise. The other CPU has to be woken with an interrupt, and inside a VM that costs extra.',
       add: [
         text('r2', 10, 112, 'two CPUs', { anchor: 'start', tone: 'grey' }),
         box('c0a', 10, 124, 80, 46, 'A', { label: 'CPU 0' }),
@@ -145,22 +145,22 @@ export const switchCost: FlowDef = {
         box('c1b', 220, 178, 80, 46, 'B', { label: 'CPU 1' }),
         box('w2', 305, 128, 120, 40, 'IPI, wake', { dashed: true, tone: 'red' }),
         box('c0c', 430, 128, 80, 40, 'A'),
-        text('h2', 10, 246, 'hand-off ≈ 12.5 µs', { anchor: 'start', tone: 'red' }),
+        text('h2', 10, 246, 'hand-off ≈ 13–17 µs', { anchor: 'start', tone: 'red' }),
       ],
       set: { r1: { tone: 'grey' }, a1: { tone: 'grey' }, b1: { tone: 'grey' }, a2: { tone: 'grey' }, b2: { tone: 'grey' }, h1: { tone: 'grey' } },
     },
     {
-      caption: 'What one switch does: save and load registers and the stack pointer, FPU/SIMD state and, for another process, the page-table root (`CR3`). About 1-2 µs.',
+      caption: 'What one switch does: save and load registers and the stack pointer, FPU/SIMD state and, for another process, the page-table root (`CR3`). Roughly 1-2 µs.',
       drop: ['r1', 'a1', 'b1', 'a2', 'b2', 'h1', 'r2', 'c0a', 'w1', 'c1b', 'w2', 'c0c', 'h2'],
       add: [
         box('sv1', 10, 20, 250, 56, 'registers + stack', { sub: 'switch_to, new rsp' }),
         box('sv2', 10, 86, 250, 56, 'FPU / SIMD state', { sub: 'XSAVE' }),
         box('sv3', 10, 152, 250, 56, 'address space', { sub: 'CR3 (PCID: no full flush)' }),
-        box('dc', 290, 20, 250, 188, 'direct cost', { sub: 'about 1-2 µs', tone: 'soft' }),
+        box('dc', 290, 20, 250, 188, 'direct cost', { sub: 'roughly 1-2 µs', tone: 'soft' }),
       ],
     },
     {
-      caption: 'The bigger bill comes after: the next task meets cold caches, a cold TLB and cold branch history. Threads and processes switched equally fast here, thanks to PCID.',
+      caption: 'The bigger bill comes after: the next task meets cold caches, a cold TLB and cold branch history. Threads and processes switched about equally fast here (PCID).',
       drop: ['dc'],
       add: [
         box('ce1', 290, 20, 250, 56, 'cold L1 / L2 cache', { dashed: true, tone: 'red' }),
@@ -191,8 +191,8 @@ export const eevdf: FlowDef = {
       ],
     },
     {
-      caption: 'CPU share follows weight, about 1.25x per nice step. Two spinners on one CPU: nice 0 vs 10 got 8.8 : 1 (1024 / 110 predicts 9.3).',
-      add: [text('m1', 280, 120, 'nice 0 vs 10: 8.8 : 1 measured', { tone: 'red' }), text('m2', 280, 145, 'weights predict 9.3 : 1', { tone: 'grey' })],
+      caption: 'CPU share follows weight, about 1.25x per nice step. Two spinners on one CPU: nice 0 vs 10 got about 9 : 1 (1024 / 110 predicts 9.3).',
+      add: [text('m1', 280, 120, 'nice 0 vs 10: ~9 : 1 measured', { tone: 'red' }), text('m2', 280, 145, 'weights predict 9.3 : 1', { tone: 'grey' })],
     },
     {
       caption: 'Each task has a lag: time it is owed (+) or overdrew (-). Only lag ≥ 0 tasks are eligible; the earliest virtual deadline wins. Numbers are illustrative.',
@@ -203,13 +203,13 @@ export const eevdf: FlowDef = {
         title: 'CFS before 6.6',
         body: (
           <>
-            Until 6.5, CFS ran the task with the least weighted CPU time (<code>vruntime</code>). Since 6.6 EEVDF picks by lag and deadline, and a task can ask for a shorter slice to get lower latency.
+            Until 6.5, CFS ran the task with the least weighted CPU time (<code>vruntime</code>). Since 6.6 EEVDF picks by lag and deadline. Asking for a shorter per-task slice with <code>sched_setattr</code> needs 6.12 or later.
           </>
         ),
       },
     },
     {
-      caption: 'A runs. The timer tick fires every 4 ms (`HZ=250`) and checks whether A used its slice (about 2 ms here) or a woken task has an earlier deadline.',
+      caption: 'A runs. The timer tick (every 4 ms at `HZ=250` here) checks whether A used its slice (about 2 ms) or a woken task has an earlier deadline.',
       add: [
         { t: 'line', id: 'axis', x1: 20, y1: 161, x2: 540, y2: 161, tone: 'grey' } as El,
         ...Array.from({ length: 9 }, (_, k) => tick(k)),
@@ -226,7 +226,7 @@ export const eevdf: FlowDef = {
       },
     },
     {
-      caption: 'Preempted while runnable: involuntary switch. Blocked on I/O, a futex or `sleep`: voluntary. Two spinners sharing a CPU: 243 involuntary each in 2 s (`/proc/PID/status`).',
+      caption: 'Preempted while runnable: involuntary switch. Blocked on I/O, a futex or `sleep`: voluntary. Two spinners sharing a CPU: ~245 involuntary each in 2 s (`/proc/PID/status`).',
       add: [
         box('rb', 85, 177, 55, 34, 'B'),
         box('ra2', 145, 177, 60, 34, 'A'),
@@ -236,7 +236,7 @@ export const eevdf: FlowDef = {
       set: { ra: { tone: 'ink' } },
     },
     {
-      caption: 'A sleeper that wakes with a short requested slice gets an earlier deadline and preempts at once: lower latency without a bigger share.',
+      caption: 'A sleeper with a short requested slice (kernel 6.12+) gets an earlier deadline and can preempt at once: lower latency without a bigger share.',
       add: [box('rw', 175, 177, 40, 34, 'W', { tone: 'red' }), text('tw', 225, 199, 'W wakes: earlier deadline', { anchor: 'start', size: 13, tone: 'red' })],
       set: { ra2: { w: 30 } },
     },
@@ -317,8 +317,8 @@ export const futex: FlowDef = {
         text('sm', 280, 80, 'sync.Mutex is not a futex', { tone: 'grey' }),
         box('gp', 20, 110, 250, 70, 'goroutine blocks', { sub: 'runtime parks it' }),
         box('mp', 290, 110, 250, 70, 'idle thread (M)', { sub: 'FUTEX_WAIT_PRIVATE', tone: 'red' }),
-        text('ms1', 280, 230, '2M lock/unlock, alone: 9 futex calls', { size: 14 }),
-        text('ms2', 280, 262, '8 goroutines, same 2M: 1,346 calls', { size: 14, tone: 'red' }),
+        text('ms1', 280, 230, '2M lock/unlock, alone: ~10–20 futex calls', { size: 14 }),
+        text('ms2', 280, 262, '8 goroutines, same 2M: ~100–1,300 calls', { size: 14, tone: 'red' }),
       ],
     },
   ],
@@ -353,12 +353,12 @@ export const throttle: FlowDef = {
       },
     },
     {
-      caption: 'Frozen for the rest of the window. A 1 ms sleeper probe overslept p99 49.6 ms with 4 spinners under this quota, 0.4 ms unthrottled.',
+      caption: 'Frozen for the rest of the window. Measured: a 1 ms sleeper probe overslept up to ~50 ms (p99 25–50 ms) with 4 spinners; a few ms unthrottled.',
       add: [box('fz', 280, 86, 260, 138, 'all threads frozen', { sub: '~50 ms', dashed: true, tone: 'red' }), arrow('rq', 332, 296, 540, 296, { tone: 'red', text: 'request waits' })],
     },
     {
-      caption: 'The kernel counts it in `cpu.stat`: 40 of 40 periods throttled. Watch `nr_throttled / nr_periods`, not average CPU%.',
-      add: [box('cs', 20, 270, 300, 40, 'nr_throttled 40 / 40 periods', { tone: 'red' })],
+      caption: 'The kernel counts it in `cpu.stat`: 37–40 of 40 periods throttled. Watch `nr_throttled / nr_periods`, not average CPU%.',
+      add: [box('cs', 20, 270, 300, 40, 'nr_throttled ~40 / 40 periods', { tone: 'red' })],
       stop: {
         title: 'Low average, still throttled',
         edge: true,
@@ -370,9 +370,9 @@ export const throttle: FlowDef = {
       },
     },
     {
-      caption: 'With `GOMAXPROCS=2`, two threads spend 2 x 100 ms: the bucket lasts the whole period. Same total work, 8 of 40 periods throttled (measured, Go test).',
+      caption: 'With `GOMAXPROCS=2`, two threads spend 2 x 100 ms: the bucket lasts the whole period. Same total work, only 7–8 of 40 periods throttled (measured, Go test).',
       drop: ['t3', 't4', 'fz', 'rq'],
-      set: { bk: { text: 'bucket lasts the period', tone: 'ink' }, t1: { w: 520 }, t2: { w: 520 }, cs: { text: 'nr_throttled 8 / 40 periods', tone: 'ink' } },
+      set: { bk: { text: 'bucket lasts the period', tone: 'ink' }, t1: { w: 520 }, t2: { w: 520 }, cs: { text: 'nr_throttled ~8 / 40 periods', tone: 'ink' } },
     },
   ],
 }

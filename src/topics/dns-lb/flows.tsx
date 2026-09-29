@@ -140,7 +140,7 @@ export const l4Flow: FlowDef = {
     },
     {
       caption: 'Fix 1: server MaxConnectionAge makes it send GOAWAY (±10 % jitter). The client reconnects and the LB can pick a new pod.',
-      set: { lb0: { tone: 'grey', dashed: true, text: 'old conn ends' }, p0: { tone: 'grey', text: 'pod A · 0%' }, p3: { tone: 'ink', dashed: false, text: 'pod D · 100%' } },
+      set: { lb0: { tone: 'grey', dashed: true, text: 'closed' }, p0: { tone: 'grey', text: 'pod A · 0%' }, p3: { tone: 'ink', dashed: false, text: 'pod D · 100%' } },
       add: fan('lb', 275, [3], 'red'),
       stop: {
         title: 'DNS is not polled',
