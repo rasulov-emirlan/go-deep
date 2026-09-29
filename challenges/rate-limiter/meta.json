@@ -1,0 +1,8 @@
+{
+  "title": "Rate limiter: N requests per second",
+  "bank": "concurrency-patterns-rate-limiter-external-api",
+  "cat": "concurrency-patterns",
+  "level": 2,
+  "prompt": "An API allows `rps` requests per second. Implement:\n\n- `NewLimiter(rps int) *Limiter`\n- `Wait(ctx context.Context) error` blocks until the caller may send one request, or returns `ctx.Err()`.\n- `Stop()` releases the limiter's resources.\n\nSpace calls evenly, no bursts: with `rps = 100`, 10 `Wait`s take about 100 ms, even from many goroutines.",
+  "hint": "A `time.Ticker` firing every `time.Second / rps`: each `Wait` takes one tick, in a `select` with `ctx.Done()`."
+}

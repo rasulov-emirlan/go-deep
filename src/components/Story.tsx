@@ -127,14 +127,14 @@ export function Story({ title, frames, id }: { title: string; frames: Frame[]; i
   }
   const findProp = (pid: string): Prop => f.props?.find((p) => p.id === pid) ?? { ...frames.flatMap((fr) => fr.props ?? []).find((p) => p.id === pid)!, hidden: true }
   const stops = frames.filter((fr) => fr.stop).length
-  // crop empty sky: the stage starts just above the highest thing any frame draws (+ room for bubbles)
+  // crop empty sky: the stage starts just above the highest thing any frame draws; bubbles use the stage's top margin
   const top = Math.max(
     0,
-    Math.min(...frames.flatMap((fr) => [...fr.actors.map((a) => a.y - (a.h ?? 90) - 44), ...(fr.props ?? []).map((p) => p.y - 8)])),
+    Math.min(...frames.flatMap((fr) => [...fr.actors.map((a) => a.y - (a.h ?? 90) - 12), ...(fr.props ?? []).map((p) => p.y - 8)])),
   )
   const up = <T extends { y: number }>(o: T): T => ({ ...o, y: o.y - top })
-  // …and keep room under the lowest feet for their tags
-  const bottom = Math.max(H, ...frames.flatMap((fr) => fr.actors.filter((a) => a.tag).map((a) => a.y + 24)))
+  // …and never cut off feet; tags use the stage's bottom margin
+  const bottom = Math.max(H, ...frames.flatMap((fr) => fr.actors.map((a) => a.y)))
 
   return (
     <figure className="story" id={id} tabIndex={0} onKeyDown={(e) => (e.key === 'ArrowRight' ? next() : e.key === 'ArrowLeft' ? setI(Math.max(i - 1, 0)) : null)}>

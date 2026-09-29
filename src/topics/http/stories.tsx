@@ -42,7 +42,7 @@ export const urlToByte: Frame[] = [
   },
   {
     caption: '200 OK arrives after 3 round trips. At 100 ms each, that’s 300 ms.',
-    actors: [client('finally!'), pkt(240, '200 OK', true, true), server()],
+    actors: [client('finally!'), pkt(280, '200 OK', true, true), server()],
     props: [wire, rt(3, true)],
   },
 ]

@@ -1,0 +1,11 @@
+/* mongo topic: story text + choose table */
+.mg-big { font: 700 clamp(12px, 2.6cqw, 21px) var(--mono); padding-top: .8em; white-space: nowrap; }
+.mg-hot { color: var(--red); }
+.mg-mono { font: 600 clamp(9px, 1.9cqw, 14px) var(--mono); white-space: nowrap; }
+.st-ink .mg-mono { color: var(--paper); }
+
+.mg-table { width: 100%; max-width: 36rem; margin-top: 1.2rem; border-collapse: collapse; font: 500 .85rem var(--mono); }
+.mg-table th, .mg-table td { border-bottom: 1px solid var(--g300); padding: .45rem .4rem; text-align: left; vertical-align: top; }
+.mg-table thead th { font-size: .66rem; text-transform: uppercase; letter-spacing: .05em; color: var(--g500); }
+.mg-table tbody th { font-family: var(--body); font-weight: 600; }
+.mg-table td.win { color: var(--red); font-weight: 700; }

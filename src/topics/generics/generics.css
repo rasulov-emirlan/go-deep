@@ -1,0 +1,20 @@
+/* generics topic */
+.gn-mono { font: 600 clamp(10px, 1.9cqw, 15px) var(--mono); white-space: nowrap; font-variant-ligatures: none; }
+.gn-down { padding-top: 1.1em; }
+.st-ink .gn-mono { color: var(--paper); }
+
+.gn-try { margin: 0 0 .9rem; color: var(--g800); }
+.gn-picks { display: grid; gap: .9rem; }
+@media (min-width: 760px) { .gn-picks { grid-template-columns: 1fr 1fr; gap: 1.5rem; } }
+.gn-pname { display: block; font: 700 .8rem var(--mono); margin-bottom: .35rem; }
+.gn-chips { display: grid; grid-template-columns: repeat(4, 1fr); border: 2px solid var(--ink); }
+.gn-chips button { border: 0; border-right: 1px solid var(--g300); border-bottom: 1px solid var(--g300); background: #fff; font: 600 .8rem var(--mono); padding: .6rem .2rem; cursor: pointer; color: var(--ink); }
+.gn-chips button:nth-child(4n) { border-right: 0; }
+.gn-chips button:nth-child(n+5) { border-bottom: 0; }
+.gn-chips button.on { background: var(--ink); color: var(--paper); }
+.gn-result { margin: 1.2rem 0 .6rem; display: grid; gap: .2rem; }
+.gn-result b { font: 700 clamp(1.8rem, 7vw, 2.6rem)/1 var(--head); color: var(--ink); }
+.gn-result.one b { color: var(--red); }
+.gn-result span { font-size: 1rem; color: var(--g800); min-height: 1.5em; }
+.gn-shapes { display: flex; flex-wrap: wrap; gap: .4rem; }
+.gn-shapes code { font-size: .78rem; }

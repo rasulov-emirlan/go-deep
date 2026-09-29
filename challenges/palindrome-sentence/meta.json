@@ -1,0 +1,8 @@
+{
+  "title": "Palindrome sentence",
+  "bank": "algorithms-palindrome-sentence",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `IsPalindrome(s string) bool`. Only letters count (Latin and Cyrillic), and case doesn't matter. Spaces, punctuation and digits are ignored.\n\n`\"А роза упала на лапу Азора\"` → `true`. An empty string is a palindrome.",
+  "hint": "Two pointers over `[]rune`, skipping anything where `unicode.IsLetter` is false."
+}

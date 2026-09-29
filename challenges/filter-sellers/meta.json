@@ -1,0 +1,8 @@
+{
+  "title": "Filter sellers by city",
+  "bank": "algorithms-filter-sellers-by-cities",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `FilterSellers(sellers map[int][]string, cities []string) map[int][]string`. Keep only sellers present in at least one requested city, and for each keep only the matching cities, in their original order. Return an empty map, not nil, when nothing matches.\n\nTarget O(M + N·K).\n\n`{1:[Moscow Omsk] 3:[Omsk]}`, `[Moscow]` → `{1:[Moscow]}`",
+  "hint": "Put the requested cities into a `map[string]struct{}` set first."
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Worker pool over a stream, with cancel",
+  "bank": "concurrency-patterns-stream-slow-calls",
+  "cat": "concurrency-patterns",
+  "level": 2,
+  "prompt": "Write `FetchOrders(ctx context.Context, ids <-chan int, workers int, get func(id int) Order) <-chan Order`.\n\n- `workers` goroutines call the slow `get` for each id; results in any order.\n- Close the output when `ids` is closed and all results are sent.\n- When `ctx` is cancelled: start no new `get` calls, don't block on sending, close the output.\n\nThe `ids` stream may never end.",
+  "hint": "Each worker `select`s on `ctx.Done()` both when receiving an id and when sending a result, and checks `ctx.Err()` before calling `get`."
+}

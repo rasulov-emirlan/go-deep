@@ -1,0 +1,8 @@
+{
+  "title": "Squares of a sorted slice",
+  "bank": "algorithms-sorted-squares",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `SortedSquares(nums []int) []int`. `nums` is sorted ascending and may contain negatives. Return the squares sorted ascending in O(n), without sorting.\n\n`[-7 -3 0 2 5]` → `[0 4 9 25 49]`. An empty slice gives an empty slice.",
+  "hint": "The biggest square is at one of the two ends, so fill the result from the back with two pointers."
+}

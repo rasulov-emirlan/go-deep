@@ -1,0 +1,8 @@
+{
+  "title": "Forward two readers",
+  "bank": "interfaces-copy-reader-to-writer",
+  "cat": "interfaces",
+  "level": 2,
+  "prompt": "Write `Forward(a, b io.Reader, out io.Writer) error` that copies everything from both readers into `out` and returns when both are done.\n\n- Either reader can block for a long time, so read both at once.\n- `out` isn't safe for concurrent use: never call `Write` from two goroutines at the same time.\n- Return the readers' errors (`io.EOF` is not an error).",
+  "hint": "`io.Copy` per reader in its own goroutine, a mutex-wrapped writer, and `errors.Join`."
+}

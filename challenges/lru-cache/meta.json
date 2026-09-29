@@ -1,0 +1,8 @@
+{
+  "title": "Thread-safe LRU cache",
+  "bank": "concurrency-patterns-thread-safe-cache",
+  "cat": "concurrency-patterns",
+  "level": 2,
+  "prompt": "Implement a string cache that's safe for concurrent use and holds at most `capacity` entries:\n\n- `NewLRU(capacity int) *LRU`\n- `Get(k string) (string, bool)`\n- `Set(k, v string)`\n\nWhen full, `Set` of a new key evicts the least recently used entry. Both `Get` and `Set` count as a use.\n\nCapacity 2: `Set a`, `Set b`, `Get a`, `Set c` → `b` is evicted.",
+  "hint": "A map to `*list.Element` plus `container/list`, moved to the front on each use, all under one `sync.Mutex` (Get mutates, so no RWMutex)."
+}

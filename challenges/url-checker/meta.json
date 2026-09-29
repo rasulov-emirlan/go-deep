@@ -1,0 +1,8 @@
+{
+  "title": "URL checker with a worker pool",
+  "bank": "concurrency-patterns-url-checker",
+  "cat": "concurrency-patterns",
+  "level": 2,
+  "prompt": "Write `CheckURLs(urls <-chan string, workers int, fetch func(url string) (int, error)) <-chan string`.\n\n- Run exactly `workers` goroutines that read URLs and call `fetch`.\n- Send `\"<url> ok\"` for status 200 with no error, else `\"<url> not ok\"`.\n- Close the output once the input is closed and every result is sent.\n\nOrder doesn't matter: `a`(200), `b`(404) → `\"a ok\"`, `\"b not ok\"`.",
+  "hint": "Workers `range` over the input; one extra goroutine waits on a `WaitGroup` and closes the output."
+}

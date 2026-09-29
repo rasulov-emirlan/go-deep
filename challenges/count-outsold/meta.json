@@ -1,0 +1,8 @@
+{
+  "title": "How many sellers you beat",
+  "bank": "algorithms-count-outsold-sellers",
+  "cat": "algorithms",
+  "level": 2,
+  "prompt": "Write `Outsold(sales []int) []int`. For each seller, return how many other sellers had strictly fewer sales. Aim for O(n log n) and don't modify `sales`.\n\n`[8 1 2 2 3]` → `[4 0 1 1 3]`, `[5 5 5 5]` → `[0 0 0 0]`",
+  "hint": "In a sorted copy, the index of a value's first occurrence is the number of smaller values."
+}

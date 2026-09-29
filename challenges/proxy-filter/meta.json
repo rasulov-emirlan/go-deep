@@ -1,0 +1,8 @@
+{
+  "title": "Filtering proxy handler",
+  "bank": "networking-http-handler-proxy-filter",
+  "cat": "networking",
+  "level": 2,
+  "prompt": "Write `ProductsHandler(fetch Fetcher) http.HandlerFunc`. It calls `fetch` for all products and responds with the ones matching the query:\n\n- `category`: exact match; `max_price`: price ≤ it. Both optional.\n- Bad `max_price` → 400. `fetch` error → 502.\n- 200 with a JSON array (`[]` if empty) and `Content-Type: application/json`.\n- Give `fetch` a context from the request, with a timeout.\n\n`?category=tv&max_price=200`",
+  "hint": "`context.WithTimeout(r.Context(), ...)`, and start from `make([]Product, 0)` so no matches encode as `[]`."
+}

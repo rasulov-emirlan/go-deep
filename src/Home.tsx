@@ -29,6 +29,11 @@ export default function Home() {
             <b>Interview drill →</b>
             <span>Hundreds of real interview questions with answers. Flashcards bring back the ones you missed.</span>
           </Link>
+          <Link to="/challenges" className="bank-cta">
+            <span className="kicker red">New · write code</span>
+            <b>Coding challenges →</b>
+            <span>Coding tasks from real interviews. Write Go in the browser and run the checks in the Go Playground.</span>
+          </Link>
         </div>
       </section>
       <section className="section">

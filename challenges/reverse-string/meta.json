@@ -1,0 +1,8 @@
+{
+  "title": "Reverse a string",
+  "bank": "go-basics-reverse-string",
+  "cat": "go-basics",
+  "level": 1,
+  "prompt": "Write `Reverse(s string) string`. It must work for any UTF-8 text, not just ASCII.\n\n`\"Magnit\"` → `\"tingaM\"`, `\"Привет\"` → `\"тевирП\"`",
+  "hint": "Reverse a `[]rune`, not the bytes."
+}

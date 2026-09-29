@@ -1,0 +1,8 @@
+{
+  "title": "Move items to the front",
+  "bank": "algorithms-move-target-to-front",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `MoveToFront(items []string, target string)` that moves every `target` to the front of `items`, in place, in one pass and with no extra slice. The order of the other items doesn't matter.\n\n`[knife fork spoon fork]`, `\"fork\"` → `[fork fork spoon knife]`",
+  "hint": "Keep a write index `w`; when `items[i]` is the target, swap it into `w` and advance `w`."
+}

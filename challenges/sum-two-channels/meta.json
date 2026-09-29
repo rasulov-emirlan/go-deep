@@ -1,0 +1,8 @@
+{
+  "title": "Sum two channels until both close",
+  "bank": "channels-sum-two-channels",
+  "cat": "channels",
+  "level": 2,
+  "prompt": "Write `Sum2(a, b <-chan int) int`.\n\nRead from both channels as values arrive, in whatever order they come, and return the sum of everything received once **both** are closed. One channel may close long before the other, and either may stay quiet for a while.\n\n`a`: 1 2 3, `b`: 10 20 → `36`.",
+  "hint": "`select` over both; when one is closed (`ok == false`), set it to `nil` so its case never fires again; stop when both are nil."
+}

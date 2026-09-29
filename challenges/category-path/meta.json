@@ -1,0 +1,8 @@
+{
+  "title": "Path to a category",
+  "bank": "algorithms-category-tree-path",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `FindPath(root *Category, name string) []string` that returns the names from `root` down to the category called `name`, root included.\n\nReturn `nil` if there is no such category or `root` is nil. Names are unique.\n\n`FindPath(tree, \"OLED\")` → `[Каталог Бытовая техника Телевизоры OLED]`",
+  "hint": "DFS with backtracking: append the name on the way in, and remove it again if no child matched."
+}

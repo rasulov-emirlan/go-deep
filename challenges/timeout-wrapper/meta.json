@@ -1,0 +1,8 @@
+{
+  "title": "Timeout wrapper for a slow call",
+  "bank": "context-timeout-wrapper",
+  "cat": "context",
+  "level": 2,
+  "prompt": "`f` is slow and ignores contexts; you can't change it. Write `WithTimeout(ctx context.Context, d time.Duration, f func() int64) (int64, error)`.\n\n- Return `f`'s result if it finishes within `d`.\n- Otherwise return `0` and an error matching `context.DeadlineExceeded` (or `ctx.Err()` if the parent ends first), right away.\n- Once `f` finishes, no goroutine stays stuck.",
+  "hint": "Run `f` in a goroutine that sends into a channel buffered to 1, and `select` on it and a `context.WithTimeout` ctx."
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Generic Map",
+  "bank": "generics-map-function",
+  "cat": "generics",
+  "level": 1,
+  "prompt": "Write `Map[T, R any](in []T, f func(T) R) []R` that returns `f` applied to every element, in order. Call `f` once per element. An empty input gives an empty (non-nil) slice.\n\n`Map([]int{1, 20}, strconv.Itoa)` → `[\"1\" \"20\"]`",
+  "hint": "Allocate the result with `make([]R, len(in))` and fill it by index."
+}

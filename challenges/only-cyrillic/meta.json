@@ -1,0 +1,8 @@
+{
+  "title": "Keep only Russian letters",
+  "bank": "go-basics-regex-cyrillic-only",
+  "cat": "go-basics",
+  "level": 1,
+  "prompt": "Write `OnlyCyrillic(s string) string` that removes everything except letters of the Russian alphabet (upper and lower case). A regular expression is the expected tool.\n\n`\"Hello, Мир! 123 ёлка\"` → `\"Мирёлка\"`",
+  "hint": "`а-я` doesn't include `ё`, and `\\p{Cyrillic}` includes letters Russian doesn't have."
+}

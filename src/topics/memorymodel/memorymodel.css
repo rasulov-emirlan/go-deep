@@ -1,0 +1,4 @@
+/* memory-model topic */
+.mm-big { font: 700 clamp(12px, 2.8cqw, 24px) var(--mono); white-space: nowrap; }
+.mm-mono { font: 600 clamp(10px, 2cqw, 16px) var(--mono); white-space: nowrap; }
+.st-ink .mm-mono { color: var(--paper); }

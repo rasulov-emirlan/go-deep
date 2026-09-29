@@ -98,7 +98,7 @@ v, ok := <-ch        // ok == false`}</Code>
   },
   {
     caption: 'Only the sender closes, and only once. Sending or closing again panics.',
-    actors: [g1({ sprite: BOOM, bubble: 'send → panic!', hot: true }), g2({ bubble: 'I never close' })],
+    actors: [g1({ sprite: BOOM, bubble: 'panic!', hot: true }), g2({ bubble: 'I never close' })],
     props: [closed(), slot(0), slot(1)],
   },
 ]

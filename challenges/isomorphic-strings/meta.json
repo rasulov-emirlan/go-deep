@@ -1,0 +1,8 @@
+{
+  "title": "Isomorphic strings",
+  "bank": "algorithms-isomorphic-strings",
+  "cat": "algorithms",
+  "level": 2,
+  "prompt": "Write `Isomorphic(a, b string) bool`: can you replace runes in `a` to get `b`, where every occurrence of a rune maps to the same rune and no two runes map to the same one?\n\n`(\"egg\", \"add\")` → `true`, `(\"foo\", \"bar\")` → `false`, `(\"ab\", \"aa\")` → `false`",
+  "hint": "Keep two maps, a→b and b→a; either both are unset or both must agree."
+}

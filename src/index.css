@@ -177,7 +177,9 @@ svg text { font-family: var(--mono); }
 .story-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; padding: .5rem .8rem; border-bottom: 1px solid var(--g300); background: var(--paper); }
 .story-head .kicker { margin: 0; color: var(--ink); }
 .story-head .btn { white-space: nowrap; flex-shrink: 0; }
-.stage { position: relative; aspect-ratio: 800 / 360; overflow: hidden; background: #fff; container-type: inline-size; }
+.stage { position: relative; aspect-ratio: 800 / 360; background: #fff; container-type: inline-size; margin: 30px 0 22px; }
+/* bubbles and tags may spill into the stage margins, which are fixed px so they fit at any scale */
+.story { overflow: hidden; }
 .st-prop { position: absolute; transition: all .6s ease; border: 2px solid var(--ink); background: #fff; }
 .st-line { border-color: var(--ink); }
 .st-soft { border: 0; background: var(--g100); }
@@ -185,14 +187,14 @@ svg text { font-family: var(--mono); }
 .st-ink { background: var(--ink); color: var(--paper); }
 .st-red { border-color: var(--red); background: var(--red-soft); }
 .st-none { border: 0; background: transparent; }
-.st-plabel { position: absolute; top: .3em; left: .5em; font: 500 clamp(8px, 1.5cqw, 12px) var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--g500); white-space: nowrap; }
+.st-plabel { position: absolute; top: .3em; left: .5em; font: 500 clamp(9px, 1.5cqw, 12px) var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--g500); white-space: nowrap; }
 .st-ink .st-plabel { color: #a3a3a3; }
-.st-ptext { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font: 600 clamp(9px, 1.9cqw, 15px) var(--body); padding: 0 .4em; }
+.st-ptext { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; font: 600 clamp(10px, 1.9cqw, 15px) var(--body); padding: 0 .4em; }
 .st-actor { position: absolute; transition: left .7s cubic-bezier(.4,0,.2,1), top .7s cubic-bezier(.4,0,.2,1), height .5s ease, opacity .4s ease; }
 .st-actor img { height: 100%; width: auto; position: relative; left: 0; display: block; transition: transform .3s ease; pointer-events: none; user-select: none; }
-.st-tag { position: absolute; top: 100%; left: 0; transform: translate(-50%, 2px); font: 700 clamp(8px, 1.5cqw, 12px) var(--mono); background: var(--ink); color: var(--paper); padding: 0 .35em; white-space: nowrap; }
+.st-tag { position: absolute; top: 100%; left: 0; transform: translate(-50%, 2px); font: 700 clamp(9px, 1.5cqw, 12px) var(--mono); background: var(--ink); color: var(--paper); padding: 0 .35em; white-space: nowrap; }
 .st-tag.hot { background: var(--red); }
-.st-bubble { position: absolute; bottom: 100%; left: 0; transform: translate(-50%, -6px); font: 600 clamp(9px, 1.7cqw, 14px) var(--body); background: #fff; border: 2px solid var(--ink); border-radius: 10px; padding: .15em .55em; white-space: nowrap; animation: pop .25s ease; }
+.st-bubble { position: absolute; bottom: 100%; left: 0; transform: translate(-50%, -6px); font: 600 clamp(10px, 1.7cqw, 14px) var(--body); background: #fff; border: 2px solid var(--ink); border-radius: 10px; padding: .15em .55em; white-space: nowrap; animation: pop .25s ease; }
 .st-bubble::after { content: ''; position: absolute; left: 50%; top: 100%; border: 6px solid transparent; border-top-color: var(--ink); transform: translateX(-50%); }
 @keyframes pop { from { transform: translate(-50%, 0) scale(.6); opacity: 0; } }
 .story-cap { padding: .9rem 1rem .5rem; font-size: 1.05rem; line-height: 1.5; min-height: 3.6em; border-top: 1px solid var(--g300); }
@@ -228,6 +230,7 @@ details.sandbox > .sandbox-body { padding: 0 1rem 1rem; }
 .hero-gopher { position: absolute; right: 1.25rem; bottom: 1.5rem; width: min(26vw, 260px); pointer-events: none; }
 @media (max-width: 1000px) { .hero-gopher { position: static; width: 150px; display: block; margin: 0 0 1rem auto; } }
 .tcard-gopher { height: 64px; width: auto; align-self: flex-end; margin: -.4rem 0 -.2rem; }
+.bank-cta + .bank-cta { margin-top: .8rem; }
 .bank-cta { display: grid; gap: .3rem; border: 1px solid var(--ink); padding: 1.1rem 1.25rem; text-decoration: none; max-width: 40rem; background: #fff; }
 .bank-cta b { font: 700 1.4rem var(--head); }
 .bank-cta span:last-child { color: var(--g500); font-size: .92rem; }
@@ -236,7 +239,7 @@ details.sandbox > .sandbox-body { padding: 0 1rem 1rem; }
 .bank-link { margin-top: 1.2rem; font: 500 .8rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }
 .tgroup { margin-top: 1.6rem; } .tgroup > .kicker { display: block; margin-bottom: .5rem; }
 /* shared story fixes: text sits under a prop's label, bubbles stay inside the stage edges, stop code scrolls */
-.st-prop:has(.st-plabel) > .st-ptext { top: 1.1em; }
+.st-prop:has(.st-plabel) > .st-ptext { top: calc(.3em + 13px); }
 .st-bubble.l { transform: translate(-18%, -6px); }
 .st-bubble.l::after { left: 18%; }
 .st-bubble.r { transform: translate(-82%, -6px); }
@@ -245,3 +248,17 @@ details.sandbox > .sandbox-body { padding: 0 1rem 1rem; }
 @media (max-width: 620px) {
   .story { margin-left: -1.25rem; margin-right: -1.25rem; border-left: 0; border-right: 0; }
 }
+/* topic rating */
+.rate { border: 2px solid var(--ink); background: #fff; padding: 1rem 1.1rem; margin: 0 0 2.5rem; max-width: 40rem; display: grid; gap: .8rem; }
+.rate-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .8rem; }
+.rate-q { font: 700 1.15rem var(--head); }
+.rate-votes, .rate-actions { display: flex; gap: .5rem; }
+.rate-form { display: grid; gap: .9rem; border-top: 1px solid var(--g300); padding-top: .9rem; }
+.rate-chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+.rate-chips button { border: 1px solid var(--g300); background: var(--paper); font: 500 .85rem var(--body); padding: .4rem .65rem; cursor: pointer; }
+.rate-chips button.on { border-color: var(--red); background: var(--red-soft); color: var(--ink); }
+.rate-field { display: grid; gap: .3rem; }
+.rate-field select, .rate-field textarea { font: 400 1rem var(--body); border: 1px solid var(--g300); background: #fff; padding: .5rem .6rem; width: 100%; box-sizing: border-box; border-radius: 0; }
+.rate-field textarea { resize: vertical; }
+.rate-err { color: var(--red); margin: 0; font-size: .92rem; }
+.qactions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .6rem 0; }

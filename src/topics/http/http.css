@@ -1,5 +1,5 @@
 /* http topic */
-.ht-msg { display: block; align-self: flex-start; width: 100%; padding: 1.4em .5em 0; text-align: left; font: 500 clamp(8px, 1.7cqw, 14px)/1.45 var(--mono); white-space: nowrap; overflow: hidden; }
+.ht-msg { display: block; align-self: flex-start; width: 100%; padding: 1.4em .5em 0; text-align: left; font: 500 clamp(9px, 1.7cqw, 14px)/1.45 var(--mono); white-space: nowrap; overflow: hidden; }
 .ht-msg b { color: var(--red); font-weight: 700; }
 .ht-msg i { color: var(--g500); }
 
@@ -11,6 +11,6 @@
 .ht-trips span.k-http { background: var(--red); }
 @keyframes ht-grow { from { transform: scaleX(0); } }
 
-.ht-cell { display: flex; flex-direction: column; align-items: center; gap: .35em; line-height: 1.2; font-size: clamp(8px, 1.7cqw, 14px); }
+.ht-cell { display: flex; flex-direction: column; align-items: center; gap: .35em; line-height: 1.2; font-size: clamp(9px, 1.7cqw, 14px); }
 .ht-cell b { font: 700 clamp(9px, 2.1cqw, 18px) var(--mono); text-transform: uppercase; }
 .st-red .ht-cell b { color: var(--red); }

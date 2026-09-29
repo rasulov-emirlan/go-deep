@@ -1,0 +1,8 @@
+{
+  "title": "Parse a oneOf body",
+  "bank": "networking-openapi-oneof-parsing",
+  "cat": "networking",
+  "level": 2,
+  "prompt": "Write `Parse(body []byte) (any, error)` for bodies like `{\"kind\": \"cat\", \"entity\": {...}}`. Return a `Cat` or `Dog` value depending on `kind`.\n\nReturn an error for an unknown `kind`, for unknown fields anywhere (a client must not sneak in `isAdmin`), and for malformed JSON.\n\n`{\"kind\":\"dog\",\"entity\":{\"name\":\"Rex\",\"breed\":\"husky\"}}` → `Dog{Rex husky}`",
+  "hint": "Decode the envelope with `entity` as `json.RawMessage`, then decode it again with `DisallowUnknownFields`."
+}

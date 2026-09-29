@@ -1,0 +1,8 @@
+{
+  "title": "Monotonic slice",
+  "bank": "algorithms-monotonic-slice",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `IsMonotonic(nums []int) bool`: true if `nums` is entirely non-decreasing or entirely non-increasing. One pass, O(1) memory.\n\n`[1 2 2 3]` → `true`, `[1 3 2]` → `false`. Empty and single-element slices are monotonic.",
+  "hint": "Track two flags, `inc` and `dec`, and clear one whenever you see a step the other way."
+}

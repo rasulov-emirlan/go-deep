@@ -1,0 +1,4 @@
+/* defer topic */
+.df-big { font: 700 clamp(13px, 3.4cqw, 28px) var(--mono); padding-top: .6em; white-space: nowrap; }
+.df-mono { font: 600 clamp(10px, 2.3cqw, 17px) var(--mono); white-space: nowrap; }
+.st-ink .df-mono { color: var(--paper); }

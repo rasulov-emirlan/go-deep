@@ -1,0 +1,8 @@
+{
+  "title": "Sort without sort",
+  "bank": "algorithms-sort-ints-without-builtin",
+  "cat": "algorithms",
+  "level": 2,
+  "prompt": "Write `SortInts(a []int)` that sorts `a` ascending in place without `sort`, `slices` or any other library sorting.\n\nIt must handle empty, sorted, reversed and duplicate-heavy input, and stay fast on a few thousand elements.\n\n`[5 2 9 1 5]` → `[1 2 5 5 9]`",
+  "hint": "Quicksort with a middle pivot, or merge sort if you want a guaranteed O(n log n)."
+}

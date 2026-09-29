@@ -1,0 +1,8 @@
+{
+  "title": "Async logger with a buffered channel",
+  "bank": "concurrency-patterns-async-sequential-logger",
+  "cat": "concurrency-patterns",
+  "level": 2,
+  "prompt": "Wrap a slow `Logger` so logging doesn't wait for writes. Write `NewAsyncLogger(next Logger, buf int) *AsyncLogger` with `Log(msg string) error` and `Close() error`.\n\n- One background goroutine writes to `next`, in `Log` order.\n- `Log` returns at once while fewer than `buf` messages are waiting.\n- `Close` writes everything pending, then closes `next`. It's safe to call twice or while other goroutines are logging.\n- `Log` after `Close` returns `ErrClosed`.",
+  "hint": "A buffered channel drained by one goroutine; an `RWMutex` + `closed` flag so no `Log` sends on a closed channel; `sync.Once` for `Close`."
+}

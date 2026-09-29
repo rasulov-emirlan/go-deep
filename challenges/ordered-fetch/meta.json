@@ -1,0 +1,8 @@
+{
+  "title": "Parallel fetch, at most k at a time, in order",
+  "bank": "concurrency-patterns-bounded-parallel-fetch-ordered",
+  "cat": "concurrency-patterns",
+  "level": 2,
+  "prompt": "Write `Crawl(urls []string, k int, fetch func(url string) int) []int`.\n\n- Call `fetch` once per URL, with at most `k` calls running at the same time.\n- Return the results in input order, even though calls finish out of order.\n- An empty list gives an empty (non-nil) slice.\n\n`[\"a\", \"b\", \"c\"]`, k = 2 → `[fetch(\"a\") fetch(\"b\") fetch(\"c\")]`.",
+  "hint": "Preallocate the result and let each goroutine write its own index; a buffered channel of size `k` is the semaphore."
+}

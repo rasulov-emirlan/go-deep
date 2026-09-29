@@ -115,7 +115,7 @@ fmt.Println(err == nil) // false`}</Code>
   },
   {
     caption: 'The classic bug: returning a nil *MyErr as `error` looks like a failure.',
-    actors: [judge('err != nil', true), { id: 'victim', sprite: 'convict-hard-times', x: 100, y: 335, h: 115, tag: 'caller', bubble: 'but it worked?!' }],
+    actors: [judge('err != nil', true), { id: 'victim', sprite: 'convict-hard-times', x: 100, y: 335, h: 115, tag: 'caller', bubble: 'it worked?!' }],
     props: [box('return e'), w1('type', '*MyErr', 'red'), w2('nil', 'dashed')],
     stop: {
       title: 'Where it hides',
@@ -138,9 +138,9 @@ fmt.Println(err == nil) // false`}</Code>
 /* ── 3 · embedding ───────────────────────────────────────────────────────── */
 
 const dogBox: Prop = { id: 'dog', x: 200, y: 150, w: 420, h: 195, label: 'Dog' }
-const animalBox = (tone: Prop['tone'] = 'soft'): Prop => ({ id: 'animal', x: 400, y: 190, w: 200, h: 140, tone, label: 'embedded' })
-const dog = (bubble?: string, hot?: boolean, dim?: boolean): Actor => ({ id: 'dog', sprite: 'misc-cool-one', x: 290, y: 330, h: 120, tag: 'Dog', bubble, hot, dim })
-const animal = (bubble?: string, hot?: boolean): Actor => ({ id: 'an', sprite: 'misc-standing-left', x: 500, y: 320, h: 105, tag: 'Animal', bubble, hot })
+const animalBox = (tone: Prop['tone'] = 'soft'): Prop => ({ id: 'animal', x: 400, y: 225, w: 200, h: 105, tone, label: 'embedded' })
+const dog = (bubble?: string, hot?: boolean, dim?: boolean): Actor => ({ id: 'dog', sprite: 'misc-cool-one', x: 330, y: 330, h: 120, tag: 'Dog', bubble, hot, dim })
+const animal = (bubble?: string, hot?: boolean): Actor => ({ id: 'an', sprite: 'misc-standing-left', x: 545, y: 320, h: 90, tag: 'Animal', bubble, hot })
 const asker = (bubble?: string): Actor => ({ id: 'asker', sprite: 'fairy-tale-messenger-showing', x: 90, y: 335, h: 120, bubble })
 
 export const embedding: Frame[] = [

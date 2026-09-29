@@ -1,0 +1,8 @@
+{
+  "title": "Two Sum",
+  "bank": "algorithms-two-sum",
+  "cat": "algorithms",
+  "level": 1,
+  "prompt": "Write `TwoSum(nums []int, target int) []int` that returns indices `[i, j]`, `i < j`, with `nums[i] + nums[j] == target`, in O(n). An element can't pair with itself. Return `nil` if there is no pair.\n\n`[2 7 11 15]`, `9` → `[0 1]`",
+  "hint": "Map each value to its index, and look up `target - v` before storing `v`."
+}
