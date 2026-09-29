@@ -1,0 +1,5 @@
+/* GC topic: the "town" SVG fills its Story prop exactly */
+.st-ptext > svg.gc-town { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.gc-town .gc-house path, .gc-town .gc-house rect { transition: fill .45s ease, stroke .45s ease; }
+.gc-town .gc-road path { transition: stroke .35s ease, fill .35s ease; }
+.gc-seg { margin: .4rem 0 0 .6rem; vertical-align: middle; flex-wrap: wrap; }

@@ -7,6 +7,20 @@
 export type Heap = { spans: number; perSpan: number; objs: HObj[]; roots: number[] }
 export type HObj = { id: number; span: number; slot: number; ptrs: number[] }
 
+/** Typed events for guided tours. `span` is the street (span) the event is about. */
+export type GEventKind =
+  | 'c-root' // classic: a root pushed on the LIFO work stack
+  | 'c-scan' // classic: pop one object and scan it
+  | 'c-jump' // classic: the next object is on a different span than the last one
+  | 'c-skip' // classic: pointee already marked, only its metadata was touched
+  | 'g-enqueue' // green: first mark on an unqueued span → the span is queued
+  | 'g-requeue' // green: a span that was already scanned is queued again
+  | 'g-accumulate' // green: mark on an already-queued span, no new queue entry
+  | 'g-dequeue-many' // green: dequeued span scans several objects in one pass
+  | 'g-dequeue-one' // green: only one object was marked → single-object fast path
+  | 'done'
+export type GEvent = { kind: GEventKind; span: number; objs: number[]; misses: number; text: string }
+
 export type GCState = {
   marked: Set<number> // "seen"
   scanned: Set<number> // black
@@ -23,6 +37,9 @@ export type GCState = {
   queued: Set<number>
   batch: number[] // objects scanned in the last span dequeue
   batches: number[] // sizes of every span dequeue
+  events: GEvent[]
+  lastSpan: number | null // span of the last scanned object/span
+  everQueued: Set<number>
 }
 
 function rng(seed: number) {
@@ -71,6 +88,9 @@ export function initState(): GCState {
     queued: new Set(),
     batch: [],
     batches: [],
+    events: [],
+    lastSpan: null,
+    everQueued: new Set(),
   }
 }
 
@@ -91,14 +111,20 @@ function touch(s: GCState, region: string, cacheSize: number, span?: number) {
 
 export function classicStart(h: Heap, cacheSize: number): GCState {
   const s = initState()
-  for (const r of h.roots) classicShade(h, s, r, cacheSize)
+  for (const r of h.roots) {
+    classicShade(h, s, r, cacheSize)
+    s.events.push({ kind: 'c-root', span: h.objs[r].span, objs: [r], misses: 0, text: `root → push #${r}` })
+  }
   return s
 }
 
 function classicShade(h: Heap, s: GCState, id: number, cacheSize: number) {
   const o = h.objs[id]
   touch(s, 'meta' + o.span, cacheSize) // spanOf → mspan → gcmarkBits (out-of-line)
-  if (s.marked.has(id)) return
+  if (s.marked.has(id)) {
+    s.events.push({ kind: 'c-skip', span: o.span, objs: [id], misses: 0, text: `#${id} already marked (still had to look up its span)` })
+    return
+  }
   s.marked.add(id)
   s.stack.push(id)
 }
@@ -110,13 +136,23 @@ export function classicStep(h: Heap, s: GCState, cacheSize: number) {
     return
   }
   const o = h.objs[id]
+  const m0 = s.misses
+  const jump = s.lastSpan !== null && s.lastSpan !== o.span
   touch(s, 'span' + o.span, cacheSize, o.span) // read the object's pointer fields
   s.scanned.add(id)
   s.batch = [id]
   s.batches.push(1)
+  const scan: GEvent = { kind: 'c-scan', span: o.span, objs: [id], misses: 0, text: `pop #${id} and scan it` }
+  s.events.push(scan)
+  if (jump) s.events.push({ kind: 'c-jump', span: o.span, objs: [id], misses: 0, text: `hop from span ${s.lastSpan} to span ${o.span}` })
+  s.lastSpan = o.span
   for (const p of o.ptrs) classicShade(h, s, p, cacheSize)
   s.steps++
-  if (!s.stack.length) s.done = true
+  scan.misses = s.misses - m0
+  if (!s.stack.length) {
+    s.done = true
+    s.events.push({ kind: 'done', span: -1, objs: [], misses: 0, text: 'work stack empty — marking done' })
+  }
 }
 
 // ---- green tea: FIFO queue of spans ------------------------------------------------
@@ -135,7 +171,10 @@ function greenShade(h: Heap, s: GCState, id: number, cacheSize: number) {
   if (!s.queued.has(o.span)) {
     s.queued.add(o.span) // first discoverer enqueues the span; later marks just accumulate
     s.queue.push(o.span)
-  }
+    const again = s.everQueued.has(o.span)
+    s.everQueued.add(o.span)
+    s.events.push({ kind: again ? 'g-requeue' : 'g-enqueue', span: o.span, objs: [id], misses: 0, text: `#${id} seen → span ${o.span} ${again ? 'queued again' : 'queued'}` })
+  } else s.events.push({ kind: 'g-accumulate', span: o.span, objs: [id], misses: 0, text: `#${id} seen → span ${o.span} is already queued` })
 }
 
 export function greenStep(h: Heap, s: GCState, cacheSize: number) {
@@ -145,15 +184,47 @@ export function greenStep(h: Heap, s: GCState, cacheSize: number) {
     return
   }
   s.queued.delete(span)
+  const m0 = s.misses
   touch(s, 'span' + span, cacheSize, span)
   // toGrey = marks &^ scans — every object marked since the span was queued
   const ready = h.objs.filter((o) => o.span === span && s.marked.has(o.id) && !s.scanned.has(o.id))
   for (const o of ready) s.scanned.add(o.id)
   s.batch = ready.map((o) => o.id)
   s.batches.push(ready.length)
+  const deq: GEvent = {
+    kind: ready.length === 1 ? 'g-dequeue-one' : 'g-dequeue-many',
+    span,
+    objs: s.batch,
+    misses: 0,
+    text: ready.length === 1 ? `dequeue span ${span}: only #${ready[0].id} is marked → scan just that one` : `dequeue span ${span}: scan ${ready.length} marked objects in one pass`,
+  }
+  s.events.push(deq)
+  s.lastSpan = span
   for (const o of ready) for (const p of o.ptrs) greenShade(h, s, p, cacheSize)
+  deq.misses = s.misses - m0
   s.steps++
-  if (!s.queue.length) s.done = true
+  if (!s.queue.length) {
+    s.done = true
+    s.events.push({ kind: 'done', span: -1, objs: [], misses: 0, text: 'span queue empty — marking done' })
+  }
+}
+
+/**
+ * A hand-made 3-span × 4-slot heap for the guided tour. Object id = span*4 + slot.
+ * Roots a0, a1 share span 0; span 2 collects four marks before it is scanned;
+ * span 0 is queued a second time for a lone object (the single-object fast path).
+ */
+export function tourHeap(): Heap {
+  const ptrs: Record<number, number[]> = {
+    0: [4, 5], // a0 → b0, b1
+    1: [6, 8], // a1 → b2, c0
+    4: [9, 10], // b0 → c1, c2
+    5: [2], // b1 → a2
+    6: [11], // b2 → c3
+    9: [7], // c1 → b3
+  }
+  const objs: HObj[] = Array.from({ length: 12 }, (_, id) => ({ id, span: Math.floor(id / 4), slot: id % 4, ptrs: ptrs[id] ?? [] }))
+  return { spans: 3, perSpan: 4, objs, roots: [0, 1] }
 }
 
 export function runToEnd(h: Heap, mode: 'classic' | 'green', cacheSize: number) {

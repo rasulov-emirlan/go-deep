@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildHeap, runToEnd, reachableFrom } from './greentea'
+import { buildHeap, runToEnd, reachableFrom, tourHeap, classicStart, classicStep, greenStart, greenStep } from './greentea'
 import { simulate, defaults, goalFor } from './pacer'
 
 describe('green tea vs classic', () => {
@@ -52,5 +52,36 @@ describe('pacer', () => {
     expect(lateGc).toBeLessThan(0.56)
     expect(lateGc).toBeGreaterThan(0.4)
     expect(r.overLimitMs).toBeGreaterThan(0)
+  })
+})
+
+describe('green tea tour heap', () => {
+  const h = tourHeap()
+  const run = (mode: 'classic' | 'green') => {
+    const s = mode === 'classic' ? classicStart(h, 2) : greenStart(h, 2)
+    while (!s.done) (mode === 'classic' ? classicStep : greenStep)(h, s, 2)
+    return s
+  }
+
+  it('both algorithms mark exactly the reachable objects', () => {
+    const want = reachableFrom(h)
+    expect(want.size).toBe(11) // everything but a3
+    expect(want.has(3)).toBe(false)
+    for (const m of ['classic', 'green'] as const) expect(run(m).scanned).toEqual(want)
+  })
+
+  it('covers every green-tea event kind the tour stops on', () => {
+    const k = run('green').events.map((e) => e.kind)
+    for (const want of ['g-enqueue', 'g-accumulate', 'g-dequeue-many', 'g-dequeue-one', 'g-requeue', 'done'] as const) expect(k).toContain(want)
+  })
+
+  it('green tea scans the same set in fewer, denser steps with fewer misses', () => {
+    const c = run('classic')
+    const g = run('green')
+    expect(g.scanned).toEqual(c.scanned)
+    expect(g.steps).toBeLessThan(c.steps)
+    expect(Math.max(...g.batches)).toBe(4)
+    expect(g.misses).toBeLessThan(c.misses)
+    expect(c.events.map((e) => e.kind)).toContain('c-jump')
   })
 })

@@ -38,7 +38,42 @@ export type M = { id: number; p: number | null; g: number | null; state: 'runnin
 export type Parked = { g: number; readyAt: number; kind: 'net' | 'sleep' }
 export type Sys = { g: number; m: number; p: number; since: number; doneAt: number }
 
+export type EventKind =
+  | 'info'
+  | 'spawn'
+  | 'kick'
+  | 'overflow'
+  | 'new-thread'
+  | 'wakep'
+  | 'park-m'
+  | 'run-runnext'
+  | 'run-local'
+  | 'run-global'
+  | 'fairness'
+  | 'run-netpoll'
+  | 'steal'
+  | 'steal-runnext'
+  | 'goexit'
+  | 'gosched'
+  | 'net-park'
+  | 'sleep-park'
+  | 'wait-park'
+  | 'syscall-enter'
+  | 'exitsyscall-fast'
+  | 'exitsyscall-idlep'
+  | 'exitsyscall-global'
+  | 'handoff'
+  | 'retake-idle'
+  | 'preempt'
+  | 'preempt-ignored'
+  | 'netpoll-sysmon'
+  | 'timer-ready'
+  | 'run-timer'
+  | 'wg-wake'
+export type SimEvent = { tick: number; kind: EventKind; g?: number; p?: number; text: string }
+
 export type Sim = {
+  events: SimEvent[]
   tick: number
   gomaxprocs: number
   asyncPreempt: boolean
@@ -80,6 +115,7 @@ export function create(cfg: Config): Sim {
     log: [],
     order: [],
     history: [],
+    events: [],
     stats: { steals: 0, handoffs: 0, preemptions: 0, threads: 1, switches: 0, ignoredPreempts: 0 },
   }
   for (let i = 0; i < cfg.gomaxprocs; i++) s.ps.push({ id: i, status: 'idle', m: null, cur: null, runnext: null, runq: [], schedtick: 0 })
@@ -118,7 +154,8 @@ function loadOp(g: G) {
   g.left = op && 'n' in op ? op.n : 0
 }
 
-function say(s: Sim, msg: string) {
+function say(s: Sim, msg: string, kind: EventKind = 'info', g?: number, p?: number) {
+  s.events.push({ tick: s.tick, kind, g, p, text: msg })
   s.log.unshift(`t${s.tick} · ${msg}`)
   if (s.log.length > 200) s.log.length = 200
 }
@@ -145,7 +182,7 @@ export function runqput(s: Sim, p: P, gid: number, next: boolean) {
     const old = p.runnext
     p.runnext = gid
     if (old === null) return
-    say(s, `P${p.id}: ${gname(s, old)} kicked out of runnext → local queue tail`)
+    say(s, `P${p.id}: ${gname(s, old)} kicked out of runnext → local queue tail`, 'kick', old, p.id)
     gid = old
   }
   if (p.runq.length < s.runqCap) {
@@ -155,7 +192,7 @@ export function runqput(s: Sim, p: P, gid: number, next: boolean) {
   // runqputslow: move half the local queue + this G to the global queue
   const half = p.runq.splice(0, s.runqCap / 2)
   s.global.push(...half, gid)
-  say(s, `P${p.id}: local queue full → runqputslow moves ${half.length + 1} Gs to the global queue`)
+  say(s, `P${p.id}: local queue full → runqputslow moves ${half.length + 1} Gs to the global queue`, 'overflow', gid, p.id)
 }
 
 function idleP(s: Sim) {
@@ -168,7 +205,7 @@ function getM(s: Sim): M {
   const m: M = { id: s.ms.length, p: null, g: null, state: 'idle' }
   s.ms.push(m)
   s.stats.threads++
-  say(s, `no idle M → runtime creates OS thread m${m.id}`)
+  say(s, `no idle M → runtime creates OS thread m${m.id}`, 'new-thread')
   return m
 }
 
@@ -203,7 +240,7 @@ function wakep(s: Sim) {
   if (!p || !hasWork(s)) return
   const m = getM(s)
   acquire(p, m, 'spinning')
-  say(s, `wakep: m${m.id} starts spinning on idle P${p.id} to look for work`)
+  say(s, `wakep: m${m.id} starts spinning on idle P${p.id} to look for work`, 'wakep', undefined, p.id)
 }
 
 function netpoll(s: Sim): number[] {
@@ -215,32 +252,37 @@ function netpoll(s: Sim): number[] {
   return ready.map((r) => r.g)
 }
 
-type Found = { g: number; why: string; inherit?: boolean }
+type Found = { g: number; why: string; kind: EventKind; inherit?: boolean }
 
 export function findRunnable(s: Sim, p: P): Found | null {
   // 1. fairness: every 61st schedule, look at the global queue first
   if (p.schedtick % 61 === 0 && p.schedtick > 0 && s.global.length) {
-    return { g: s.global.shift()!, why: 'schedtick%61==0 → global queue first (fairness)' }
+    return { g: s.global.shift()!, why: 'schedtick%61==0 → global queue first (fairness)', kind: 'fairness' }
   }
   // 2. runnext, then local queue
   if (p.runnext !== null) {
     const g = p.runnext
     p.runnext = null
-    return { g, why: 'from runnext (inherits time slice)', inherit: true }
+    return { g, why: 'from runnext (inherits time slice)', kind: 'run-runnext', inherit: true }
   }
-  if (p.runq.length) return { g: p.runq.shift()!, why: 'from local run queue' }
+  if (p.runq.length) return { g: p.runq.shift()!, why: 'from local run queue', kind: 'run-local' }
   // 3. global queue: take a batch
   if (s.global.length) {
     const n = Math.min(s.global.length, Math.floor(s.global.length / s.gomaxprocs) + 1, s.runqCap / 2)
     const batch = s.global.splice(0, n)
     p.runq.push(...batch.slice(1))
-    return { g: batch[0], why: n > 1 ? `grabbed ${n} Gs from global queue` : 'from global queue' }
+    return { g: batch[0], why: n > 1 ? `grabbed ${n} Gs from global queue` : 'from global queue', kind: 'run-global' }
   }
   // 4. non-blocking netpoll
   const ready = netpoll(s)
   if (ready.length) {
     s.global.push(...ready.slice(1))
-    return { g: ready[0], why: `netpoll: ${ready.length} G(s) ready` + (ready.length > 1 ? ', rest → global' : '') }
+    const timer = s.gs[ready[0]].wait === 'sleep'
+    return {
+      g: ready[0],
+      why: (timer ? 'its timer expired' : `netpoll: ${ready.length} G(s) ready`) + (ready.length > 1 ? ', rest → global' : ''),
+      kind: timer ? 'run-timer' : 'run-netpoll',
+    }
   }
   // 5. steal half of another P's local queue (random victim order)
   const victims = s.ps.filter((v) => v !== p)
@@ -254,7 +296,7 @@ export function findRunnable(s: Sim, p: P): Found | null {
       const stolen = v.runq.splice(0, n)
       p.runq.push(...stolen.slice(1))
       s.stats.steals++
-      return { g: stolen[0], why: `stole ${n} G(s) from P${v.id}` }
+      return { g: stolen[0], why: `stole ${n} G(s) from P${v.id}`, kind: 'steal' }
     }
   }
   // last resort: steal a busy P's runnext
@@ -263,7 +305,7 @@ export function findRunnable(s: Sim, p: P): Found | null {
       const g = v.runnext
       v.runnext = null
       s.stats.steals++
-      return { g, why: `stole runnext from P${v.id}` }
+      return { g, why: `stole runnext from P${v.id}`, kind: 'steal-runnext' }
     }
   }
   return null
@@ -273,13 +315,13 @@ function schedule(s: Sim, p: P): boolean {
   const f = findRunnable(s, p)
   const m = s.ms[p.m!]
   if (!f) {
-    say(s, `P${p.id}: nothing to run → P idle, m${m.id} parks (stopm)`)
+    say(s, `P${p.id}: nothing to run → P idle, m${m.id} parks (stopm)`, 'park-m', undefined, p.id)
     releaseP(s, p)
     return false
   }
   const wasSpinning = m.state === 'spinning'
   run(s, p, s.gs[f.g], f.inherit)
-  say(s, `P${p.id} runs ${gname(s, f.g)} — ${f.why}`)
+  say(s, `P${p.id} runs ${gname(s, f.g)} — ${f.why}`, f.kind, f.g, p.id)
   if (wasSpinning) wakep(s) // resetspinning → maybe wake another
   return true
 }
@@ -292,7 +334,7 @@ function exec(s: Sim, p: P) {
     g.state = 'dead'
     p.cur = null
     m.g = null
-    say(s, `${g.label} returns → goexit, P${p.id} calls schedule()`)
+    say(s, `${g.label} returns → goexit, P${p.id} calls schedule()`, 'goexit', g.id, p.id)
     return
   }
   switch (op.k) {
@@ -313,7 +355,7 @@ function exec(s: Sim, p: P) {
         const c = newG(s, op.script, op.label ? `${op.label}${op.count > 1 ? i : ''}` : undefined)
         runqput(s, p, c.id, true)
       }
-      say(s, `${g.label}: go ×${op.count} → newproc puts each new G in P${p.id}.runnext`)
+      say(s, op.count === 1 ? `${g.label}: go ${s.gs[s.gs.length - 1].label}() → newproc puts it in P${p.id}.runnext` : `${g.label}: go ×${op.count} → newproc puts each new G in P${p.id}.runnext`, 'spawn', s.gs[s.gs.length - 1].id, p.id)
       g.pc++
       loadOp(g)
       g.slice++
@@ -326,7 +368,7 @@ function exec(s: Sim, p: P) {
       g.state = 'runnable'
       s.global.push(g.id)
       p.cur = null
-      say(s, `${g.label}: runtime.Gosched() → goes to the GLOBAL queue`)
+      say(s, `${g.label}: runtime.Gosched() → goes to the GLOBAL queue`, 'gosched', g.id, p.id)
       return
     case 'net':
     case 'sleep':
@@ -337,14 +379,14 @@ function exec(s: Sim, p: P) {
       s.parked.push({ g: g.id, readyAt: s.tick + op.n, kind: op.k })
       p.cur = null
       m.g = null
-      say(s, `${g.label}: ${op.k === 'net' ? 'conn.Read would block → gopark on netpoller' : 'time.Sleep → gopark on timer'}; M keeps P and schedules`)
+      say(s, `${g.label}: ${op.k === 'net' ? 'conn.Read would block → gopark on netpoller' : 'time.Sleep → gopark on timer'}; M keeps P and schedules`, op.k === 'net' ? 'net-park' : 'sleep-park', g.id, p.id)
       return
     case 'wait':
       g.state = 'waiting'
       g.wait = 'wait'
       p.cur = null
       m.g = null
-      say(s, `${g.label}: blocks (wg.Wait) → gopark`)
+      say(s, `${g.label}: blocks (wg.Wait) → gopark`, 'wait-park', g.id, p.id)
       return
     case 'syscall':
       g.state = 'syscall'
@@ -353,7 +395,7 @@ function exec(s: Sim, p: P) {
       s.sys.push({ g: g.id, m: m.id, p: p.id, since: s.tick, doneAt: s.tick + op.n })
       g.pc++
       loadOp(g)
-      say(s, `${g.label}: entersyscall (read file) — m${m.id} blocks in the kernel, P${p.id} marked _Psyscall`)
+      say(s, `${g.label}: entersyscall (read file) — m${m.id} blocks in the kernel, P${p.id} stays attached for now`, 'syscall-enter', g.id, p.id)
       return
   }
 }
@@ -369,14 +411,14 @@ function exitSyscalls(s: Sim) {
       m.state = 'running'
       g.state = 'running'
       g.slice = 0
-      say(s, `${g.label}: exitsyscall fast path — P${old.id} still ours`)
+      say(s, `${g.label}: exitsyscall fast path — P${old.id} still ours`, 'exitsyscall-fast', g.id, old.id)
       continue
     }
     const p = idleP(s)
     if (p) {
       acquire(p, m, 'running')
       run(s, p, g)
-      say(s, `${g.label}: exitsyscall — P${sc.p} was handed off, grabbed idle P${p.id}`)
+      say(s, `${g.label}: exitsyscall — P${sc.p} was handed off, grabbed idle P${p.id}`, 'exitsyscall-idlep', g.id, p.id)
       continue
     }
     g.state = 'runnable'
@@ -384,7 +426,7 @@ function exitSyscalls(s: Sim) {
     m.g = null
     m.p = null
     m.state = 'idle'
-    say(s, `${g.label}: exitsyscall — no P free → G to global queue, m${m.id} parks`)
+    say(s, `${g.label}: exitsyscall — no P free → G to global queue, m${m.id} parks`, 'exitsyscall-global', g.id)
   }
 }
 
@@ -401,9 +443,9 @@ function sysmon(s: Sim) {
     if (p.runnext !== null || p.runq.length || s.global.length) {
       const m = getM(s)
       acquire(p, m, 'running')
-      say(s, `sysmon retakes P${p.id} from syscalling m${sc.m} → handoffp to m${m.id}`)
+      say(s, `sysmon retakes P${p.id} from syscalling m${sc.m} → handoffp to m${m.id}`, 'handoff', sc.g, p.id)
     } else {
-      say(s, `sysmon retakes P${p.id} from syscalling m${sc.m} → no work, P idles`)
+      say(s, `sysmon retakes P${p.id} from syscalling m${sc.m} → no work, P idles`, 'retake-idle', sc.g, p.id)
     }
   }
   // preempt long-running Gs (real: forcePreemptNS = 10ms)
@@ -415,7 +457,7 @@ function sysmon(s: Sim) {
     const tight = op?.k === 'loop'
     if (tight && !s.asyncPreempt) {
       s.stats.ignoredPreempts++
-      say(s, `sysmon: ${g.label} ran >10ms, sets preempt flag — but a tight loop has no safe point (Go ≤1.13): ignored`)
+      say(s, `sysmon: ${g.label} ran >10ms, sets preempt flag — but a tight loop has no safe point (Go ≤1.13): ignored`, 'preempt-ignored', g.id, p.id)
       g.slice = 0
       continue
     }
@@ -424,14 +466,16 @@ function sysmon(s: Sim) {
     s.global.push(g.id)
     p.cur = null
     s.ms[p.m!].g = null
-    say(s, `sysmon: ${g.label} ran >10ms → ${tight ? 'SIGURG async preemption' : 'preempt at next function prologue'} → G to global queue`)
+    say(s, `sysmon: ${g.label} ran >10ms → ${tight ? 'SIGURG async preemption' : 'preempt at next function prologue'} → G to global queue`, 'preempt', g.id, p.id)
   }
   // netpoll if nobody polled for a while (real: 10ms)
   if (s.tick - s.lastPoll >= 5) {
     const ready = netpoll(s)
     if (ready.length) {
       s.global.push(...ready)
-      say(s, `sysmon: netpoll found ${ready.length} ready G(s) → global queue`)
+      for (const id of ready)
+        if (s.gs[id].wait === 'sleep') say(s, `${s.gs[id].label}'s timer expired → runnable, global queue (still needs a free P)`, 'timer-ready', id)
+        else say(s, `sysmon: netpoll found ${s.gs[id].label} ready → global queue`, 'netpoll-sysmon', id)
     }
     s.lastPoll = s.tick
   }
@@ -454,7 +498,7 @@ export function step(s: Sim) {
     waiter.pc++
     loadOp(waiter)
     s.global.push(waiter.id)
-    say(s, `${waiter.label}: wg.Wait returns → runnable`)
+    say(s, `${waiter.label}: wg.Wait returns → runnable`, 'wg-wake', waiter.id)
   }
   wakep(s)
   s.history.push(s.ps.map((p) => (p.status === 'syscall' ? -1 : p.m !== null ? p.cur : null)))
@@ -465,7 +509,7 @@ export function spawnOn(s: Sim, pid: number, ops: Op[], label?: string) {
   const g = newG(s, ops, label)
   const p = s.ps[pid]
   runqput(s, p, g.id, true)
-  say(s, `go ${g.label}() on P${pid} → runnext`)
+  say(s, `go ${g.label}() on P${pid} → runnext`, 'spawn', g.id, pid)
   wakep(s)
   return g
 }

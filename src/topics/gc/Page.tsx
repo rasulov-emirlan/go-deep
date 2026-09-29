@@ -3,21 +3,28 @@ import { Code } from '../../components/Code'
 import { QuizList } from '../../components/Quiz'
 import { Interview } from '../../components/Interview'
 import { NextTopic, Sources, TopicHero } from '../../components/TopicShell'
+import { Story } from '../../components/Story'
 import { TriColorLab } from './TriColorLab'
 import { PacerLab } from './PacerLab'
 import { GreenTeaLab } from './GreenTeaLab'
 import { GctraceDecoder } from './Gctrace'
+import { GuidedGC } from './GuidedGC'
+import { GuidedGreenTea } from './GuidedGreenTea'
+import { greenTea, leaks, pacer, triColor, writeBarrier } from './stories'
 import { interview, quiz } from './content'
+import './gc.css'
 
 const toc = [
-  { id: 'answer', label: '30-second answer' },
-  { id: 'phases', label: 'Phases' },
+  { id: 'mark', label: 'Tri-color mark' },
   { id: 'barrier', label: 'Write barrier' },
-  { id: 'pacer', label: 'Pacer' },
-  { id: 'alloc', label: 'Allocator & escape' },
+  { id: 'tour', label: 'Guided tour' },
   { id: 'greentea', label: 'Green Tea' },
+  { id: 'pacer', label: 'Pacer' },
+  { id: 'phases', label: 'Phases' },
+  { id: 'alloc', label: 'Allocator & escape' },
   { id: 'gctrace', label: 'gctrace' },
   { id: 'leaks', label: 'Leaks' },
+  { id: 'sandbox', label: 'Sandbox' },
   { id: 'puzzles', label: 'Puzzles' },
   { id: 'interview', label: 'Interview' },
 ]
@@ -34,16 +41,21 @@ export default function GcPage() {
             GC & <span className="r">Green Tea</span>
           </>
         }
-        lead="Go’s collector trades memory for latency: concurrent, non-moving, non-generational, with sub-millisecond pauses. Go 1.26 made Green Tea — span-based marking — the default. Break it, tune it, and read its trace."
+        lead="Go’s collector trades memory for latency: concurrent, non-moving, non-generational, with sub-millisecond pauses. Go 1.26 made Green Tea — span-based marking — the default. Watch it paint a town, break it, and read its trace."
         toc={toc}
       />
 
-      <Section id="answer" n="01" kicker="Mental model" title="The 30-second answer">
+      <Section id="mark" n="01" kicker="Tri-color mark & sweep" title="Paint the reachable town">
         <div className="prose">
           <p>
-            Go’s GC is a <b>concurrent, tri-color, mark-sweep</b> collector. It is <b>precise</b> (it knows exactly which words are pointers), <b>non-moving</b> (heap objects never move) and{' '}
-            <b>non-generational</b>. Each cycle has two short stop-the-world pauses — typically tens to hundreds of microseconds, independent of heap size — and a <b>hybrid write barrier</b> that is on
-            only while marking. The <b>pacer</b> decides when to start so marking finishes as the heap reaches its goal, which is set by <code>GOGC</code> and capped by <code>GOMEMLIMIT</code>.
+            Each story below plays by itself with <b>Autoplay</b> and <b>stops at every important moment</b> to explain it. Press <b>OK, next</b> to go on, or step with the arrows.
+          </p>
+        </div>
+        <Story id="story-mark" title="Tri-color mark" frames={triColor} />
+        <div className="prose">
+          <p>
+            In one breath: Go’s GC is a <b>concurrent, tri-color, mark-sweep</b> collector. It is <b>precise</b> (it knows exactly which words are pointers), <b>non-moving</b> and{' '}
+            <b>non-generational</b>, with two short stop-the-world pauses per cycle that don’t grow with the heap.
           </p>
           <Callout label="Why not generational or compacting?">
             <p>
@@ -55,7 +67,54 @@ export default function GcPage() {
         </div>
       </Section>
 
-      <Section id="phases" n="02" kicker="runtime/mgc.go" title="One cycle, four phases">
+      <Section id="barrier" n="02" kicker="Write barrier" title="Why Go needs the hybrid barrier">
+        <Story id="story-barrier" title="Why the write barrier" frames={writeBarrier} />
+        <div className="prose">
+          <Code>{`
+// runtime/mbarrier.go — Go 1.8+ hybrid barrier (the runtime shades both unconditionally)
+writePointer(slot, ptr):
+    shade(*slot)                  // Yuasa deletion: shade the old target
+    if current stack is grey:
+        shade(ptr)                // Dijkstra insertion: shade the new target
+    *slot = ptr
+`}</Code>
+        </div>
+      </Section>
+
+      <Section id="tour" n="03" kicker="Guided tour" title="Run the real model, barrier by barrier">
+        <div className="prose">
+          <p>
+            A tested tri-color simulator. Tour 1 is a plain marking run. Tours 2–4 are the three ways a program can hide an object from the marker; pick a barrier and press <b>Autoplay</b>. It stops the
+            first time each kind of event happens: a root scan, a shade, a barrier firing, a stack write with no barrier, a sweep, and the final verdict (use-after-free, or every reachable object
+            survived). The chips show which cases you’ve seen. Only <b>Hybrid</b> survives all three.
+          </p>
+        </div>
+        <GuidedGC />
+      </Section>
+
+      <Section id="greentea" n="04" kicker="Go 1.25 experiment · 1.26 default" title="Green Tea: scan by street, not by house">
+        <Story id="story-greentea" title="Green Tea" frames={greenTea} />
+        <div className="prose">
+          <p>
+            Now the same idea on a real (tiny) run: first the classic marker, then Green Tea, on the same heap. Watch the cache-miss counter and the queue.
+          </p>
+        </div>
+        <GuidedGreenTea />
+      </Section>
+
+      <Section id="pacer" n="05" kicker="GOGC · GOMEMLIMIT · pacer" title="When does the next GC start?">
+        <Story id="story-pacer" title="The pacer" frames={pacer} />
+        <div className="prose">
+          <Code>{`
+heap goal = live + (live + stacks + globals) × GOGC/100     // roots counted since 1.18
+          = max(goal, 4 MiB × GOGC/100)
+          = min(goal, GOMEMLIMIT − non-heap − headroom)       // since 1.19, never below live
+trigger  ≈ goal − runway   (clamped to 70%…95% of the way from live to goal)
+`}</Code>
+        </div>
+      </Section>
+
+      <Section id="phases" n="06" kicker="runtime/mgc.go" title="One cycle, four phases">
         <div className="viz-scroll">
           <table style={{ borderCollapse: 'collapse', fontSize: 14, maxWidth: '56rem', minWidth: 560 }}>
             <thead>
@@ -98,60 +157,7 @@ export default function GcPage() {
         </div>
       </Section>
 
-      <Section id="barrier" n="03" kicker="Tri-color + write barrier" title="Why Go needs the hybrid barrier">
-        <div className="prose">
-          <p>
-            <b>White</b> = not reached yet, <b>grey</b> = reached but its pointers not scanned, <b>black</b> = scanned. Marking is done when there is no grey left, and every white object is garbage. The
-            mutator keeps running during marking, so it can break the invariant <em>“no black object points to a white one”</em>. A <b>write barrier</b> is code the compiler puts on every heap pointer
-            store while the GC is marking:
-          </p>
-          <Code>{`
-// runtime/mbarrier.go — Go 1.8+ hybrid barrier
-writePointer(slot, ptr):
-    shade(*slot)                  // Yuasa deletion: shade the old target
-    if current stack is grey:
-        shade(ptr)                // Dijkstra insertion: shade the new target
-    *slot = ptr
-`}</Code>
-          <p>
-            The catch: <b>stack writes have no barrier</b> — too expensive. Each half of the barrier alone loses objects in one of the scenarios below. Before 1.8 Go used Dijkstra only and had to{' '}
-            <em>re-scan every stack</em> in the final STW pause (tens of ms with many goroutines). The hybrid barrier made stack re-scans unnecessary, and pauses dropped under a millisecond. In practice
-            the runtime shades both pointers unconditionally.
-          </p>
-        </div>
-        <TriColorLab />
-      </Section>
-
-      <Section id="pacer" n="04" kicker="GOGC · GOMEMLIMIT · pacer" title="When does the next GC start?">
-        <div className="prose">
-          <Code>{`
-heap goal = live + (live + stacks + globals) × GOGC/100     // roots counted since 1.18
-          = max(goal, 4 MiB × GOGC/100)
-          = min(goal, GOMEMLIMIT − non-heap − headroom)       // since 1.19, never below live
-trigger  ≈ goal − runway   (clamped to 70%…95% of the way from live to goal)
-`}</Code>
-          <ul>
-            <li>
-              <b>GOGC</b> (default 100): doubling it roughly doubles heap overhead and halves GC CPU. <code>GOGC=off</code> disables the proportional goal entirely.
-            </li>
-            <li>
-              <b>Mark assists</b>: if your goroutines allocate faster than the 25% background workers can mark, the allocating goroutine is made to do scan work before <code>malloc</code> returns. That’s
-              the GC latency you actually feel in p99.
-            </li>
-            <li>
-              <b>GOMEMLIMIT</b> is a <em>soft</em> limit on memory the runtime manages (<code>Sys − HeapReleased</code>, not cgo). Near the limit the GC runs back to back — a death spiral — so the{' '}
-              <b>CPU limiter</b> caps GC at roughly 50% CPU and disables assists. When that happens the program exceeds the limit rather than stalling.
-            </li>
-            <li>
-              <b>GOGC=off + GOMEMLIMIT=X</b> is right for a container with a dedicated memory budget and a live heap well below it: GC only runs when it must. It is dangerous when live memory can
-              approach X.
-            </li>
-          </ul>
-        </div>
-        <PacerLab />
-      </Section>
-
-      <Section id="alloc" n="05" kicker="Allocator & escape analysis" title="The cheapest garbage is the kind you never make">
+      <Section id="alloc" n="07" kicker="Allocator & escape analysis" title="The cheapest garbage is the kind you never make">
         <div className="prose">
           <p>
             Allocation is TCMalloc-style and size-segregated: a per-P <code>mcache</code> (no locks) holds one span per <em>span class</em> (68 size classes × scan/noscan); on a miss it refills from{' '}
@@ -177,39 +183,7 @@ esc/main.go:21:14: x escapes to heap         // fmt.Println(x): x boxed into an 
         </div>
       </Section>
 
-      <Section id="greentea" n="06" kicker="Go 1.25 experiment · 1.26 default" title="Green Tea: scan pages, not pointers">
-        <div className="prose">
-          <p>
-            The classic mark phase is a <b>graph flood</b>: pop an object, read its pointers, look up each target’s span and mark bits, push it. Consecutive steps jump all over the heap, so the CPU
-            spends at least 35% of mark time <em>stalled on memory</em>, and the prefetcher can’t help.
-          </p>
-          <p>Green Tea changes the unit of work from an object to a <b>span</b> (an 8 KiB page of same-size objects) for small objects of 16–512 bytes:</p>
-          <ol>
-            <li>
-              Each small-object span keeps two bitmaps inline at its end: <b>marks</b> (“seen”) and <b>scans</b> (“scanned”). Finding the metadata is address arithmetic, with no <code>mspan</code>{' '}
-              lookup.
-            </li>
-            <li>
-              Marking an object just sets its bit. The <em>first</em> marker of an unqueued span enqueues the span. Later marks only accumulate.
-            </li>
-            <li>
-              Span queues are <b>FIFO</b> (the classic work queue is LIFO), so a span waits and collects more marks before it’s scanned.
-            </li>
-            <li>
-              Scanning a span processes <code>marks &amp;^ scans</code> in one sequential pass — with AVX-512 on Ice Lake / Zen 4 and newer. If only one object was marked, a fast path scans just that one.
-            </li>
-          </ol>
-          <Callout label="Status">
-            <p>
-              Go 1.25: <code>GOEXPERIMENT=greenteagc</code>. <b>Go 1.26: on by default</b>; opt out at build time with <code>GOEXPERIMENT=nogreenteagc</code> (expected to disappear in 1.27). Reported 10–40%
-              less GC CPU, plus ~10% more with vector scanning. It can regress when each dequeued span holds one object: deep, low-fan-out, pointer-chasing graphs.
-            </p>
-          </Callout>
-        </div>
-        <GreenTeaLab />
-      </Section>
-
-      <Section id="gctrace" n="07" kicker="GODEBUG=gctrace=1" title="Read the trace">
+      <Section id="gctrace" n="08" kicker="GODEBUG=gctrace=1" title="Read the trace">
         <div className="prose">
           <p>
             Tap a field to see what it means. The sample line was captured on go1.26.4. <code>gctrace=2</code> additionally prints Green Tea’s per-size-class scan statistics.
@@ -218,19 +192,13 @@ esc/main.go:21:14: x escapes to heap         // fmt.Println(x): x boxed into an 
         <GctraceDecoder />
       </Section>
 
-      <Section id="leaks" n="08" kicker="Retention" title="Memory the GC can’t take back">
+      <Section id="leaks" n="09" kicker="Retention" title="Memory the GC can’t take back">
+        <Story id="story-leaks" title="What the GC can’t take back" frames={leaks} />
         <div className="prose">
+          <p>Two more that don’t need a picture:</p>
           <ul>
             <li>
-              <b>Sub-slices and substrings</b> pin the whole backing array: <code>small := big[:10]</code> keeps all of <code>big</code> alive. Use <code>slices.Clone</code> or{' '}
-              <code>strings.Clone</code>.
-            </li>
-            <li>
-              <b>Goroutine leaks</b>: a goroutine blocked forever is a root. Its stack and everything it references stay alive. Go 1.26’s <code>goroutineleak</code> profile can <em>detect</em> them;
-              nothing frees them.
-            </li>
-            <li>
-              <b>Maps never shrink</b> — see the maps topic.
+              <b>Maps never shrink</b>: deleting keys keeps the groups (see the maps topic). Copy into a fresh map to give memory back.
             </li>
             <li>
               <b>
@@ -238,28 +206,43 @@ esc/main.go:21:14: x escapes to heap         // fmt.Println(x): x boxed into an 
               </b>{' '}
               kept each timer alive until it fired before Go 1.23. Since 1.23 (with <code>go 1.23</code> in go.mod) unreferenced timers are collectable.
             </li>
-            <li>
-              <b>
-                <code>sync.Pool</code>
-              </b>{' '}
-              is emptied by GC: at each cycle, pooled items move to a victim cache and the old victims are dropped. It reduces allocation; it is not a connection pool.
-            </li>
-            <li>
-              <b>Finalizers</b> resurrect the object (≥2 cycles to free it) and never run for cycles. Prefer <code>runtime.AddCleanup</code> (1.24): it doesn’t resurrect, handles cycles, and allows several
-              cleanups per object — unless the cleanup captures the object itself, in which case it never runs.
-            </li>
-            <li>
-              <b>Interior pointers</b>: <code>&amp;big.field</code> keeps all of <code>big</code> alive.
-            </li>
           </ul>
         </div>
       </Section>
 
-      <Section id="puzzles" n="09" kicker="Test yourself" title="GC & escape puzzles">
+      <section className="section" id="sandbox">
+        <div className="wrap">
+          <span className="kicker red">Sandbox</span>
+          <h2>Free-play labs</h2>
+          <p className="prose" style={{ color: 'var(--g500)' }}>
+            The full dashboards, for when the stories make sense and you want to poke at the models yourself.
+          </p>
+          <details className="sandbox">
+            <summary>Tri-color + write barrier dashboard</summary>
+            <div className="sandbox-body">
+              <TriColorLab />
+            </div>
+          </details>
+          <details className="sandbox">
+            <summary>Pacer: GOGC, GOMEMLIMIT, heap sawtooth</summary>
+            <div className="sandbox-body">
+              <PacerLab />
+            </div>
+          </details>
+          <details className="sandbox">
+            <summary>Green Tea vs classic on a random heap</summary>
+            <div className="sandbox-body">
+              <GreenTeaLab />
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <Section id="puzzles" n="10" kicker="Test yourself" title="GC & escape puzzles">
         <QuizList items={quiz} />
       </Section>
 
-      <Section id="interview" n="10" kicker="Interview prep" title="Questions you will be asked">
+      <Section id="interview" n="11" kicker="Interview prep" title="Questions you will be asked">
         <Interview items={interview} prefix="gc" />
         <Sources>
           <p>

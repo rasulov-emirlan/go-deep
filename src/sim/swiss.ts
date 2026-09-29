@@ -49,6 +49,10 @@ export type Step =
   | { t: 'miss'; table: number; group: number }
   | { t: 'grow'; from: number; to: number; kind: 'small→table' | 'double' | 'split'; note: string; moved: number }
   | { t: 'dirDouble'; depth: number }
+  | { t: 'prune'; table: number; tombstones: number; freed: number }
+
+/** Called after the map's shape changed mid-insert (grow, split, prune), before the insert is retried. */
+export type OnMutate = (m: SwissMap) => void
 
 const newGroup = (): Group => ({ ctrl: Array(SLOTS).fill(EMPTY), keys: Array(SLOTS).fill(null), vals: Array(SLOTS).fill(null) })
 
@@ -153,13 +157,16 @@ export function get(m: SwissMap, key: string): { found: boolean; val?: number; s
   return { found: false, steps }
 }
 
-export function put(m: SwissMap, key: string, val: number): Step[] {
+export function put(m: SwissMap, key: string, val: number, onMutate?: OnMutate): Step[] {
   const hash = hash64(key, m.seed)
   const steps: Step[] = []
   if (!m.dir.length) {
     if (!m.small) m.small = newGroup()
     const g = m.small
     steps.push({ t: 'hash', key, hash, h1: h1(hash), h2: h2(hash), dirIdx: null })
+    // like the runtime: a small map holding 8 entries converts before looking,
+    // even when this write is an update of an existing key (TODO in map.go)
+    if (m.used >= SLOTS) return steps.concat(growToTable(m, g, onMutate), put(m, key, val, onMutate))
     const match = matchH2(g, h2(hash))
     steps.push({ t: 'probe', table: -1, group: 0, i: 0, match, empty: matchEmpty(g) })
     for (const s of match) {
@@ -172,23 +179,12 @@ export function put(m: SwissMap, key: string, val: number): Step[] {
       }
     }
     const e = matchEmpty(g)
-    if (e.length) {
-      g.ctrl[e[0]] = h2(hash)
-      g.keys[e[0]] = key
-      g.vals[e[0]] = val
-      m.used++
-      steps.push({ t: 'place', table: -1, group: 0, slot: e[0], reuse: 'empty' })
-      return steps
-    }
-    // 9th key: small group → first real table (16 slots, 1-entry directory)
-    const t = newTable(m, 2 * SLOTS, 0)
-    t.index = 0
-    for (let s = 0; s < SLOTS; s++) if (g.keys[s] !== null) reinsert(m, t, g.keys[s]!, g.vals[s]!)
-    m.small = null
-    m.dir = [t]
-    m.globalDepth = 0
-    steps.push({ t: 'grow', from: SLOTS, to: t.capacity, kind: 'small→table', moved: SLOTS, note: '9th key: the small map (one group, no table) becomes a 16-slot table behind a 1-entry directory' })
-    return steps.concat(put(m, key, val))
+    g.ctrl[e[0]] = h2(hash)
+    g.keys[e[0]] = key
+    g.vals[e[0]] = val
+    m.used++
+    steps.push({ t: 'place', table: -1, group: 0, slot: e[0], reuse: 'empty' })
+    return steps
   }
   const t = m.dir[dirIndex(m, hash)]
   steps.push({ t: 'hash', key, hash, h1: h1(hash), h2: h2(hash), dirIdx: dirIndex(m, hash) })
@@ -218,18 +214,67 @@ export function put(m: SwissMap, key: string, val: number): Step[] {
         steps.push({ t: 'place', table: t.id, group: firstDel.g, slot: firstDel.s, reuse: 'tombstone' })
         return steps
       }
+      if (t.growthLeft === 0) {
+        const p = pruneTombstones(m, t)
+        if (p) {
+          steps.push(p)
+          onMutate?.(m)
+        }
+      }
       if (t.growthLeft > 0) {
-        place(t, gi, empty[0], key, val, hash)
+        const slot = matchEmpty(g)[0]
+        place(t, gi, slot, key, val, hash)
         t.growthLeft--
         m.used++
-        steps.push({ t: 'place', table: t.id, group: gi, slot: empty[0], reuse: 'empty' })
+        steps.push({ t: 'place', table: t.id, group: gi, slot, reuse: 'empty' })
         return steps
       }
       steps.push(...rehash(m, t))
-      return steps.concat(put(m, key, val))
+      onMutate?.(m)
+      return steps.concat(put(m, key, val, onMutate))
     }
   }
   throw new Error('table full: invariant violated')
+}
+
+function growToTable(m: SwissMap, g: Group, onMutate?: OnMutate): Step[] {
+  // small group → first real table (16 slots, 1-entry directory)
+  const t = newTable(m, 2 * SLOTS, 0)
+  t.index = 0
+  for (let s = 0; s < SLOTS; s++) if (g.keys[s] !== null) reinsert(m, t, g.keys[s]!, g.vals[s]!)
+  m.small = null
+  m.dir = [t]
+  m.globalDepth = 0
+  onMutate?.(m)
+  return [{ t: 'grow', from: SLOTS, to: t.capacity, kind: 'small→table', moved: SLOTS, note: 'the small map (one group, no table) becomes a 16-slot table behind a 1-entry directory' }]
+}
+
+/**
+ * table.pruneTombstones: only when tombstones are ≥10% of capacity. Trace every
+ * key's probe path; a group whose tombstones some path walks past is needed.
+ * Free the rest, but only if that reclaims ≥10% of capacity (else the caller grows).
+ */
+function pruneTombstones(m: SwissMap, t: Table): Step | null {
+  const dead = t.groups.reduce((n, g) => n + g.ctrl.filter((c) => c === DELETED).length, 0)
+  if (dead * 10 < t.capacity) return null
+  const needed = new Set<number>()
+  t.groups.forEach((g, gi) => {
+    for (const k of g.keys) {
+      if (k === null) continue
+      for (const pg of probeSeq(hash64(k, m.seed), t.groups.length)) {
+        if (pg === gi) break
+        if (t.groups[pg].ctrl.some((c) => c === DELETED || c === EMPTY)) needed.add(pg)
+      }
+    }
+    if (g.ctrl.some((c) => c === EMPTY)) needed.add(gi)
+  })
+  const free = t.groups.flatMap((g, gi) => (needed.has(gi) ? [] : g.ctrl.flatMap((c, s) => (c === DELETED ? [[gi, s]] : []))))
+  if (free.length * 10 < t.capacity) return { t: 'prune', table: t.id, tombstones: dead, freed: 0 }
+  for (const [gi, s] of free) {
+    t.groups[gi].ctrl[s] = EMPTY
+    t.growthLeft++
+  }
+  return { t: 'prune', table: t.id, tombstones: dead, freed: free.length }
 }
 
 function place(t: Table, gi: number, s: number, key: string, val: number, hash: bigint) {
@@ -320,6 +365,12 @@ export function del(m: SwissMap, key: string): Step[] {
   }
   if (m.used === 0) m.seed = (m.seed * 6364136223846793005n + 1442695040888963407n) & M64
   return steps
+}
+
+/** Deep copy: tables stay shared between the directory entries that point at them. */
+export function cloneMap(m: SwissMap): SwissMap {
+  const tabs = new Map(tables(m).map((t) => [t.id, structuredClone(t)]))
+  return { ...m, small: m.small ? structuredClone(m.small) : null, dir: m.dir.map((t) => tabs.get(t.id)!) }
 }
 
 export function len(m: SwissMap) {

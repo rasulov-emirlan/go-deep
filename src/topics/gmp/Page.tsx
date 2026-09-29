@@ -7,16 +7,20 @@ import { NextTopic, Sources, TopicHero } from '../../components/TopicShell'
 import { SchedLab } from './SchedLab'
 import { GomaxprocsCalc, PreemptTimeline, StackGrowth } from './Widgets'
 import { interview, quiz } from './content'
+import { Story } from '../../components/Story'
+import { containerProcs, meetGMP, whyP } from './stories'
+import { GuidedSched } from './GuidedSched'
 
 const toc = [
   { id: 'model', label: 'G · M · P' },
-  { id: 'lab', label: 'Scheduler lab' },
+  { id: 'lab', label: 'Guided tours' },
   { id: 'find', label: 'findRunnable' },
   { id: 'runnext', label: 'runnext puzzles' },
   { id: 'syscalls', label: 'Syscalls & netpoll' },
   { id: 'preempt', label: 'Preemption' },
   { id: 'procs', label: 'GOMAXPROCS' },
   { id: 'stacks', label: 'Stacks' },
+  { id: 'sandbox', label: 'Sandbox' },
   { id: 'puzzles', label: 'Puzzles' },
   { id: 'interview', label: 'Interview' },
 ]
@@ -36,6 +40,8 @@ export default function GmpPage() {
       />
 
       <Section id="model" n="01" kicker="Mental model" title="Three letters, one rule">
+        <Story title="Meet G, M and P" frames={meetGMP} />
+        <Story title="Why P exists" frames={whyP} />
         <div className="prose">
           <p>
             <b>G</b> is a goroutine: a stack (starts at 2 KiB) plus saved registers. <b>M</b> is an OS thread. <b>P</b> is a <em>processor</em> — a permission slip to run Go code that owns
@@ -47,12 +53,6 @@ export default function GmpPage() {
               <b>parallelism is bounded by P; thread count is not</b> (default cap: 10 000, then <code>fatal error: thread exhaustion</code>).
             </p>
           </Callout>
-          <h3>Why P exists at all</h3>
-          <p>
-            Go 1.0 had only G and M, with one global run queue behind one lock, and an mcache per M (so a thousand threads blocked in syscalls each held allocator memory). Dmitry Vyukov’s 2012
-            redesign introduced P: run queues become per-P and lock-free, memory caches scale with GOMAXPROCS instead of thread count, and when an M blocks, its P — with all its queued work — is
-            handed to another M.
-          </p>
           <Code>{`
 // runtime/runtime2.go (heavily trimmed)
 type p struct {
@@ -69,14 +69,15 @@ type p struct {
         </div>
       </Section>
 
-      <Section id="lab" n="02" kicker="Interactive" title="The scheduler lab">
+      <Section id="lab" n="02" kicker="Guided tours" title="Watch the scheduler work">
         <div className="prose">
           <p>
-            A deterministic model of <code>runtime/proc.go</code>. It follows the real decision order and queue rules — runnext kick-outs, <code>runqputslow</code>, batch grabs from the global
-            queue, steal-half, sysmon retake and preemption — in 2 ms ticks. It reproduces go1.26’s verified output for the 300-goroutine ordering puzzle exactly. Pick a scenario, press Step, and read the log.
+            Five short runs of a tested model of <code>runtime/proc.go</code>. Press <b>Autoplay</b>: it runs by itself and <b>stops at every important moment</b> — a goroutine sent to the global queue,
+            a syscall losing its P, a network read parking on the netpoller, a steal, a preemption — with an explanation. Press <b>OK, next</b> to continue. The chips at the bottom show which cases you’ve
+            seen.
           </p>
         </div>
-        <SchedLab />
+        <GuidedSched />
       </Section>
 
       <Section id="find" n="03" kicker="schedule() → findRunnable()" title="Where does the next goroutine come from?">
@@ -179,7 +180,6 @@ for v := range ch { fmt.Println("recv", v) }`}
             </p>
           }
         />
-        <SchedLab initial="runnext" only={['runnext', 'overflow']} />
       </Section>
 
       <Section id="syscalls" n="05" kicker="Syscalls, cgo, netpoller" title="Blocking without blocking">
@@ -206,7 +206,9 @@ for v := range ch { fmt.Println("recv", v) }`}
             Consequence: 1 000 goroutines doing blocking file reads can mean ~1 000 threads. 1 000 goroutines doing network reads mean ~GOMAXPROCS threads. Try both in the lab:
           </p>
         </div>
-        <SchedLab initial="syscall" only={['syscall', 'net']} />
+        <p className="prose">
+          <a href="#lab">↑ Guided tour 4</a> runs exactly this: a file read and a socket read side by side.
+        </p>
       </Section>
 
       <Section id="preempt" n="06" kicker="Preemption" title="Cooperative, then signals">
@@ -221,7 +223,9 @@ for v := range ch { fmt.Println("recv", v) }`}
             libc doesn’t use it, and spurious delivery is harmless. Side effect: more <code>EINTR</code> for raw syscalls.
           </p>
         </div>
-        <PreemptTimeline />
+        <p className="prose">
+          <a href="#lab">↑ Guided tour 6</a> shows both versions — flip between Go ≤ 1.13 and 1.14+.
+        </p>
       </Section>
 
       <Section id="procs" n="07" kicker="GOMAXPROCS" title="Container-aware since Go 1.25">
@@ -232,6 +236,7 @@ for v := range ch { fmt.Println("recv", v) }`}
             (floored at 2), ignores requests, and is re-evaluated periodically — but only if <code>go.mod</code> says <code>go 1.25</code> or later.
           </p>
         </div>
+        <Story title="GOMAXPROCS in a container" frames={containerProcs} />
         <GomaxprocsCalc />
       </Section>
 
@@ -245,6 +250,28 @@ for v := range ch { fmt.Println("recv", v) }`}
         </div>
         <StackGrowth />
       </Section>
+
+      <section className="section" id="sandbox">
+        <div className="wrap">
+          <span className="kicker red">Sandbox</span>
+          <h2>Free-play labs</h2>
+          <p className="prose" style={{ color: 'var(--g500)' }}>
+            The full dashboards, for when the tours above make sense and you want to poke at the scheduler yourself: spawn goroutines on any P, change GOMAXPROCS, turn off async preemption.
+          </p>
+          <details className="sandbox">
+            <summary>Scheduler dashboard</summary>
+            <div className="sandbox-body">
+              <SchedLab />
+            </div>
+          </details>
+          <details className="sandbox">
+            <summary>Preemption timeline</summary>
+            <div className="sandbox-body">
+              <PreemptTimeline />
+            </div>
+          </details>
+        </div>
+      </section>
 
       <Section id="puzzles" n="09" kicker="Test yourself" title="Scheduler puzzles">
         <QuizList items={quiz} />
