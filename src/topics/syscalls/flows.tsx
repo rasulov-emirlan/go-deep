@@ -97,7 +97,7 @@ export const crossing: FlowDef = {
       set: { c: { sub: 'CPL 0', tone: 'red' } },
       stop: {
         title: 'Why r10, not rcx?',
-        body: <p>The `syscall` instruction overwrites `rcx` with the return address and `r11` with the flags, so the 4th argument moves to `r10`.</p>,
+        body: <p>The <code>syscall</code> instruction overwrites <code>rcx</code> with the return address and <code>r11</code> with the flags, so the 4th argument moves to <code>r10</code>.</p>,
       },
     },
     {
@@ -117,7 +117,7 @@ export const crossing: FlowDef = {
       stop: {
         title: 'Kernel pointer passed?',
         edge: true,
-        body: <p>`access_ok` rejects addresses above the user/kernel boundary. A bad address inside it faults, and an exception-table fixup returns `-EFAULT` instead of crashing.</p>,
+        body: <p><code>access_ok</code> rejects addresses above the user/kernel boundary. A bad address inside it faults, and an exception-table fixup returns <code>-EFAULT</code> instead of crashing.</p>,
       },
     },
     {
@@ -159,7 +159,7 @@ export const door: FlowDef = {
       stop: {
         title: 'Seccomp vs io_uring',
         edge: true,
-        body: <p>Filters see only the entry call, so io_uring can bypass a per-syscall denylist. Mitigations: filter it out entirely, or set the sysctl `kernel.io_uring_disabled`.</p>,
+        body: <p>Filters see only the entry call, so io_uring can bypass a per-syscall denylist. Mitigations: filter it out entirely, or set the sysctl <code>kernel.io_uring_disabled</code>.</p>,
       },
     },
     {
@@ -239,7 +239,7 @@ export const cost: FlowDef = {
       set: grey('g'),
       stop: {
         title: 'Is a syscall a context switch?',
-        body: <p>No. A syscall keeps the same task and only changes privilege. A blocking one, like `read` on an empty pipe, can cause a context switch; `getppid` does not.</p>,
+        body: <p>No. A syscall keeps the same task and only changes privilege. A blocking one, like <code>read</code> on an empty pipe, can cause a context switch; <code>getppid</code> does not.</p>,
       },
     },
     {
@@ -249,7 +249,7 @@ export const cost: FlowDef = {
       stop: {
         title: 'Never strace a hot path',
         edge: true,
-        body: <p>Use `strace -c` briefly, or eBPF. Its seconds are ptrace-inflated: trust the call and error counts, not the time.</p>,
+        body: <p>Use <code>strace -c</code> briefly, or eBPF. Its seconds are ptrace-inflated: trust the call and error counts, not the time.</p>,
       },
     },
     {
@@ -291,7 +291,7 @@ export const handoff: FlowDef = {
       stop: {
         title: '_Psyscall gone in 1.26',
         edge: true,
-        body: <p>Up to Go 1.25 the P was set to `_Psyscall` here. In 1.26 that state is unused: the P stays `_Prunning`, and “in a syscall” is read from the goroutine. Checked in the 1.25.1 and 1.26.0 sources.</p>,
+        body: <p>Up to Go 1.25 the P was set to <code>_Psyscall</code> here. In 1.26 that state is unused: the P stays <code>_Prunning</code>, and “in a syscall” is read from the goroutine. Checked in the 1.25.1 and 1.26.0 sources.</p>,
       },
     },
     {
@@ -331,7 +331,7 @@ export const handoff: FlowDef = {
       stop: {
         title: 'EINTR from the runtime',
         edge: true,
-        body: <p>Go’s handlers use `SA_RESTART`, but raw `nanosleep`, `epoll_wait`, `poll` and `select` are never restarted. Retry on `EINTR`; the stdlib already does.</p>,
+        body: <p>Go’s handlers use <code>SA_RESTART</code>, but raw <code>nanosleep</code>, <code>epoll_wait</code>, <code>poll</code> and <code>select</code> are never restarted. Retry on <code>EINTR</code>; the stdlib already does.</p>,
       },
     },
     {
