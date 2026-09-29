@@ -251,6 +251,7 @@ export const outbox: FlowDef = {
     },
     {
       caption: 'A relay process reads unsent rows and publishes them to Kafka, by polling or by tailing the DB log (CDC).',
+      set: { txn: { tone: 'grey' } },
       add: [msg('rd', 'r', 'a', 206, 'read #10'), msg('pub', 'r', 'k', 250, 'publish #10')],
     },
     {
@@ -342,7 +343,7 @@ export const pollSkip: FlowDef = {
       stop: {
         title: 'Polling by id can skip rows',
         edge: true,
-        body: <>Caveat, our own reasoning rather than a vendor doc: read only ids below the oldest open transaction, or tail the DB log (CDC), which keeps commit order.</>,
+        body: <>Caveat, our own reasoning rather than a vendor doc: advance last only past ids that no open transaction can still commit, or tail the DB log (CDC), which keeps commit order.</>,
       },
     },
   ],
@@ -412,33 +413,33 @@ export const idempotency: FlowDef = {
 
 /* ---------- 05 · what Kafka exactly-once covers ---------- */
 export const kafkaEos: FlowDef = {
-  h: 340,
+  h: 280,
   steps: [
     {
       caption: 'Idempotent producer: the broker tracks a producer id and per-partition sequence numbers and drops a resend it already has. One producer session, one partition.',
       add: [
-        box('in', 10, 110, 110, 50, { text: 'input', sub: 'topic' }),
-        box('ap', 225, 110, 110, 50, { text: 'your app' }),
-        box('out', 440, 110, 110, 50, { text: 'output', sub: 'topic' }),
-        { t: 'line', id: 'l1', x1: 120, y1: 135, x2: 225, y2: 135, arrow: true },
-        { t: 'line', id: 'l2', x1: 335, y1: 135, x2: 440, y2: 135, arrow: true },
+        box('in', 10, 50, 110, 50, { text: 'input', sub: 'topic' }),
+        box('ap', 225, 50, 110, 50, { text: 'your app' }),
+        box('out', 440, 50, 110, 50, { text: 'output', sub: 'topic' }),
+        { t: 'line', id: 'l1', x1: 120, y1: 75, x2: 225, y2: 75, arrow: true },
+        { t: 'line', id: 'l2', x1: 335, y1: 75, x2: 440, y2: 75, arrow: true },
       ],
     },
     {
       caption: 'A Kafka transaction writes the output and the consumer offset atomically. A transactional id and epoch fence out a zombie, an old instance still running.',
       add: [
-        box('tx', 430, 92, 128, 172, { label: 'one Kafka txn', tone: 'red', z: -1 }),
-        box('off', 440, 200, 110, 50, { text: 'offsets' }),
-        { t: 'line', id: 'l3', x1: 320, y1: 160, x2: 445, y2: 205, arrow: true },
+        box('tx', 430, 32, 128, 172, { label: 'one Kafka txn', tone: 'red', z: -1 }),
+        box('off', 440, 140, 110, 50, { text: 'offsets' }),
+        { t: 'line', id: 'l3', x1: 320, y1: 100, x2: 445, y2: 145, arrow: true },
       ],
     },
     {
       caption: 'Anything outside the box is not covered: a DB write, an HTTP call, an email. Consumers also see aborted records unless they use `read_committed`.',
       add: [
-        box('db', 10, 250, 110, 50, { text: 'your DB', tone: 'red' }),
-        box('ps', 225, 250, 110, 50, { text: 'PSP / email', tone: 'red' }),
-        { t: 'line', id: 'l4', x1: 250, y1: 160, x2: 90, y2: 250, arrow: true, tone: 'red', dashed: true },
-        { t: 'line', id: 'l5', x1: 280, y1: 160, x2: 280, y2: 250, arrow: true, tone: 'red', dashed: true },
+        box('db', 10, 190, 110, 50, { text: 'your DB', tone: 'red' }),
+        box('ps', 225, 190, 110, 50, { text: 'PSP / email', tone: 'red' }),
+        { t: 'line', id: 'l4', x1: 250, y1: 100, x2: 90, y2: 190, arrow: true, tone: 'red', dashed: true },
+        { t: 'line', id: 'l5', x1: 280, y1: 100, x2: 280, y2: 190, arrow: true, tone: 'red', dashed: true },
       ],
       stop: {
         title: 'Does Kafka EOS cover my DB?',
@@ -449,7 +450,7 @@ export const kafkaEos: FlowDef = {
     {
       caption: 'For outside effects, pair retries with an inbox, an idempotency key, and the outbox for events you emit.',
       set: { l4: { tone: 'ink', dashed: false }, l5: { tone: 'ink', dashed: false }, db: { tone: 'ink' }, ps: { tone: 'ink' } },
-      add: [text('n1', 65, 322, 'inbox + outbox', { size: 14 }), text('n2', 280, 322, 'idempotency key', { size: 14 })],
+      add: [text('n1', 72, 262, 'inbox + outbox', { size: 14 }), text('n2', 280, 262, 'idempotency key', { size: 14 })],
     },
   ],
 }

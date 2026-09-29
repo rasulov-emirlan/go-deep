@@ -238,7 +238,7 @@ export const lamport: FlowDef = {
     {
       caption: 'A sends its `L=1` to B. B receives it and sets its counter to max(0, 1) + 1 = 2.',
       set: { a1: { tone: 'ink' } },
-      add: [{ t: 'msg', id: 'm1', from: 'A', to: 'B', y: 90, y2: 150, text: 'L=1' }, dot('b2', X.B, 150, '2')],
+      add: [{ t: 'msg', id: 'm1', x1: X.A + 15, x2: X.B - 16, y: 92, y2: 146, text: 'L=1' }, dot('b2', X.B, 150, '2')],
     },
     {
       caption: 'C has two local events and never hears from anyone. Its second event also gets `L=2`.',
@@ -256,7 +256,7 @@ export const lamport: FlowDef = {
     {
       caption: 'C’s first event (`L=1`) and B’s receive (`L=2`) never exchanged a message. Smaller counter, yet neither caused the other.',
       drop: ['tie', 'tiet'],
-      add: [{ t: 'line', id: 'cc', x1: 296, y1: 145, x2: 456, y2: 105, tone: 'red', dashed: true, text: '1 < 2, concurrent' }],
+      add: [{ t: 'line', id: 'cc', x1: 296, y1: 145, x2: 456, y2: 105, tone: 'red', dashed: true, text: 'concurrent' }],
       stop: {
         title: 'Smaller L means earlier?',
         edge: true,
@@ -280,7 +280,7 @@ export const vector: FlowDef = {
     {
       caption: 'A sends to B. B takes max([0,0,0], [1,0,0]) = [1,0,0], then bumps its own slot: [1,1,0].',
       set: { a1: { tone: 'ink' }, a1t: { tone: 'ink' } },
-      add: [{ t: 'msg', id: 'm1', from: 'A', to: 'B', y: 90, y2: 150, text: '[1,0,0]' }, dot('b1', X.B, 150), lbl('b1t', 294, 150, '[1,1,0]')],
+      add: [{ t: 'msg', id: 'm1', x1: X.A + 9, x2: X.B - 9, y: 92, y2: 148, text: '[1,0,0]' }, dot('b1', X.B, 150), lbl('b1t', 294, 150, '[1,1,0]')],
     },
     {
       caption: 'C does an event on its own: [0,0,1].',
@@ -320,13 +320,17 @@ export const vector: FlowDef = {
       ],
     },
     {
-      caption: 'D2 descends from D1, so D2 has D1’s entry. Prune it, and D2 = {b:1} suddenly looks concurrent with D1 = {a:1}.',
+      caption: 'D2 descends from D1, so it carries D1’s entry: {a:1, b:1} ≥ {a:1}. The store knows D2 replaces D1.',
       drop: ['vt', 's0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 'cut', 'keep', 'oldest'],
       add: [
-        { t: 'box', id: 'p1', x: 40, y: 50, w: 190, h: 70, label: 'D1', text: '{a:1}' },
-        { t: 'box', id: 'p2', x: 330, y: 50, w: 190, h: 70, label: 'D2', text: '{a:1, b:1}' },
-        { t: 'line', id: 'pa', x1: 232, y1: 85, x2: 328, y2: 85, arrow: true, text: 'D2 ≥ D1' },
+        { t: 'box', id: 'p1', x: 40, y: 90, w: 190, h: 70, label: 'D1', text: '{a:1}' },
+        { t: 'box', id: 'p2', x: 330, y: 90, w: 190, h: 70, label: 'D2', text: '{a:1, b:1}' },
+        { t: 'line', id: 'pa', x1: 232, y1: 125, x2: 328, y2: 125, arrow: true, text: 'D2 ≥ D1' },
       ],
+    },
+    {
+      caption: 'Now the oldest entry, a, is pruned from D2. {b:1} is no longer ≥ {a:1}, so D2 looks concurrent with D1: a false conflict.',
+      set: { p2: { text: '{b:1}', tone: 'red' }, pa: { tone: 'red', dashed: true, text: 'concurrent?' } },
       stop: {
         title: 'Pruning invents conflicts',
         edge: true,
@@ -347,7 +351,7 @@ export const hlc: FlowDef = {
     },
     {
       caption: 'A stamps an event `(100,0)` and sends it to B.',
-      add: [dot('a1', X.A, 92, undefined, 'red'), { t: 'msg', id: 'm1', from: 'A', to: 'B', y: 92, y2: 152, text: '(100,0)' }],
+      add: [dot('a1', X.A, 92, undefined, 'red'), { t: 'msg', id: 'm1', x1: X.A + 9, x2: X.B - 9, y: 94, y2: 150, text: '(100,0)' }],
     },
     {
       caption: 'B’s own clock reads 90, but the message says 100. B takes `l = max(90, 100) = 100` and bumps the counter: `(100,1)`.',
@@ -407,7 +411,7 @@ export const uncertainty: FlowDef = {
       stop: {
         title: 'Why do reads restart?',
         edge: true,
-        body: <p>Skew makes “later timestamp” ambiguous. CockroachDB raises <code>ReadWithinUncertaintyIntervalError</code> internally and retries above the value.</p>,
+        body: <p>Skew makes “later timestamp” ambiguous. The read hits <code>ReadWithinUncertaintyIntervalError</code>, and the transaction refreshes or restarts above the value.</p>,
       },
     },
     {
