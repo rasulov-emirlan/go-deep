@@ -3,7 +3,6 @@ import { Story } from '../../components/Story'
 import { NextTopic, TopicHero } from '../../components/TopicShell'
 import { TopQuestions } from '../../bank/TopQuestions'
 import syncQs from '../../bank/cats/sync.json'
-import { RaceLab } from './RaceLab'
 import { lostUpdate, mutexStory, toolbox, waitGroup } from './stories'
 import './sync.css'
 
@@ -25,19 +24,16 @@ export default function SyncPage() {
             sync & <span className="r">data races</span>
           </>
         }
-        lead="Why n++ loses updates, and which tool from sync or sync/atomic fixes each kind of sharing."
+        lead="Why goroutines lose updates on shared data, and which sync tool fixes each case."
         toc={toc}
       />
 
       <Section id="race" n="01" kicker="Data races" title="n++ is three steps">
-        <p className="prose">Two goroutines, one counter, no lock. Watch an increment vanish.</p>
         <Story title="The lost update" frames={lostUpdate} />
-        <RaceLab />
       </Section>
 
-      <Section id="mutex" n="02" kicker="sync.Mutex · RWMutex" title="One at a time, fairly">
-        <p className="prose">A mutex is one CAS when free. Contention is where the interesting parts are.</p>
-        <Story title="Inside Lock and Unlock" frames={mutexStory} />
+      <Section id="mutex" n="02" kicker="sync.Mutex · RWMutex" title="One at a time">
+        <Story title="Lock, wait, RLock" frames={mutexStory} />
       </Section>
 
       <Section id="wg" n="03" kicker="sync.WaitGroup" title="A counter main can wait on">
@@ -55,11 +51,11 @@ export default function SyncPage() {
             'sync-primitives-overview',
             'sync-data-race',
             'sync-race-condition-vs-data-race',
-            'sync-mutex-internals',
-            'sync-rwmutex-writer-starvation',
+            'sync-mutex-vs-rwmutex',
             'sync-waitgroup-by-value-puzzle',
             'sync-atomics-vs-mutex',
             'sync-map-when-to-use',
+            'sync-pool',
           ]}
         />
       </Section>

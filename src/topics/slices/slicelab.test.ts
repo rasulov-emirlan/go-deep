@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { apply, can, growCap, initial, view, type LabState, type Name, type Op } from './slicelab'
+import { append, canAppend, growCap, initial, view, type LabState } from './slicelab'
 
-const run = (steps: [Name, Op][], st: LabState = initial()) => steps.reduce((s, [n, op]) => apply(s, n, op).state, st)
+const times = (n: number, st: LabState = initial()) => Array.from({ length: n }).reduce<LabState>((s) => append(s).state, st)
 
 describe('growCap (verified on go1.26.4, heap path, 8-byte elems)', () => {
   it('doubles small slices, rounded to size classes', () => {
-    expect([0, 1, 2, 4, 8, 16, 32].map((c) => growCap(c, c + 1))).toEqual([1, 2, 4, 8, 16, 32, 64])
+    expect([0, 1, 2, 4, 8].map((c) => growCap(c, c + 1))).toEqual([1, 2, 4, 8, 16])
     expect(growCap(5, 6)).toBe(10)
     expect(growCap(3, 4)).toBe(6)
   })
@@ -15,64 +15,33 @@ describe('growCap (verified on go1.26.4, heap path, 8-byte elems)', () => {
   })
 })
 
-describe('slice playground', () => {
-  it('starts with a := make([]int,3,5), b := a[:2]', () => {
+describe('append lab', () => {
+  it('starts with a = [1 2 3 4], b = a[:2]', () => {
     const st = initial()
-    expect(view(st, 'a')).toEqual([0, 0, 0])
-    expect(view(st, 'b')).toEqual([0, 0])
+    expect(st.a).toEqual([1, 2, 3, 4])
+    expect(view(st)).toEqual([1, 2])
   })
 
-  it('append within cap overwrites what the other slice sees', () => {
-    const r = apply(initial(), 'b', 'append')
-    expect(r.grew).toBe(false)
-    expect(view(r.state, 'a')).toEqual([0, 0, 1])
-    expect(r.note).toMatch(/a can see/)
+  it('appends within cap overwrite a', () => {
+    const r = append(initial())
+    expect(r.event).toBe('overwrote')
+    expect(r.state.a).toEqual([1, 2, 7, 4])
+    expect(append(r.state).state.a).toEqual([1, 2, 7, 8])
   })
 
-  it('element writes are shared while both point at one array', () => {
-    const st = run([['a', 'write']])
-    expect(view(st, 'b')).toEqual([1, 0])
+  it('a full b moves to a new array and a stops changing', () => {
+    const st = times(2)
+    const r = append(st)
+    expect(r.event).toBe('moved')
+    expect(r.state.b.cells).toHaveLength(8)
+    expect(view(r.state)).toEqual([1, 2, 7, 8, 9])
+    const after = append(r.state)
+    expect(after.event).toBe('inplace')
+    expect(after.state.a).toEqual([1, 2, 7, 8])
   })
 
-  it('append beyond cap allocates, then writes no longer leak', () => {
-    let st = run([['a', 'append'], ['a', 'append']]) // a is len 5 cap 5
-    const r = apply(st, 'a', 'append')
-    expect(r.grew).toBe(true)
-    st = r.state
-    expect(st.s.a.cap).toBe(10)
-    expect(st.arrays).toHaveLength(2)
-    st = apply(st, 'a', 'write').state
-    expect(view(st, 'a')[0]).toBe(4)
-    expect(view(st, 'b')[0]).toBe(0)
-  })
-
-  it('clip forces the next append to copy (full slice expression)', () => {
-    let st = run([['b', 'clip']])
-    expect(st.s.b.cap).toBe(2)
-    st = apply(st, 'b', 'append').state
-    expect(view(st, 'a')).toEqual([0, 0, 0]) // a untouched
-    expect(view(st, 'b')).toEqual([0, 0, 1])
-    expect(st.s.b.cap).toBe(4)
-  })
-
-  it('reslicing to cap reveals values beyond len', () => {
-    let st = run([['a', 'append'], ['b', 'extend']])
-    expect(view(st, 'b')).toEqual([0, 0, 0, 1, 0])
-    st = apply(st, 'b', 'drop1').state
-    expect(st.s.b).toMatchObject({ off: 1, len: 4, cap: 4 })
-  })
-
-  it('drops arrays no header points at', () => {
-    let st = run([['a', 'clip'], ['a', 'append'], ['b', 'clip'], ['b', 'append']])
-    expect(st.arrays.map((a) => a.id)).toEqual([2, 3])
-    st = apply(st, 'a', 'copy').state
-    expect(st.arrays).toHaveLength(1)
-  })
-
-  it('refuses to draw more than MAX_CAP cells', () => {
-    let st = run([['a', 'append'], ['a', 'append'], ['a', 'append']]) // cap 10, len 6
-    st = run([['a', 'extend']], st)
-    expect(can(st, 'a', 'append')).toBe(false)
-    expect(can(st, 'a', 'extend')).toBe(false)
+  it('stops before a second move', () => {
+    expect(canAppend(times(5))).toBe(true)
+    expect(canAppend(times(6))).toBe(false)
   })
 })

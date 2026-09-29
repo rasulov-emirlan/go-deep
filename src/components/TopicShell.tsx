@@ -42,11 +42,3 @@ export function NextTopic({ slug }: { slug: string }) {
   )
 }
 
-export function Sources({ children }: { children: ReactNode }) {
-  return (
-    <div className="prose" style={{ fontSize: 13, color: 'var(--g500)', marginTop: '2rem' }}>
-      <span className="kicker">Sources</span>
-      {children}
-    </div>
-  )
-}

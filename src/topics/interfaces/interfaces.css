@@ -3,21 +3,17 @@
 .if-page .st-plabel { font-size: clamp(8px, 1.7cqw, 12px); }
 .if-mono { font: 600 1em var(--mono); }
 .if-big { font: 700 clamp(18px, 4.5cqw, 34px) var(--mono); }
+.if-page .st-prop:has(.st-plabel) .st-ptext { top: 1.1em; }
 
-.if-lab-row { display: flex; align-items: center; gap: .6rem; margin-bottom: .55rem; flex-wrap: wrap; }
-.if-lab-row .kicker { margin: 0; min-width: 3.6rem; }
+.if-try { margin: 0 0 .7rem; color: var(--g800); }
+.if-page .seg button { font-family: var(--mono); text-transform: none; }
 .if-lab-code { font: 600 .95rem var(--mono); background: var(--ink); color: var(--paper); padding: .6rem .8rem; margin: .9rem 0 .8rem; overflow-x: auto; }
 .if-words { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; border: 2px solid var(--ink); padding: .5rem; max-width: 26rem; }
 .if-word { border: 2px solid var(--ink); padding: .4rem .55rem; min-height: 4rem; display: flex; flex-direction: column; justify-content: space-between; }
 .if-word span { font: 500 .66rem var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--g500); }
-.if-word b { font: 700 1rem var(--mono); }
+.if-word b { font: 700 1.1rem var(--mono); }
 .if-word.empty { border-style: dashed; border-color: var(--g500); }
 .if-word.empty b { color: var(--g500); }
 .if-word.hot { border-color: var(--red); background: var(--red-soft); }
-.if-verdict { margin: .8rem 0 .2rem; font-size: 1.05rem; }
-.if-verdict b { font-family: var(--mono); }
-.if-verdict b.r { color: var(--red); }
-.if-note { margin: 0; color: var(--g800); font-size: .95rem; }
-.if-err { border-left: 4px solid var(--red); background: var(--red-soft); padding: .6rem .8rem; margin: 0; font: 500 .9rem var(--mono); }
-.if-err .kicker { display: block; margin-bottom: .2rem; }
-.if-page .st-prop:has(.st-plabel) .st-ptext { top: 1.1em; }
+.if-verdict { margin: .9rem 0 0; font: 700 1.5rem var(--mono); }
+.if-verdict.r { color: var(--red); }

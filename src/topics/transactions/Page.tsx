@@ -3,18 +3,21 @@ import { Story } from '../../components/Story'
 import { NextTopic, TopicHero } from '../../components/TopicShell'
 import { TopQuestions } from '../../bank/TopQuestions'
 import databases from '../../bank/cats/databases.json'
-import { IsoLab } from './IsoLab'
-import { acid, locks, mvcc, reads, writes } from './stories'
+import { acid, mvcc, reads, writes } from './stories'
 import './transactions.css'
 
 const toc = [
-  { id: 'acid', label: 'ACID' },
-  { id: 'mvcc', label: 'MVCC' },
-  { id: 'reads', label: 'Read anomalies' },
-  { id: 'writes', label: 'Write anomalies' },
-  { id: 'locks', label: 'Locks' },
-  { id: 'lab', label: 'Lab' },
+  { id: 'acid', label: 'All or nothing' },
+  { id: 'mvcc', label: 'Row versions' },
+  { id: 'reads', label: 'What you see' },
+  { id: 'writes', label: 'What you lose' },
   { id: 'asked', label: 'Asked' },
+]
+
+const levels: [string, string, string][] = [
+  ['Read Committed', 'happens', 'happens'],
+  ['Repeatable Read', 'error', 'happens'],
+  ['Serializable', 'error', 'error'],
 ]
 
 export default function TransactionsPage() {
@@ -27,51 +30,58 @@ export default function TransactionsPage() {
             Transactions &amp; <span className="r">isolation</span>
           </>
         }
-        lead="What PostgreSQL promises when two transactions touch the same rows, and what it makes you retry."
+        lead="What PostgreSQL promises when two transactions change the same data at once."
         toc={toc}
       />
 
-      <Section id="acid" n="01" kicker="ACID" title="One transfer, four promises">
-        <p className="prose">A transaction is a group of statements that commits or vanishes as one.</p>
-        <Story title="Moving 30 from Alice to Bob" frames={acid} />
+      <Section id="acid" n="01" kicker="ACID" title="All or nothing">
+        <Story title="Alice pays Bob 30" frames={acid} />
       </Section>
 
-      <Section id="mvcc" n="02" kicker="MVCC" title="Versions, not overwrites">
-        <p className="prose">PostgreSQL keeps several versions of a row so readers and writers don’t wait for each other. Dead versions are the price.</p>
-        <Story title="What an UPDATE really does" frames={mvcc} />
+      <Section id="mvcc" n="02" kicker="MVCC" title="Updates make new row versions">
+        <Story title="One UPDATE" frames={mvcc} />
       </Section>
 
-      <Section id="reads" n="03" kicker="Read anomalies" title="What you can see">
-        <p className="prose">Default level: Read Committed. Repeatable Read gives the whole transaction one snapshot.</p>
-        <Story title="Dirty, non-repeatable, phantom" frames={reads} />
+      <Section id="reads" n="03" kicker="Reads" title="What each level lets you see">
+        <Story title="Read it twice" frames={reads} />
       </Section>
 
-      <Section id="writes" n="04" kicker="Write anomalies" title="What you can lose">
-        <p className="prose">Snapshots don’t stop two transactions from each acting on stale reads. Higher levels turn the race into an error you retry.</p>
-        <Story title="Lost update and write skew" frames={writes} />
+      <Section id="writes" n="04" kicker="Writes" title="How updates get lost">
+        <Story title="Two writers" frames={writes} />
+        <table className="tx-table">
+          <thead>
+            <tr>
+              <th>Level</th>
+              <th>Lost update</th>
+              <th>Write skew</th>
+            </tr>
+          </thead>
+          <tbody>
+            {levels.map(([lv, ...cells]) => (
+              <tr key={lv}>
+                <th>{lv}</th>
+                {cells.map((c, i) => (
+                  <td key={i} className={c === 'happens' ? 'bad' : undefined}>
+                    {c}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </Section>
 
-      <Section id="locks" n="05" kicker="Row locks" title="Waiting on purpose">
-        <p className="prose">In Read Committed you prevent races yourself: lock the row, or make the write atomic.</p>
-        <Story title="FOR UPDATE, deadlocks, SKIP LOCKED" frames={locks} />
-      </Section>
-
-      <Section id="lab" n="06" kicker="Try it" title="Same race, three levels">
-        <IsoLab />
-      </Section>
-
-      <Section id="asked" n="07" kicker="Interview prep" title="Asked in real interviews">
+      <Section id="asked" n="05" kicker="Interview prep" title="Asked in real interviews">
         <TopQuestions
           from={[databases]}
           ids={[
             'databases-isolation-levels',
             'databases-acid-transactions',
             'databases-mvcc',
-            'databases-lost-update',
-            'databases-atomic-withdraw',
-            'databases-deadlocks',
             'databases-vacuum',
-            'databases-task-queue-skip-locked',
+            'databases-lost-update',
+            'databases-concurrent-writes-same-rows',
+            'databases-atomic-withdraw',
           ]}
         />
       </Section>

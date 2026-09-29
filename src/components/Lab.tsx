@@ -22,15 +22,6 @@ export function Stat({ label, value, hot }: { label: string; value: ReactNode; h
   )
 }
 
-export function Callout({ label = 'Note', red, children }: { label?: string; red?: boolean; children: ReactNode }) {
-  return (
-    <div className={'callout' + (red ? ' red' : '')}>
-      <span className={'kicker' + (red ? ' red' : '')}>{label}</span>
-      {children}
-    </div>
-  )
-}
-
 export function Section({ id, n, kicker, title, children }: { id: string; n: string; kicker: string; title: ReactNode; children: ReactNode }) {
   return (
     <section className="section" id={id}>
