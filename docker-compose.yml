@@ -1,0 +1,14 @@
+services:
+  godeep:
+    build: .
+    restart: unless-stopped
+    networks: [web]
+    labels:
+      - traefik.enable=true
+      - "traefik.http.routers.godeep.rule=Host(`godeep.night.enkiduck.com`)"
+      - traefik.http.routers.godeep.entrypoints=websecure
+      - traefik.http.routers.godeep.tls.certresolver=le
+      - traefik.http.services.godeep.loadbalancer.server.port=80
+networks:
+  web:
+    external: true
