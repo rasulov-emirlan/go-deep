@@ -28,3 +28,4 @@ playwright-report
 
 # topic ratings (written by the api container)
 data
+__pycache__/

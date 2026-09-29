@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { Code } from '../components/Code'
 import { buildSession, exportDeck, importDeck, isDue, mastered, record, resetDeck, useDeck, type Deck, type Grade } from '../lib/srs'
+import { Lesson } from './Lesson'
 import { Md } from './Md'
 import { QActions } from './QActions'
 import { allQuestions } from './data'
@@ -262,11 +263,7 @@ function Drill({ pool, deck, now, onDone }: { pool: Question[]; deck: Deck; now:
           <div className="qans">
             <span className="kicker red">Answer{q.verified ? ' · ' + checked(q) : ''}</span>
             <Md text={q.a} />
-            {catBy[q.cat]?.topic && (
-              <p>
-                <Link to={catBy[q.cat].topic!}>See it animated →</Link>
-              </p>
-            )}
+            <Lesson id={q.id} />
           </div>
           <div className="qgrade">
             <span className="kicker">How did you do?</span>
@@ -321,6 +318,7 @@ function Browse({ pool, deck, now }: { pool: Question[]; deck: Deck; now: number
                     <div className="qans">
                       <span className="kicker red">Answer{q.verified ? ' · ' + checked(q) : ''}</span>
                       <Md text={q.a} />
+                      <Lesson id={q.id} />
                     </div>
                     <div className="qgrade">
                       <button className="btn ghost sm" onClick={() => record(q.id, 1)}>

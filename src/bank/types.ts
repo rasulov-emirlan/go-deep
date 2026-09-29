@@ -15,21 +15,21 @@ export type Question = {
   verified?: boolean
 }
 
-export type Category = { slug: string; title: string; group: string; topic?: string }
+export type Category = { slug: string; title: string; group: string }
 
 export const categories: Category[] = [
   { slug: 'go-basics', title: 'Language basics', group: 'Go' },
   { slug: 'slices', title: 'Slices & arrays', group: 'Go' },
-  { slug: 'maps', title: 'Maps', group: 'Go', topic: '/maps' },
+  { slug: 'maps', title: 'Maps', group: 'Go' },
   { slug: 'interfaces', title: 'Interfaces', group: 'Go' },
   { slug: 'errors', title: 'Errors', group: 'Go' },
   { slug: 'generics', title: 'Generics', group: 'Go' },
-  { slug: 'goroutines-scheduler', title: 'Goroutines & scheduler', group: 'Concurrency', topic: '/scheduler' },
+  { slug: 'goroutines-scheduler', title: 'Goroutines & scheduler', group: 'Concurrency' },
   { slug: 'channels', title: 'Channels & select', group: 'Concurrency' },
   { slug: 'sync', title: 'sync, atomics, races', group: 'Concurrency' },
   { slug: 'context', title: 'context', group: 'Concurrency' },
   { slug: 'concurrency-patterns', title: 'Concurrency patterns', group: 'Concurrency' },
-  { slug: 'memory-gc', title: 'Memory & GC', group: 'Runtime', topic: '/gc' },
+  { slug: 'memory-gc', title: 'Memory & GC', group: 'Runtime' },
   { slug: 'tooling-testing', title: 'Tooling & testing', group: 'Engineering' },
   { slug: 'architecture', title: 'Architecture & patterns', group: 'Engineering' },
   { slug: 'devops', title: 'DevOps & observability', group: 'Engineering' },

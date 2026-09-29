@@ -1,0 +1,1273 @@
+{
+ "sections": {
+  "scheduler#model": [
+   "GMP scheduler",
+   "Many goroutines, few threads"
+  ],
+  "scheduler#steal": [
+   "GMP scheduler",
+   "Idle threads steal work"
+  ],
+  "scheduler#wait": [
+   "GMP scheduler",
+   "Waiting without wasting a thread"
+  ],
+  "scheduler#procs": [
+   "GMP scheduler",
+   "CPU limits in containers"
+  ],
+  "maps#lookup": [
+   "Maps & Swiss tables",
+   "How a map finds a key"
+  ],
+  "maps#grow": [
+   "Maps & Swiss tables",
+   "When a map fills up"
+  ],
+  "maps#order": [
+   "Maps & Swiss tables",
+   "Map order is random"
+  ],
+  "maps#danger": [
+   "Maps & Swiss tables",
+   "Nil maps and shared maps"
+  ],
+  "gc#escape": [
+   "Garbage collection",
+   "Stack or heap?"
+  ],
+  "gc#mark": [
+   "Garbage collection",
+   "Paint what’s reachable, free the rest"
+  ],
+  "gc#barrier": [
+   "Garbage collection",
+   "Why marking needs a write barrier"
+  ],
+  "gc#when": [
+   "Garbage collection",
+   "When does the GC run?"
+  ],
+  "memory-layout#order": [
+   "Padding & false sharing",
+   "Field order changes the size"
+  ],
+  "memory-layout#zero": [
+   "Padding & false sharing",
+   "Fields that take no bytes"
+  ],
+  "memory-layout#sharing": [
+   "Padding & false sharing",
+   "Two counters, one cache line"
+  ],
+  "memory-layout#fix": [
+   "Padding & false sharing",
+   "Give each counter its own line"
+  ],
+  "slices#header": [
+   "Slices & strings",
+   "Arrays are values, slices are views"
+  ],
+  "slices#append": [
+   "Slices & strings",
+   "append: in place or a new array"
+  ],
+  "slices#funcs": [
+   "Slices & strings",
+   "Passing a slice to a function"
+  ],
+  "slices#strings": [
+   "Slices & strings",
+   "Strings are read-only bytes"
+  ],
+  "interfaces#words": [
+   "Interfaces & nil",
+   "A box of two words"
+  ],
+  "interfaces#nil": [
+   "Interfaces & nil",
+   "A nil pointer in a box is not nil"
+  ],
+  "interfaces#embed": [
+   "Interfaces & nil",
+   "Embedding is not inheritance"
+  ],
+  "interfaces#errors": [
+   "Interfaces & nil",
+   "Errors are values"
+  ],
+  "defer#stack": [
+   "defer, panic & recover",
+   "Last in, first out"
+  ],
+  "defer#results": [
+   "defer, panic & recover",
+   "A defer can change the result"
+  ],
+  "defer#panic": [
+   "defer, panic & recover",
+   "Panic unwinds, recover catches"
+  ],
+  "defer#fatal": [
+   "defer, panic & recover",
+   "What recover can’t save"
+  ],
+  "generics#params": [
+   "Generics & GC shapes",
+   "One function, many types"
+  ],
+  "generics#versus": [
+   "Generics & GC shapes",
+   "Generics or interfaces?"
+  ],
+  "generics#shapes": [
+   "Generics & GC shapes",
+   "One copy per shape"
+  ],
+  "generics#limits": [
+   "Generics & GC shapes",
+   "What generics can’t do"
+  ],
+  "channels#handoff": [
+   "Channels & select",
+   "Handshake or mailbox"
+  ],
+  "channels#nil-closed": [
+   "Channels & select",
+   "nil and closed channels"
+  ],
+  "channels#select": [
+   "Channels & select",
+   "Wait on many, run one"
+  ],
+  "channels#deadlock": [
+   "Channels & select",
+   "Deadlock is loud, leaks are silent"
+  ],
+  "sync#race": [
+   "sync & data races",
+   "n++ is three steps"
+  ],
+  "sync#mutex": [
+   "sync & data races",
+   "One at a time"
+  ],
+  "sync#wg": [
+   "sync & data races",
+   "A counter main can wait on"
+  ],
+  "sync#tools": [
+   "sync & data races",
+   "The rest of the toolbox"
+  ],
+  "memory-model#unseen": [
+   "The Go memory model",
+   "Your write may never arrive"
+  ],
+  "memory-model#edges": [
+   "The Go memory model",
+   "Sync makes the only promise"
+  ],
+  "memory-model#torn": [
+   "The Go memory model",
+   "A race means no guarantees"
+  ],
+  "memory-model#simple": [
+   "The Go memory model",
+   "Use a channel or a mutex"
+  ],
+  "patterns#context": [
+   "context & concurrency patterns",
+   "Cancel flows down"
+  ],
+  "patterns#pool": [
+   "context & concurrency patterns",
+   "Worker pool"
+  ],
+  "patterns#fan": [
+   "context & concurrency patterns",
+   "Run many, but not too many"
+  ],
+  "patterns#shutdown": [
+   "context & concurrency patterns",
+   "Graceful shutdown"
+  ],
+  "indexes#find": [
+   "Indexes & query plans",
+   "How an index finds a row"
+  ],
+  "indexes#order": [
+   "Indexes & query plans",
+   "Column order matters"
+  ],
+  "indexes#ignored": [
+   "Indexes & query plans",
+   "Why is my index ignored?"
+  ],
+  "indexes#costs": [
+   "Indexes & query plans",
+   "What an index costs"
+  ],
+  "transactions#acid": [
+   "Transactions & isolation",
+   "All or nothing"
+  ],
+  "transactions#mvcc": [
+   "Transactions & isolation",
+   "Updates make new row versions"
+  ],
+  "transactions#reads": [
+   "Transactions & isolation",
+   "What each level lets you see"
+  ],
+  "transactions#writes": [
+   "Transactions & isolation",
+   "How updates get lost"
+  ],
+  "mongo-vs-postgres#model": [
+   "Postgres vs MongoDB",
+   "Rows or documents"
+  ],
+  "mongo-vs-postgres#schema": [
+   "Postgres vs MongoDB",
+   "Strict, flexible, or both"
+  ],
+  "mongo-vs-postgres#writes": [
+   "Postgres vs MongoDB",
+   "Safe writes and copies"
+  ],
+  "mongo-vs-postgres#scale": [
+   "Postgres vs MongoDB",
+   "Growing past one machine"
+  ],
+  "kafka#log": [
+   "Kafka & delivery guarantees",
+   "The key picks the partition"
+  ],
+  "kafka#groups": [
+   "Kafka & delivery guarantees",
+   "One reader per partition"
+  ],
+  "kafka#commit": [
+   "Kafka & delivery guarantees",
+   "Lost or processed twice"
+  ],
+  "kafka#outbox": [
+   "Kafka & delivery guarantees",
+   "Save and publish together"
+  ],
+  "queues#log": [
+   "Kafka vs SQS vs Pub/Sub",
+   "Keep it, or delete it"
+  ],
+  "queues#sqs": [
+   "Kafka vs SQS vs Pub/Sub",
+   "SQS: hide it, then delete it"
+  ],
+  "queues#pubsub": [
+   "Kafka vs SQS vs Pub/Sub",
+   "Pub/Sub: a copy per subscription"
+  ],
+  "queues#choose": [
+   "Kafka vs SQS vs Pub/Sub",
+   "How to choose"
+  ],
+  "http#url": [
+   "HTTP, TLS & gRPC",
+   "From URL to response"
+  ],
+  "http#anatomy": [
+   "HTTP, TLS & gRPC",
+   "Which requests are safe to retry"
+  ],
+  "http#pool": [
+   "HTTP, TLS & gRPC",
+   "Reusing connections in Go"
+  ],
+  "http#versions": [
+   "HTTP, TLS & gRPC",
+   "One slow thing blocks the rest"
+  ],
+  "scaling#cache": [
+   "Scaling & resilience",
+   "Keep hot data close"
+  ],
+  "scaling#retries": [
+   "Scaling & resilience",
+   "Retry gently, then stop"
+  ],
+  "scaling#pool": [
+   "Scaling & resilience",
+   "Waiting for a connection"
+  ],
+  "scaling#replicas": [
+   "Scaling & resilience",
+   "Copy the data, then split it"
+  ],
+  "profiling#cpu": [
+   "Profiling & observability",
+   "Where does the CPU go?"
+  ],
+  "profiling#memory": [
+   "Profiling & observability",
+   "Finding a memory leak"
+  ],
+  "profiling#metrics": [
+   "Profiling & observability",
+   "What to measure"
+  ],
+  "profiling#traces": [
+   "Profiling & observability",
+   "Follow one request"
+  ]
+ },
+ "links": {
+  "algorithms-b-tree": [
+   "indexes#find"
+  ],
+  "algorithms-dynamic-array": [
+   "slices#append"
+  ],
+  "algorithms-hash-collisions-hash-function": [
+   "maps#lookup",
+   "maps#grow"
+  ],
+  "algorithms-hash-table": [
+   "maps#lookup"
+  ],
+  "algorithms-palindrome-sentence": [
+   "slices#strings"
+  ],
+  "algorithms-strings-appearing-more-than-once": [
+   "maps#order"
+  ],
+  "architecture-cache-invalidation": [
+   "scaling#cache"
+  ],
+  "architecture-cache-stampede": [
+   "scaling#cache"
+  ],
+  "architecture-caching-basics": [
+   "scaling#cache"
+  ],
+  "architecture-caching-strategies": [
+   "scaling#cache"
+  ],
+  "architecture-cap-theorem": [
+   "scaling#replicas"
+  ],
+  "architecture-circuit-breaker": [
+   "scaling#retries"
+  ],
+  "architecture-error-logging-layer": [
+   "interfaces#errors"
+  ],
+  "architecture-eventual-consistency": [
+   "scaling#replicas"
+  ],
+  "architecture-fault-tolerance-patterns": [
+   "scaling#retries"
+  ],
+  "architecture-gateway-caching-design": [
+   "scaling#cache"
+  ],
+  "architecture-idempotency": [
+   "http#anatomy"
+  ],
+  "architecture-idempotency-keys-payments": [
+   "http#anatomy"
+  ],
+  "architecture-monolith-migration": [
+   "kafka#outbox"
+  ],
+  "architecture-payment-timeout-reconciliation": [
+   "http#anatomy"
+  ],
+  "architecture-review-currency-updater": [
+   "defer#stack",
+   "http#pool"
+  ],
+  "architecture-review-visits-handler": [
+   "scaling#pool"
+  ],
+  "channels-buffered-vs-unbuffered": [
+   "channels#handoff"
+  ],
+  "channels-check-closed": [
+   "channels#nil-closed"
+  ],
+  "channels-comma-ok-receive": [
+   "channels#nil-closed"
+  ],
+  "channels-deadlock": [
+   "channels#deadlock"
+  ],
+  "channels-first-closed-of-many": [
+   "channels#select",
+   "channels#nil-closed"
+  ],
+  "channels-foobar-single-channel": [
+   "channels#handoff"
+  ],
+  "channels-hchan-internals": [
+   "channels#handoff"
+  ],
+  "channels-nil-closed-behavior": [
+   "channels#nil-closed"
+  ],
+  "channels-non-blocking-select": [
+   "channels#select"
+  ],
+  "channels-price-writer-bugs": [
+   "channels#deadlock",
+   "sync#wg"
+  ],
+  "channels-range-never-closed-sum": [
+   "channels#nil-closed"
+  ],
+  "channels-range-requires-close": [
+   "channels#nil-closed",
+   "channels#deadlock"
+  ],
+  "channels-read-after-close-buffered": [
+   "channels#nil-closed",
+   "channels#select"
+  ],
+  "channels-select": [
+   "channels#select"
+  ],
+  "channels-select-closed-send-panic": [
+   "channels#select",
+   "channels#nil-closed"
+  ],
+  "channels-select-default-drops": [
+   "channels#select",
+   "channels#handoff"
+  ],
+  "channels-select-send-receive-alternate": [
+   "channels#select",
+   "channels#handoff"
+  ],
+  "channels-sum-of-squares-quit": [
+   "channels#select"
+  ],
+  "channels-sum-two-channels": [
+   "channels#select",
+   "channels#nil-closed"
+  ],
+  "channels-unbuffered-send-deadlock": [
+   "channels#deadlock",
+   "channels#handoff"
+  ],
+  "channels-url-workers-fan-out": [
+   "patterns#pool",
+   "patterns#fan"
+  ],
+  "channels-vs-mutex": [
+   "memory-model#simple"
+  ],
+  "channels-what-and-kinds": [
+   "channels#handoff"
+  ],
+  "channels-who-closes": [
+   "channels#nil-closed"
+  ],
+  "concurrency-patterns-async-sequential-logger": [
+   "channels#nil-closed"
+  ],
+  "concurrency-patterns-basket-double-checkout": [
+   "transactions#writes",
+   "kafka#outbox"
+  ],
+  "concurrency-patterns-bounded-parallel-fetch-ordered": [
+   "patterns#fan"
+  ],
+  "concurrency-patterns-errgroup": [
+   "patterns#fan"
+  ],
+  "concurrency-patterns-fan-in": [
+   "patterns#pool",
+   "patterns#fan"
+  ],
+  "concurrency-patterns-fast-and-slow-dependency": [
+   "patterns#fan",
+   "scaling#retries"
+  ],
+  "concurrency-patterns-gather-from-many-services": [
+   "patterns#fan"
+  ],
+  "concurrency-patterns-graceful-shutdown": [
+   "patterns#shutdown"
+  ],
+  "concurrency-patterns-job-processor-review": [
+   "patterns#pool",
+   "channels#nil-closed"
+  ],
+  "concurrency-patterns-multisearch-first-success": [
+   "channels#deadlock",
+   "patterns#context"
+  ],
+  "concurrency-patterns-semaphore": [
+   "patterns#fan"
+  ],
+  "concurrency-patterns-semaphore-vs-worker-pool": [
+   "patterns#fan",
+   "patterns#pool"
+  ],
+  "concurrency-patterns-stop-goroutines-externally": [
+   "patterns#context"
+  ],
+  "concurrency-patterns-stream-slow-calls": [
+   "patterns#pool"
+  ],
+  "concurrency-patterns-stuck-pending-task": [
+   "queues#sqs"
+  ],
+  "concurrency-patterns-thread-safe-cache": [
+   "sync#mutex"
+  ],
+  "concurrency-patterns-timeouts-retries-backoff": [
+   "scaling#retries",
+   "patterns#context"
+  ],
+  "concurrency-patterns-url-checker": [
+   "patterns#pool",
+   "channels#handoff"
+  ],
+  "concurrency-patterns-user-service-review": [
+   "sync#race"
+  ],
+  "concurrency-patterns-worker-count-sizing": [
+   "patterns#pool"
+  ],
+  "context-context-basics": [
+   "patterns#context"
+  ],
+  "context-passing-through-layers": [
+   "patterns#context"
+  ],
+  "context-timeout-wrapper": [
+   "channels#deadlock",
+   "patterns#context"
+  ],
+  "context-usage-example": [
+   "patterns#context"
+  ],
+  "databases-acid-transactions": [
+   "transactions#acid",
+   "transactions#mvcc"
+  ],
+  "databases-atomic-withdraw": [
+   "transactions#writes"
+  ],
+  "databases-btree-internals": [
+   "indexes#find"
+  ],
+  "databases-bulk-update-large-table": [
+   "transactions#mvcc"
+  ],
+  "databases-code-review-transfer": [
+   "transactions#writes",
+   "kafka#outbox"
+  ],
+  "databases-composite-index-leftmost-prefix": [
+   "indexes#order"
+  ],
+  "databases-concurrent-writes-same-rows": [
+   "transactions#writes"
+  ],
+  "databases-connection-pooler": [
+   "scaling#pool"
+  ],
+  "databases-distributed-transactions-nosql": [
+   "kafka#outbox",
+   "kafka#commit"
+  ],
+  "databases-explain-analyze": [
+   "indexes#ignored"
+  ],
+  "databases-hash-index": [
+   "indexes#costs"
+  ],
+  "databases-index-downsides": [
+   "indexes#costs"
+  ],
+  "databases-index-gender-age": [
+   "indexes#order",
+   "indexes#ignored"
+  ],
+  "databases-index-not-used": [
+   "indexes#ignored"
+  ],
+  "databases-index-range-equality-order-by": [
+   "indexes#order"
+  ],
+  "databases-index-types": [
+   "indexes#costs"
+  ],
+  "databases-index-what-why": [
+   "indexes#find"
+  ],
+  "databases-index-when-to-add": [
+   "indexes#ignored",
+   "indexes#costs"
+  ],
+  "databases-isolation-levels": [
+   "transactions#reads",
+   "transactions#writes"
+  ],
+  "databases-isolation-limit-count": [
+   "transactions#reads"
+  ],
+  "databases-jsonb": [
+   "mongo-vs-postgres#schema"
+  ],
+  "databases-keyset-pagination": [
+   "indexes#costs"
+  ],
+  "databases-lost-update": [
+   "transactions#writes"
+  ],
+  "databases-masters-replicas-count": [
+   "scaling#replicas"
+  ],
+  "databases-mvcc": [
+   "transactions#mvcc"
+  ],
+  "databases-normalization-vs-denormalization": [
+   "mongo-vs-postgres#model"
+  ],
+  "databases-postgres-vs-mongodb": [
+   "mongo-vs-postgres#model",
+   "mongo-vs-postgres#writes"
+  ],
+  "databases-process-million-rows": [
+   "indexes#costs",
+   "patterns#pool"
+  ],
+  "databases-redis-cache-commands": [
+   "scaling#cache"
+  ],
+  "databases-redis-ttl-eviction": [
+   "scaling#cache"
+  ],
+  "databases-reduce-read-load": [
+   "scaling#cache",
+   "scaling#replicas"
+  ],
+  "databases-replication-types": [
+   "scaling#replicas",
+   "mongo-vs-postgres#writes"
+  ],
+  "databases-scaling": [
+   "scaling#replicas",
+   "scaling#cache"
+  ],
+  "databases-sharding-basics": [
+   "scaling#replicas",
+   "mongo-vs-postgres#scale"
+  ],
+  "databases-sharding-experience": [
+   "mongo-vs-postgres#scale"
+  ],
+  "databases-sharding-key": [
+   "mongo-vs-postgres#scale"
+  ],
+  "databases-sharding-problems": [
+   "mongo-vs-postgres#scale"
+  ],
+  "databases-sharding-vs-replication": [
+   "scaling#replicas"
+  ],
+  "databases-slow-query-troubleshooting": [
+   "indexes#ignored",
+   "indexes#find"
+  ],
+  "databases-sql-vs-nosql": [
+   "mongo-vs-postgres#model",
+   "mongo-vs-postgres#schema"
+  ],
+  "databases-task-queue-skip-locked": [
+   "kafka#outbox",
+   "queues#sqs"
+  ],
+  "databases-vacuum": [
+   "transactions#mvcc"
+  ],
+  "databases-wal": [
+   "transactions#acid"
+  ],
+  "databases-write-heavy-scaling": [
+   "indexes#costs",
+   "scaling#replicas"
+  ],
+  "devops-behavioral-failure-handling": [
+   "scaling#retries"
+  ],
+  "devops-cooperative-vs-preemptive-multitasking": [
+   "scheduler#model"
+  ],
+  "devops-cpu-over-100-percent": [
+   "scheduler#procs"
+  ],
+  "devops-distributed-tracing": [
+   "profiling#traces"
+  ],
+  "devops-epoll": [
+   "scheduler#wait"
+  ],
+  "devops-latency-regression-investigation": [
+   "profiling#metrics",
+   "profiling#traces"
+  ],
+  "devops-linux-kill-process": [
+   "patterns#shutdown"
+  ],
+  "devops-monitoring-and-logging": [
+   "profiling#metrics",
+   "profiling#traces"
+  ],
+  "devops-observability-overview": [
+   "profiling#traces",
+   "profiling#metrics"
+  ],
+  "devops-os-sync-primitives": [
+   "sync#mutex"
+  ],
+  "devops-prometheus-metric-types": [
+   "profiling#metrics"
+  ],
+  "devops-service-metrics-red-use": [
+   "profiling#metrics"
+  ],
+  "errors-custom-errors": [
+   "interfaces#errors"
+  ],
+  "errors-error-handling-basics": [
+   "interfaces#errors",
+   "interfaces#nil"
+  ],
+  "errors-wrapping": [
+   "interfaces#errors"
+  ],
+  "generics-generics-vs-any": [
+   "generics#versus",
+   "generics#params"
+  ],
+  "generics-map-function": [
+   "generics#params"
+  ],
+  "go-basics-defer-argument-evaluation": [
+   "defer#stack"
+  ],
+  "go-basics-defer-basics": [
+   "defer#stack",
+   "defer#panic"
+  ],
+  "go-basics-defer-named-result-and-args": [
+   "defer#results",
+   "defer#stack"
+  ],
+  "go-basics-defer-named-results": [
+   "defer#results"
+  ],
+  "go-basics-gc-and-strict-sla": [
+   "gc#when",
+   "scheduler#procs"
+  ],
+  "go-basics-len-cyrillic-string": [
+   "slices#strings"
+  ],
+  "go-basics-panic-in-goroutine": [
+   "defer#fatal"
+  ],
+  "go-basics-panic-recover": [
+   "defer#panic",
+   "defer#fatal"
+  ],
+  "go-basics-pass-by-value": [
+   "slices#funcs"
+  ],
+  "go-basics-pointer-vs-value": [
+   "gc#escape"
+  ],
+  "go-basics-range-string-counter": [
+   "slices#strings"
+  ],
+  "go-basics-reverse-string": [
+   "slices#strings"
+  ],
+  "go-basics-rune": [
+   "slices#strings"
+  ],
+  "go-basics-sizeof-types": [
+   "memory-layout#order"
+  ],
+  "go-basics-string-concatenation": [
+   "slices#strings"
+  ],
+  "go-basics-string-immutability": [
+   "slices#strings"
+  ],
+  "go-basics-string-length-runes": [
+   "slices#strings"
+  ],
+  "go-basics-strings-internals": [
+   "slices#strings"
+  ],
+  "go-basics-struct-field-order-size": [
+   "memory-layout#order"
+  ],
+  "goroutines-scheduler-busy-loops-gomaxprocs-1": [
+   "scheduler#model"
+  ],
+  "goroutines-scheduler-gmp-model": [
+   "scheduler#model",
+   "scheduler#steal"
+  ],
+  "goroutines-scheduler-gomaxprocs": [
+   "scheduler#model",
+   "scheduler#procs"
+  ],
+  "goroutines-scheduler-gomaxprocs-1-threads": [
+   "scheduler#wait",
+   "scheduler#model"
+  ],
+  "goroutines-scheduler-gomaxprocs-kubernetes": [
+   "scheduler#procs"
+  ],
+  "goroutines-scheduler-goroutine-leaks": [
+   "channels#deadlock",
+   "profiling#memory"
+  ],
+  "goroutines-scheduler-goroutine-vs-thread": [
+   "scheduler#model"
+  ],
+  "goroutines-scheduler-loop-closure-no-wait": [
+   "sync#wg"
+  ],
+  "goroutines-scheduler-max-goroutines": [
+   "scheduler#wait"
+  ],
+  "goroutines-scheduler-netpoller": [
+   "scheduler#wait"
+  ],
+  "goroutines-scheduler-preemption": [
+   "scheduler#model"
+  ],
+  "goroutines-scheduler-recover-goroutine-panic-fix": [
+   "defer#fatal"
+  ],
+  "goroutines-scheduler-recover-in-goroutine-output": [
+   "defer#fatal"
+  ],
+  "goroutines-scheduler-run-queues-work-stealing": [
+   "scheduler#steal"
+  ],
+  "goroutines-scheduler-spawn-10000-sleepers": [
+   "sync#wg"
+  ],
+  "goroutines-scheduler-syscalls-handoff": [
+   "scheduler#wait"
+  ],
+  "interfaces-comparison-and-map-keys": [
+   "interfaces#words"
+  ],
+  "interfaces-embedding-and-inheritance": [
+   "interfaces#embed"
+  ],
+  "interfaces-empty-interface-any": [
+   "interfaces#words",
+   "generics#versus"
+  ],
+  "interfaces-empty-struct-vs-empty-interface": [
+   "memory-layout#zero",
+   "interfaces#words"
+  ],
+  "interfaces-internals": [
+   "interfaces#words"
+  ],
+  "interfaces-nil-byte-pointer-print": [
+   "interfaces#nil"
+  ],
+  "interfaces-nil-interface-comparison": [
+   "interfaces#nil"
+  ],
+  "interfaces-nil-pointer-in-empty-interface": [
+   "interfaces#nil"
+  ],
+  "interfaces-oop-in-go": [
+   "interfaces#embed"
+  ],
+  "interfaces-reassign-interface-param": [
+   "interfaces#nil"
+  ],
+  "interfaces-reflect-isnil-any": [
+   "interfaces#nil"
+  ],
+  "interfaces-type-switch-and-assertion": [
+   "interfaces#words"
+  ],
+  "interfaces-typed-nil-check-error": [
+   "interfaces#nil"
+  ],
+  "interfaces-typed-nil-error-handler": [
+   "interfaces#nil"
+  ],
+  "interfaces-value-vs-pointer-in-interface": [
+   "interfaces#words"
+  ],
+  "maps-collisions": [
+   "maps#lookup"
+  ],
+  "maps-complexity": [
+   "maps#lookup"
+  ],
+  "maps-concurrent-access": [
+   "maps#danger",
+   "sync#tools"
+  ],
+  "maps-delete-memory": [
+   "maps#grow"
+  ],
+  "maps-fmt-print-sorted": [
+   "maps#order"
+  ],
+  "maps-growth-evacuation": [
+   "maps#grow"
+  ],
+  "maps-internals": [
+   "maps#lookup",
+   "maps#grow"
+  ],
+  "maps-iteration-order": [
+   "maps#order"
+  ],
+  "maps-key-lookup-steps": [
+   "maps#lookup"
+  ],
+  "maps-make-and-buckets": [
+   "maps#grow"
+  ],
+  "maps-nil-map": [
+   "maps#danger"
+  ],
+  "maps-swiss-tables": [
+   "maps#lookup"
+  ],
+  "maps-value-not-addressable": [
+   "maps#grow"
+  ],
+  "memory-gc-escape-analysis": [
+   "gc#escape"
+  ],
+  "memory-gc-how-gc-works": [
+   "gc#mark",
+   "gc#barrier"
+  ],
+  "memory-gc-leak-diagnosis": [
+   "profiling#memory",
+   "channels#deadlock"
+  ],
+  "memory-gc-map-growth-old-memory": [
+   "maps#grow"
+  ],
+  "memory-gc-oom-behavior": [
+   "gc#when"
+  ],
+  "memory-gc-reduce-gc-pressure": [
+   "gc#when",
+   "gc#escape"
+  ],
+  "memory-gc-stack-vs-heap": [
+   "gc#escape"
+  ],
+  "memory-gc-struct-alignment": [
+   "memory-layout#order"
+  ],
+  "messaging-basket-handler-code-review": [
+   "kafka#outbox",
+   "transactions#writes"
+  ],
+  "messaging-choosing-a-broker": [
+   "queues#choose",
+   "queues#sqs"
+  ],
+  "messaging-consumer-batching-scheme": [
+   "kafka#commit"
+  ],
+  "messaging-delivery-guarantees-exactly-once": [
+   "kafka#commit"
+  ],
+  "messaging-idempotent-consumer-dedup": [
+   "kafka#commit",
+   "http#anatomy"
+  ],
+  "messaging-inmemory-broker": [
+   "channels#nil-closed"
+  ],
+  "messaging-kafka-consumer-lag": [
+   "kafka#groups"
+  ],
+  "messaging-kafka-consumers-vs-partitions": [
+   "kafka#groups"
+  ],
+  "messaging-kafka-core-entities": [
+   "kafka#log",
+   "kafka#groups"
+  ],
+  "messaging-kafka-partitioning": [
+   "kafka#log"
+  ],
+  "messaging-kafka-retention-unconsumed": [
+   "queues#log"
+  ],
+  "messaging-kafka-vs-rabbitmq": [
+   "queues#log"
+  ],
+  "messaging-message-brokers": [
+   "queues#log"
+  ],
+  "messaging-order-analytics-async-redesign": [
+   "kafka#outbox"
+  ],
+  "messaging-outbox-relay-concurrency": [
+   "kafka#outbox"
+  ],
+  "messaging-poison-message-handling": [
+   "queues#sqs"
+  ],
+  "messaging-pub-sub": [
+   "queues#pubsub"
+  ],
+  "messaging-transactional-outbox": [
+   "kafka#outbox"
+  ],
+  "networking-grpc-basics": [
+   "http#versions"
+  ],
+  "networking-http-handler-proxy-filter": [
+   "http#pool",
+   "patterns#context"
+  ],
+  "networking-http-message-structure": [
+   "http#anatomy"
+  ],
+  "networking-http-methods-idempotency": [
+   "http#anatomy"
+  ],
+  "networking-http-server-internals-go": [
+   "scheduler#wait"
+  ],
+  "networking-http-status-codes": [
+   "http#anatomy"
+  ],
+  "networking-http-timeouts": [
+   "http#pool",
+   "scaling#retries"
+  ],
+  "networking-http-transport-config": [
+   "http#pool"
+  ],
+  "networking-http-versions": [
+   "http#versions"
+  ],
+  "networking-keep-alive": [
+   "http#pool"
+  ],
+  "networking-tcp-vs-udp": [
+   "http#versions"
+  ],
+  "networking-url-to-response-flow": [
+   "http#url"
+  ],
+  "networking-websocket-concurrent-writes-race": [
+   "sync#mutex"
+  ],
+  "slices-append-growth": [
+   "slices#append"
+  ],
+  "slices-append-in-func-spare-capacity": [
+   "slices#funcs"
+  ],
+  "slices-append-pitfalls": [
+   "slices#append",
+   "slices#funcs"
+  ],
+  "slices-append-pointer-elements": [
+   "slices#funcs"
+  ],
+  "slices-append-shared-backing-two-appends": [
+   "slices#append"
+  ],
+  "slices-append-subslice-overwrites-parent": [
+   "slices#append",
+   "slices#header"
+  ],
+  "slices-append-subslice-primes": [
+   "slices#append",
+   "slices#header"
+  ],
+  "slices-defer-mutates-returned-slice": [
+   "slices#append",
+   "defer#results"
+  ],
+  "slices-fill-then-sort-shared": [
+   "slices#funcs"
+  ],
+  "slices-mutate-element-in-func": [
+   "slices#funcs"
+  ],
+  "slices-nil-vs-empty": [
+   "slices#header"
+  ],
+  "slices-pass-to-function": [
+   "slices#funcs"
+  ],
+  "slices-pointer-vs-value-param": [
+   "slices#funcs"
+  ],
+  "slices-preallocate": [
+   "slices#append"
+  ],
+  "slices-subslice-append-capacity": [
+   "slices#append",
+   "slices#header"
+  ],
+  "slices-thread-safety": [
+   "sync#race"
+  ],
+  "slices-vs-arrays": [
+   "slices#header"
+  ],
+  "slices-what-is-slice": [
+   "slices#header"
+  ],
+  "sync-account-transfer-race": [
+   "sync#race"
+  ],
+  "sync-atomics-vs-mutex": [
+   "sync#tools"
+  ],
+  "sync-concurrency-problems-deadlock": [
+   "sync#race",
+   "channels#deadlock"
+  ],
+  "sync-concurrent-map-slice-writes": [
+   "maps#danger"
+  ],
+  "sync-custom-waitgroup-rwmutex": [
+   "sync#wg"
+  ],
+  "sync-data-race": [
+   "sync#race",
+   "memory-model#torn"
+  ],
+  "sync-delay-cancel-race": [
+   "memory-model#unseen",
+   "memory-model#edges"
+  ],
+  "sync-map-when-to-use": [
+   "sync#tools"
+  ],
+  "sync-mutex-basics": [
+   "sync#mutex"
+  ],
+  "sync-mutex-internals": [
+   "sync#mutex"
+  ],
+  "sync-mutex-vs-rwmutex": [
+   "sync#mutex"
+  ],
+  "sync-once-use-cases": [
+   "sync#tools"
+  ],
+  "sync-pool": [
+   "sync#tools"
+  ],
+  "sync-primitives-overview": [
+   "sync#tools",
+   "memory-model#edges"
+  ],
+  "sync-process-incoming-data-review": [
+   "sync#wg",
+   "maps#danger"
+  ],
+  "sync-race-condition-vs-data-race": [
+   "sync#race"
+  ],
+  "sync-rwmutex-writer-starvation": [
+   "sync#mutex"
+  ],
+  "sync-singleton-without-once": [
+   "memory-model#edges"
+  ],
+  "sync-struct-fields-race": [
+   "sync#race",
+   "memory-layout#sharing"
+  ],
+  "sync-thread-safe-singleton": [
+   "sync#tools"
+  ],
+  "sync-unsynchronized-counter": [
+   "sync#race",
+   "sync#wg"
+  ],
+  "sync-waitgroup-by-value-puzzle": [
+   "sync#wg"
+  ],
+  "sync-waitgroup-how-it-works": [
+   "sync#wg"
+  ],
+  "sync-waitgroup-pass-by-value": [
+   "sync#wg"
+  ],
+  "system-design-airline-tickets": [
+   "transactions#writes"
+  ],
+  "system-design-bank-transfers": [
+   "transactions#acid",
+   "transactions#writes"
+  ],
+  "system-design-cross-cluster-document-transfer": [
+   "kafka#log"
+  ],
+  "system-design-data-aggregation-service": [
+   "patterns#pool",
+   "patterns#shutdown"
+  ],
+  "system-design-distributed-cache-challenges": [
+   "scaling#cache"
+  ],
+  "system-design-exchange-rate-proxy": [
+   "scaling#cache"
+  ],
+  "system-design-scale-monolith-single-server": [
+   "scaling#replicas"
+  ],
+  "system-design-survive-until-more-cpu": [
+   "scaling#retries",
+   "scheduler#procs"
+  ],
+  "system-design-telemetry-ingestion": [
+   "kafka#log"
+  ],
+  "system-design-travel-orders-list": [
+   "patterns#fan"
+  ],
+  "tooling-testing-go-version-whats-new": [
+   "scheduler#procs"
+  ],
+  "tooling-testing-profiling-in-production": [
+   "profiling#cpu"
+  ],
+  "tooling-testing-profiling-pprof": [
+   "profiling#cpu",
+   "profiling#memory"
+  ],
+  "tooling-testing-race-detector": [
+   "memory-model#edges",
+   "sync#race"
+  ]
+ }
+}
