@@ -37,13 +37,13 @@ export function RingLab() {
           />
         </>
       }
-      foot="Points per node, then the change. Bars are keys per node after the change; the dashed line is a fair share."
+      foot="Points per node, then the change. Bars: keys per node after it. Dashed line: a fair share. Busiest node is shown as a multiple of that."
     >
       <div className="sharding-lab">
         <div className="sharding-stats">
           <Stat label="Ring moved" value={pct(r.movedPct)} />
           <Stat label="hash mod N would move" value={pct(r.modPct)} hot />
-          <Stat label="Busiest node" value={`${r.maxOverMean.toFixed(2)}× fair`} hot={r.maxOverMean > 1.3} />
+          <Stat label="Busiest node" value={`${r.maxOverMean.toFixed(2)}×`} hot={r.maxOverMean > 1.3} />
         </div>
         <div className="sharding-bars" role="img" aria-label="keys per node after the change">
           <span className="sharding-fair" style={{ bottom: `${(1 / top) * 100}%` }} />

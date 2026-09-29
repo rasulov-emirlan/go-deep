@@ -193,15 +193,15 @@ export const netpollFile: FlowDef = {
 
 /* ---------- 03 · write() is a promise to the page cache ---------- */
 export const writeCache: FlowDef = {
-  h: 470,
+  h: 490,
   steps: [
     {
       caption: '`write()` copies the bytes into a page of the page cache (spare RAM used for files) and marks it dirty. The disk has not been touched.',
       add: [
-        lane('app', 'App', 70, 435),
-        lane('pc', 'Page cache', 205, 435),
-        lane('dc', 'Disk cache', 345, 435),
-        lane('md', 'Flash/platter', 485, 435),
+        lane('app', 'App', 70, 455),
+        lane('pc', 'Page cache', 205, 455),
+        lane('dc', 'Disk cache', 345, 455),
+        lane('md', 'Flash/platter', 485, 455),
         msg('w1', 'app', 'pc', 72, 'write(4 KB)'),
         { t: 'box', id: 'dirty', x: 150, y: 96, w: 110, h: 30, text: 'page: dirty', tone: 'red' },
       ],
@@ -227,15 +227,15 @@ export const writeCache: FlowDef = {
     {
       caption: 'So the kernel also sends a flush command. The disk writes its cache out to flash or platter and only then acknowledges.',
       add: [
-        msg('w5', 'pc', 'dc', 300, 'FLUSH cache', { y2: 310 }),
-        msg('w6', 'dc', 'md', 335, 'persist', { y2: 360 }),
-        { t: 'box', id: 'dur', x: 440, y: 368, w: 90, h: 30, text: 'durable' },
+        msg('w5', 'pc', 'dc', 322, 'FLUSH cache', { y2: 332 }),
+        msg('w6', 'dc', 'md', 358, 'persist', { y2: 383 }),
+        { t: 'box', id: 'dur', x: 440, y: 391, w: 90, h: 30, text: 'durable' },
       ],
       set: { inc: { tone: 'grey' } },
     },
     {
       caption: 'Only then does `fsync` return. On this VM, 200 appends of 4 KiB took 91 ms with `fsync` and 15 ms without: about 6x.',
-      add: [msg('w7', 'dc', 'pc', 410, 'done'), msg('w8', 'pc', 'app', 436, 'fsync = 0', { tone: 'red' })],
+      add: [msg('w7', 'dc', 'pc', 434, 'done'), msg('w8', 'pc', 'app', 460, 'fsync = 0', { tone: 'red' })],
       stop: {
         title: 'When fsync lies',
         edge: true,
@@ -247,7 +247,7 @@ export const writeCache: FlowDef = {
 
 /* ---------- 03 · three waiting rooms, and what fsync misses ---------- */
 export const layers: FlowDef = {
-  h: 270,
+  h: 245,
   steps: [
     {
       caption: 'Three waiting rooms for your bytes. `bufio.Writer.Flush` moves them to the kernel only. Forget it and the buffered tail is lost on exit.',
@@ -308,6 +308,8 @@ export const zeroCopy: FlowDef = {
         down('a2', gap.p + col.h, gap.u, { tone: 'red' }),
         down('a3', gap.u + col.h, gap.s, { tone: 'red' }),
         down('a4', gap.s + col.h, gap.n),
+        note('n1', gap.d + col.h + 16, 'DMA', { tone: 'grey' }),
+        note('n4', gap.s + col.h + 16, 'DMA', { tone: 'grey' }),
         note('n2', gap.p + col.h + 16, 'read(): CPU copy', { tone: 'red' }),
         note('n3', gap.u + col.h + 16, 'write(): CPU copy', { tone: 'red' }),
       ],
@@ -338,7 +340,7 @@ export const zeroCopy: FlowDef = {
     },
     {
       caption: 'A proxy copying one TCP conn to another uses `splice` through a kernel pipe, moving pages by reference. A `tls.Conn` breaks it: encryption happens in user space.',
-      drop: ['ub', 'a1', 'a2', 'a3', 'a4', 'nl', 'nl2', 'nic'],
+      drop: ['ub', 'a1', 'a2', 'a3', 'a4', 'nl', 'nl2', 'nic', 'n1', 'n4'],
       set: { disk: { text: 'Client socket' }, pc: { text: 'Pipe (kernel)' }, sb: { y: 160, text: 'Backend socket' } },
       add: [down('p1', gap.d + col.h, gap.p, { tone: 'red' }), down('p2', gap.p + col.h, 160, { tone: 'red' }), note('sp1', 60, 'splice()', { tone: 'red' }), note('sp2', 136, 'splice()', { tone: 'red' })],
     },
@@ -378,7 +380,7 @@ export const descriptors: FlowDef = {
       stop: {
         title: 'Running out of fds',
         edge: true,
-        body: <><code>accept</code> fails with <code>EMFILE</code> at the <code>ulimit -n</code> limit, and <code>http.Server</code> backs off (up to 1 s) instead of spinning. Go raises the soft limit at startup and opens every fd <code>O_CLOEXEC</code>. Leaked <code>resp.Body</code>s are the usual cause.</>,
+        body: <><code>accept</code> fails with <code>EMFILE</code> at the <code>ulimit -n</code> limit, and <code>http.Server</code> backs off (up to 1 s) instead of spinning. Go raises the soft limit at startup and opens every fd <code>O_CLOEXEC</code>. Unclosed <code>resp.Body</code> and <code>os.File</code> leaks are the usual cause.</>,
       },
     },
   ],

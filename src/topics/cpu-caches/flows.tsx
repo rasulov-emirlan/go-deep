@@ -106,8 +106,8 @@ export const lines: FlowDef = {
         body: (
           <>
             <p>Walk a column of a 4096-byte-wide matrix: only 12 lines fit, so they evict each other while the rest sits empty. Pad the rows.</p>
-            <Code>{`row := make([]int64, 512)   // 4096 B
-row := make([]int64, 512+8) // +1 line`}</Code>
+            <Code>{`make([]int64, 512)   // 4096 B
+make([]int64, 512+8) // +1 line`}</Code>
           </>
         ),
       },
@@ -279,12 +279,13 @@ export const mesi: FlowDef = {
       ],
       stop: {
         title: 'No shared data, still slow',
-        body: <p>Coherence tracks whole 64-byte lines, not variables. `a` and `b` never share a value, only a line. That is false sharing.</p>,
+        body: <p>Coherence tracks whole 64-byte lines, not variables. <code>a</code> and <code>b</code> never share a value, only a line. That is false sharing.</p>,
       },
     },
     {
       caption: 'Give `a` and `b` their own lines (padding, or per-goroutine shards) and both cores stay Modified. No messages, no waiting.',
       drop: ['t0', 't1', 'inv2', 'ack2', 'u0', 'u1', 'loop'],
+      set: { l3: { sub: 'lines A and B' } },
       add: [
         node('v0', LX.c0, 110, 'M'),
         node('v1', LX.c1, 110, 'M'),
@@ -462,7 +463,7 @@ export const goModel: FlowDef = {
       caption: 'ARM, POWER and RISC-V are weaker. The flag may become visible before the data, so the consumer can see 1 and still read stale 0.',
       drop: ['a1', 'a2', 'b1', 'b2', 'b3', 'b4'],
       add: [
-        { t: 'msg', id: 'w1', from: 'p', to: 'mem', y: 100, y2: 262, text: 'data=42', tone: 'grey', dashed: true },
+        { t: 'msg', id: 'w1', from: 'p', to: 'mem', y: 100, y2: 262, text: 'data=42', tone: 'grey', dashed: true, below: true },
         { t: 'msg', id: 'w2', from: 'p', to: 'mem', y: 134, y2: 146, text: 'flag=1', tone: 'red' },
         msg('r1', 'c', 'mem', 172, 'read flag'),
         msg('r2', 'mem', 'c', 196, '1'),
@@ -486,7 +487,7 @@ export const goModel: FlowDef = {
         title: 'Works on my x86 laptop',
         body: (
           <>
-            <p>Race-free is the rule, not “what x86 did”. The compiler may also hoist the load. Run `go test -race`.</p>
+            <p>Race-free is the rule, not “what x86 did”. The compiler may also hoist the load. Run <code>go test -race</code>.</p>
             <Code>{`var done bool
 go func() { done = true }()
 for !done {} // may spin forever`}</Code>
@@ -564,7 +565,7 @@ numactl --interleave=all ./svc`}</Code>
       stop: {
         edge: true,
         title: 'A vCPU is not a core',
-        body: <p>On x86 AWS instances, 4 vCPUs are usually 2 cores, so `GOMAXPROCS=4` may buy about 2 cores of CPU-bound throughput. Noisy neighbours show up as steal time (`%st`).</p>,
+        body: <p>On x86 AWS instances, 4 vCPUs are usually 2 cores, so <code>GOMAXPROCS=4</code> may buy about 2 cores of CPU-bound throughput. Noisy neighbours show up as steal time (<code>%st</code>).</p>,
       },
     },
   ],

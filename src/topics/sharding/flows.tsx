@@ -504,7 +504,7 @@ export const hotFlow: FlowDef = {
         bar('b0', 60, 80, 34, 'soft'),
         bar('b1', 240, 80, 84, 'red'),
         bar('b2', 420, 80, 30, 'soft'),
-        { t: 'node', id: 'hk', r: 14, text: 'k', tone: 'red', x: 280, y: 84 },
+        { t: 'node', id: 'hk', r: 14, text: 'k', tone: 'red', x: 280, y: 84, z: 5 },
         { t: 'text', id: 'hkt', x: 280, y: 28, tone: 'red', text: 'one hot key → one shard' },
       ],
     },
@@ -626,9 +626,9 @@ export const indexFlow: FlowDef = {
       drop: ['g1', 'g2', 'q'],
       set: { ix1: { tone: 'ink' }, ix2: { tone: 'red' } },
       add: [
-        { t: 'text', id: 'ins', x: IX(0), y: 20, tone: 'red', text: 'INSERT' },
-        { t: 'line', id: 'w1', x1: IX(0), y1: 30, x2: IX(0), y2: 138, tone: 'red', arrow: true },
-        { t: 'line', id: 'w2', x1: IX(0) + 40, y1: 138, x2: IX(2) - 10, y2: 88, tone: 'red', arrow: true, dashed: true },
+        { t: 'text', id: 'ins', x: IX(0) + 65, y: 20, tone: 'red', text: 'INSERT' },
+        { t: 'line', id: 'w1', x1: IX(0) + 65, y1: 30, x2: IX(0) + 65, y2: 138, tone: 'red', arrow: true },
+        { t: 'line', id: 'w2', x1: 60, y1: 138, x2: IX(2) - 10, y2: 88, tone: 'red', arrow: true, dashed: true },
       ],
     },
     {
