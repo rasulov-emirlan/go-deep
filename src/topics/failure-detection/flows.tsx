@@ -51,16 +51,16 @@ export const slowOrDead: FlowDef = {
     {
       caption: 'N stalls: a GC pause, a swap storm, a stuck disk. The next ping arrives, but no ack ever leaves.',
       add: [
-        { t: 'box', id: 'stall', x: 407, y: 140, w: 66, h: 150, tone: 'red', dashed: true, text: 'paused' },
-        { t: 'msg', id: 'p2', y: 150, y2: 168, from: 'M', to: 'N', text: 'ping' },
+        { t: 'box', id: 'stall', x: 407, y: 140, w: 66, h: 182, tone: 'red', dashed: true, text: 'paused' },
+        { t: 'msg', id: 'p2', y: 170, y2: 188, from: 'M', to: 'N', text: 'ping' },
       ],
     },
     {
-      caption: 'Pings go out into silence while the monitor’s timer runs: 1 s, 2 s, 3 s.',
+      caption: 'Pings go out into silence while the monitor’s timer, started at the last ack, runs: 1 s, 2 s, 3 s.',
       add: [
-        { t: 'msg', id: 'p3', y: 210, y2: 228, from: 'M', to: 'N', text: 'ping' },
-        { t: 'msg', id: 'p4', y: 270, y2: 288, from: 'M', to: 'N', text: 'ping' },
-        { t: 'line', id: 'timer', x1: 70, y1: 150, x2: 70, y2: 296, tone: 'red', arrow: true },
+        { t: 'msg', id: 'p3', y: 230, y2: 248, from: 'M', to: 'N', text: 'ping' },
+        { t: 'msg', id: 'p4', y: 290, y2: 308, from: 'M', to: 'N', text: 'ping' },
+        { t: 'line', id: 'timer', x1: 70, y1: 110, x2: 70, y2: 290, tone: 'red', arrow: true },
         txt('timer-t', 70, 316, '3 s', 'red'),
       ],
     },
@@ -106,7 +106,7 @@ export const phiAccrual: FlowDef = {
   h: 285,
   steps: [
     {
-      caption: 'Fixed T = 1.5 s: one late beat and a live node is accused. The failover it triggers adds load (GitHub, 2012).',
+      caption: 'Fixed T = 1.5 s: one late beat and a live node is accused. A false failover can do more harm than the slowness (GitHub, 2012).',
       add: [
         txt('lab1', 30, 34, 'T = 1.5 s: quick, jumpy', 'ink', 'start'),
         { t: 'line', id: 'ax1', x1: 30, y1: 100, x2: 530, y2: 100, tone: 'grey' },
@@ -122,7 +122,7 @@ export const phiAccrual: FlowDef = {
         { t: 'line', id: 'ax2', x1: 30, y1: 235, x2: 530, y2: 235, tone: 'grey' },
         { t: 'path', id: 'tk2', d: 'M60,219 L60,251 M130,219 L130,251 M200,219 L200,251', tone: 'ink' },
         cross('dies', 236, 235),
-        { t: 'line', id: 'ln2', x1: 236, y1: 262, x2: 525, y2: 262, tone: 'red', arrow: true, text: '10 s of silence' },
+        { t: 'line', id: 'ln2', x1: 236, y1: 262, x2: 525, y2: 262, tone: 'red', arrow: true, text: '10 s of silence (not to scale)' },
       ],
     },
     {
@@ -187,7 +187,7 @@ export const swim: FlowDef = {
   h: 340,
   steps: [
     {
-      caption: 'Every second, A picks one random member (B) and pings it. SWIM is designed so each node’s load stays constant as the cluster grows.',
+      caption: 'Every second, A pings the next member in its shuffled probe list (B). SWIM keeps each node’s load constant as the cluster grows.',
       add: [...ring(), L('ping', 'A', 'B', { text: 'ping' }), note('A probes B')],
     },
     {
@@ -209,7 +209,7 @@ export const swim: FlowDef = {
     {
       caption: 'Nobody gets an ack, so B is marked suspect, not dead. A gossips that by piggybacking it on the pings it sends anyway.',
       set: { r1: { tone: 'red', dashed: true }, r2: { tone: 'red', dashed: true }, r3: { tone: 'red', dashed: true }, nB: { tone: 'red', dashed: true }, note: { text: 'no acks:\nB is suspect', tone: 'red' } },
-      add: [txt('stB', 480, 214, 'suspect\ninc 4', 'red'), L('g1', 'A', 'H', { tone: 'red' }), L('g2', 'A', 'G', { tone: 'red' })],
+      add: [txt('stB', 520, 214, 'suspect\ninc 4', 'red'), L('g1', 'A', 'H', { tone: 'red' }), L('g2', 'A', 'G', { tone: 'red' })],
     },
     {
       caption: 'The rumour reaches B. B is alive, so it raises its own incarnation number to 5 and gossips Alive(5). That beats Suspect(4).',
@@ -227,7 +227,7 @@ export const swim: FlowDef = {
       },
     },
     {
-      caption: 'Had B truly crashed, nobody refutes. After the suspicion timeout (4 s at 8 nodes, longer as N grows) B is dead. Gossip reaches everyone in O(log N) rounds.',
+      caption: 'Had B truly crashed, nobody refutes. The suspicion timer ends B: 4 s at 8 nodes once others confirm, else 24 s. Gossip spreads in O(log N) rounds.',
       drop: ['f1', 'f2'],
       set: { nB: { tone: 'red' }, stB: { text: 'dead\ninc 4' }, note: { text: 'no refutation:\nB is dead', tone: 'red' } },
       add: [L('g3', 'H', 'C', { tone: 'red' }), L('g4', 'G', 'D', { tone: 'red' })],
@@ -248,13 +248,13 @@ c.ProbeInterval = time.Second
 c.ProbeTimeout = 500*time.Millisecond
 c.IndirectChecks = 3
 c.SuspicionMult = 4
-c.AwarenessMaxMultiplier = 8`}</Code>
+c.AwarenessMaxMultiplier = 8 // all equal the defaults`}</Code>
           </>
         ),
       },
     },
     {
-      caption: 'Gossip is probabilistic, so every 30 s two members swap their full state over TCP. That heals missed rumours and partitions.',
+      caption: 'Gossip is probabilistic, so about every 30 s each node swaps full state with one random peer over TCP. That heals missed rumours and partitions.',
       drop: ['x1', 'x2', 'x3'],
       set: { nA: { tone: 'ink', dashed: false }, note: { text: 'push/pull sync\nevery 30 s', tone: 'ink' } },
       add: [L('s1', 'G', 'F', { off: -6, text: 'full state' }), L('s2', 'F', 'G', { off: -6 })],
@@ -482,12 +482,12 @@ export const stonith: FlowDef = {
       add: [{ t: 'line', id: 'b2a', x1: 396, y1: 92, x2: 164, y2: 92, arrow: true, tone: 'red', text: 'power off' }],
     },
     {
-      caption: 'Instead, a 90 s network blip: A is alive, and both sides see the other as dead. A shoots B too (GitHub, Dec 2012).',
+      caption: 'Instead, a 90 s network blip: both sides see the other as dead and send power-off, but delivery is delayed, so both stay active (GitHub, Dec 2012).',
       set: { A: { tone: 'ink', text: 'alive' }, B: { text: 'alive' } },
       add: [{ t: 'line', id: 'a2b', x1: 164, y1: 122, x2: 396, y2: 122, arrow: true, tone: 'red', text: 'power off' }],
     },
     {
-      caption: 'Both are shot: no node is left, and recovery took about 5 hours.',
+      caption: 'When the network recovers, both are shot at once. Some pairs lost both nodes; recovery took about 5 hours.',
       set: { A: { tone: 'grey', text: 'off' }, B: { tone: 'grey', text: 'off' } },
       stop: {
         title: 'Fencing can misfire',
@@ -510,7 +510,7 @@ export const k8s: FlowDef = {
   h: 285,
   steps: [
     {
-      caption: 'The kubelet renews a small Lease object every 10 s, and posts full node status on the same 10 s beat. That is the heartbeat.',
+      caption: 'The kubelet renews a small Lease object every 10 s. That is the heartbeat; full node status is posted only on change or every 5 minutes.',
       add: [
         txt('kl', 10, 62, 'kubelet: Lease renewed every 10 s', 'ink', 'start'),
         { t: 'line', id: 'ax', x1: 10, y1: 100, x2: 545, y2: 100, tone: 'grey', arrow: true },
@@ -549,7 +549,7 @@ export const k8s: FlowDef = {
         edge: true,
         body: (
           <>
-            Default 0.1 nodes/s. At 55% of a zone unhealthy it drops to 0.01/s (or stops, in a small cluster). If every zone is unhealthy it assumes the fault is its own link and evicts nothing.
+            Default 0.1 nodes/s. Once 55% of a zone (at least 3 nodes) is not Ready it drops to 0.01/s, or to 0 in a zone of 50 nodes or fewer. If no node in any zone is Ready, it assumes the fault is its own link and evicts nothing.
           </>
         ),
       },

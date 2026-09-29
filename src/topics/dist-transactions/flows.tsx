@@ -173,7 +173,7 @@ export const cancelFirst: FlowDef = {
     },
     {
       caption: 'Stock has no reservation #42 to cancel. A naive handler ignores the cancel.',
-      add: [box('bx', 400, 250, 150, 46, { text: 'no #42: ignore', tone: 'grey' })],
+      add: [box('bx', 385, 250, 155, 46, { text: 'no #42: ignore', tone: 'grey' })],
     },
     {
       caption: 'Then the late reserve lands and succeeds. Stock is now held for an order that is already cancelled, and nothing will release it.',
@@ -283,7 +283,7 @@ export const inbox: FlowDef = {
     },
     {
       caption: 'In one DB transaction the consumer inserts the event id into an inbox table and applies the effect. A new id means both commit.',
-      add: [box('in', 400, 130, 150, 50, { text: 'inbox #10', sub: 'effect applied' })],
+      add: [box('in', 392, 130, 140, 50, { text: 'inbox #10', sub: 'effect applied' })],
     },
     {
       caption: 'The duplicate hits the unique id. The insert changes 0 rows, so the consumer skips the effect and commits.',
@@ -378,7 +378,7 @@ export const idempotency: FlowDef = {
     {
       caption: 'The client retries K1. The API finds it done and returns the stored response. No second charge.',
       drop: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6'],
-      add: [msg('n1', 'cl', 'ap', 70, 'POST key K1'), msg('n2', 'ap', 'db', 100, 'lookup K1'), msg('n3', 'ap', 'cl', 190, 'stored 200', { tone: 'red' }), text('nc', 480, 214, 'no 2nd charge', { tone: 'red' })],
+      add: [msg('n1', 'cl', 'ap', 70, 'POST key K1'), msg('n2', 'ap', 'db', 100, 'lookup K1'), msg('n3', 'ap', 'cl', 190, 'stored 200', { tone: 'red' }), text('nc', 468, 214, 'no 2nd charge', { tone: 'red' })],
       set: { kr: { tone: 'ink' } },
       stop: {
         title: 'Result and effect, one txn',

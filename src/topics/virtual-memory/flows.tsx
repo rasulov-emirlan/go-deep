@@ -156,7 +156,7 @@ export const shootdown: FlowDef = {
       ],
     },
     {
-      caption: 'Each CPU invalidates P. Measured: 20,000 mmap+touch+munmap took 6.5 µs alone, 24 µs with three busy sibling threads (about 3 IPIs each).',
+      caption: 'Each CPU invalidates P. Measured on one VM: 20,000 mmap+touch+munmap ran 3–5× slower with three busy sibling threads (e.g. 9 µs vs 42 µs each).',
       set: { t1: { tone: 'grey', dashed: true, text: 'P gone' }, t2: { tone: 'grey', dashed: true, text: 'P gone' }, t3: { tone: 'grey', dashed: true, text: 'P gone' } },
       add: [tx('cost', 280, 232, 'more threads, more CPUs to interrupt', { tone: 'red' })],
     },
@@ -202,11 +202,11 @@ export const demand: FlowDef = {
       set: { p0: { tone: 'ink' }, g: { text: 'RSS +4 KiB' } },
       stop: {
         title: 'Why untouched make() is free',
-        body: md('Go 1.25.1, `make([]byte, 1<<30)`: VSZ +1 GiB, RSS +1.3 MB. Writing one byte per page then cost 262,144 minor faults and +1 GiB of RSS.'),
+        body: md('Go 1.25.1, `make([]byte, 1<<30)`: VSZ +1 GiB, RSS +1.3 MB. Writing one byte per page then cost about 262,000 minor faults (1 GiB / 4 KiB) and +1 GiB of RSS.'),
       },
     },
     {
-      caption: 'Writing a page you only read faults a second time: the zero-page mapping is swapped for a private frame. 256 MiB read then written: 65,538 then 65,549 faults.',
+      caption: 'Writing a page you only read faults a second time: the zero-page mapping is swapped for a private frame. 256 MiB read, then written: ~65,540 faults, then ~65,550 more.',
       drop: ['r0'],
       add: [box('f0', 381, 144, 160, 34, 'frame, zeroed', { tone: 'red' }), ln('r0b', 345, 65, 381, 161, { tone: 'red' })],
       set: { p0: { text: 'page 0: write', tone: 'red' }, e0: { text: '-> frame 43' }, z: { tone: 'grey' }, p1: { tone: 'ink' }, g: { text: 'RSS +8 KiB' } },
@@ -224,7 +224,7 @@ export const demand: FlowDef = {
       stop: {
         title: 'Faults hide inside loads',
         edge: true,
-        body: 'A plain load can wait on disk (cold vs warm read of a mapped 256 MiB file: 102 ms vs 3 ms). A page past a truncated end of file raises SIGBUS, not an error return.',
+        body: 'A plain load can wait on disk (cold vs warm read of a mapped 256 MiB file, one VM: ~100–140 ms vs 2–3 ms). A page past a truncated end of file raises SIGBUS, not an error return.',
       },
     },
   ],
@@ -270,7 +270,7 @@ export const cow: FlowDef = {
       stop: {
         title: 'fork cost, and Go',
         edge: true,
-        body: md('Big heap means slow fork, then a COW fault per page written (32,776 for a child writing half of 256 MiB). Go never plain-forks: `os/exec` uses clone with CLONE_VFORK|CLONE_VM, so no page-table copy.'),
+        body: md('Big heap means slow fork, then a COW fault per page written (32,776 for a child writing half of 256 MiB). Go never forks without exec: `os/exec` uses clone with CLONE_VFORK|CLONE_VM (unless a new user namespace is requested), so no page-table copy.'),
       },
     },
   ],
@@ -291,9 +291,9 @@ export const rss: FlowDef = {
       ],
     },
     {
-      caption: 'Now write one byte per 4 KiB page: 262,144 minor faults, and RSS climbs to 1 GiB. Faults, not allocations, are what memory costs.',
+      caption: 'Now write one byte per 4 KiB page: about 262,000 minor faults, and RSS climbs to 1 GiB. Faults, not allocations, are what memory costs.',
       drop: ['rv'],
-      add: [tx('rv2', 280, 190, '262,144 faults = 1 GiB / 4 KiB', { tone: 'red', size: 14 })],
+      add: [tx('rv2', 280, 190, '~262,000 faults = 1 GiB / 4 KiB', { tone: 'red', size: 14 })],
       set: { rss: { w: 490, text: 'touched: +1 GiB' } },
     },
     {
@@ -393,7 +393,7 @@ export const goheap: FlowDef = {
       ],
     },
     {
-      caption: 'As the heap grows, Go maps 4 MiB at a time read-write over the reservation (MAP_FIXED). Pages still cost RAM only when touched.',
+      caption: 'As the heap grows, Go maps read-write chunks (4 MiB at first) over the reservation (MAP_FIXED). Pages still cost RAM only when touched.',
       add: [box('rw', 19, 62, 64, 34, 'rw', { tone: 'red' }), tx('cm', 9, 122, 'first 4 MiB committed: mmap RW', { anchor: 'start', tone: 'red' })],
       set: { res: { x: 89, w: 452, text: 'still reserved' }, g2: { text: 'RSS grows as pages are touched' } },
     },
@@ -445,7 +445,7 @@ export const limit: FlowDef = {
       add: [box('gb', mx(120), 60, 240, 40, 'garbage', { dashed: true, tone: 'red' }), tx('kill', 280, 180, 'OOM-killed at the wall', { tone: 'red', size: 14 })],
     },
     {
-      caption: 'GOMEMLIMIT=170MiB is a soft target. Near it the GC runs more often and the scavenger works harder. Measured: survived, GC used about 5% CPU.',
+      caption: 'GOMEMLIMIT=170MiB is a soft target. Near it the GC runs more often and the scavenger works harder. Measured on one VM: survived, GC used about 5% CPU.',
       drop: ['gb', 'kill'],
       add: [
         box('gb2', mx(120), 60, 100, 40, 'garbage', { dashed: true }),
@@ -454,7 +454,7 @@ export const limit: FlowDef = {
       ],
     },
     {
-      caption: 'A limit just above the live heap leaves no room for garbage, so the GC runs almost back to back. Measured: 5x lower throughput.',
+      caption: 'A limit just above the live heap leaves no room for garbage, so the GC runs almost back to back. Measured: 5–7x lower throughput.',
       drop: ['gb2'],
       add: [tx('slow', 280, 195, 'GC nearly non-stop', { tone: 'red', size: 14 })],
       set: { gl: { x1: mx(125), x2: mx(125), tone: 'red' }, gll: { x: mx(125), text: 'GOMEMLIMIT 125', tone: 'red' } },

@@ -160,7 +160,7 @@ export const leapSecond: FlowDef = {
       },
     },
     {
-      caption: 'Ordinary NTP: slew (change the rate, at most 500 ppm) for small errors, step for big ones. 100 ms of slewing takes 200 s.',
+      caption: 'ntpd slews (changes the clock rate, at most 500 ppm) for small errors and steps for big ones. 100 ms of slewing takes 200 s.',
       drop: ['ax', 'y0', 'y1', 'x0', 'x1', 'x2', 'sr', 'ramp', 'stp', 'gap', 'gapt'],
       add: [
         { t: 'text', id: 'gt', x: 280, y: 36, text: 'clock offset (not to scale)' },

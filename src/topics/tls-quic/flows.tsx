@@ -41,17 +41,17 @@ export const resumeFlow: FlowDef = {
       ],
     },
     {
-      caption: '0-RTT: the request rides in the first flight, encrypted with a key derived from the ticket. Zero extra round trips.',
+      caption: '0-RTT: the request rides in the first flight, encrypted with a key derived from the ticket. No TLS round trip before it.',
       drop: ['r1', 'r2', 'r3', 'rt'],
       add: [
         { t: 'msg', id: 'z1', from: 'c', to: 's', y: 66, y2: 78, text: 'Hello+ticket' },
         { t: 'msg', id: 'z2', from: 'c', to: 's', y: 108, y2: 120, text: 'GET /img', tone: 'red' },
         { t: 'msg', id: 'z3', from: 's', to: 'c', y: 160, y2: 172, text: 'reply' },
-        { t: 'text', id: 'zt', x: 280, y: 236, text: '0 extra RTT', tone: 'red' },
+        { t: 'text', id: 'zt', x: 280, y: 236, text: '0 TLS RTT before GET', tone: 'red' },
       ],
     },
     {
-      caption: 'An on-path attacker copies the first flight and sends it to Server B. B never saw the original, so the POST runs twice.',
+      caption: 'An on-path attacker copies the first flight to Server B, which shares A’s ticket keys but never saw the original. The POST runs twice.',
       drop: ['z1', 'z2', 'z3', 'zt'],
       set: { s: { x: 270, text: 'Server A' } },
       add: [
@@ -84,7 +84,7 @@ export const resumeFlow: FlowDef = {
       ],
     },
     {
-      caption: 'A ticket opens only under the key that made it. Server B has another key, so it falls back to a full handshake.',
+      caption: 'A ticket opens only under the key that made it. If Server B has a different key, it does a full handshake. Shared keys enable the replay.',
       drop: ['e1', 'e2', 'e3', 'eh'],
       set: { s: { tone: 'ink' }, tkbox: { sub: 'from A' } },
       add: [
@@ -138,7 +138,7 @@ export const certFlow: FlowDef = {
       ],
     },
     {
-      caption: 'Go, curl and Java do not fetch it. They stop with an unknown-authority error.',
+      caption: 'Go and OpenSSL-based clients such as curl do not fetch it. They stop with an unknown-authority error.',
       drop: ['br', 'aia'],
       set: { inter: { tone: 'red', dashed: true, sub: 'unknown' } },
       add: [
@@ -197,7 +197,7 @@ cfg.GetCertificate = func(
       },
     },
     {
-      caption: 'A resumed handshake skips GetCertificate, so it never sees the new cert. Go tickets stay valid up to 7 days.',
+      caption: 'A resumed handshake skips GetCertificate, so the client still sees the old cert. Go tickets stay valid up to 7 days.',
       add: [{ t: 'box', id: 'res', x: 20, y: 286, w: 520, h: 48, text: 'resumed handshake', sub: 'GetCertificate not called', tone: 'red', dashed: true }],
     },
   ],
@@ -318,7 +318,7 @@ export const quicFlow: FlowDef = {
       ],
     },
     {
-      caption: 'Still shared: congestion control and flow-control limits are per connection, so heavy loss can slow every stream.',
+      caption: 'Still shared: one congestion controller and a connection-wide flow-control limit, so heavy loss can slow every stream.',
       drop: ['ob'],
       add: [
         { t: 'path', id: 'cw', d: 'M352,44 L362,44 L362,196 L352,196', tone: 'red' },
@@ -327,17 +327,17 @@ export const quicFlow: FlowDef = {
       stop: {
         title: 'Not fully free',
         edge: true,
-        body: <>HTTP/3 removes head-of-line blocking at the transport level only. One congestion window still governs the whole connection.</>,
+        body: <>HTTP/3 removes head-of-line blocking at the transport level only. One congestion window still governs the whole connection, and frames from several streams can share a packet, so one lost packet can stall more than one stream.</>,
       },
     },
     {
-      caption: 'The phone leaves Wi-Fi. Same connection ID, new address: the server sends PATH_CHALLENGE and, until answered, at most 3× the bytes it received.',
+      caption: 'The phone leaves Wi-Fi. New address, fresh connection ID: the server sends PATH_CHALLENGE and, until answered, at most 3× the bytes it received.',
       drop: ['la', 'lb', 'lc', 'a1', 'a2', 'a3', 'b1', 'b2', 'b3', 'c1', 'c2', 'c3', 'cw', 'cwt'],
       add: [
         { t: 'lane', id: 'c', x: C, y: 6, len: 236, text: 'Client', sub: 'LTE' },
         { t: 'lane', id: 's', x: S, y: 6, len: 236, text: 'Server' },
         { t: 'msg', id: 'q1', from: 'c', to: 's', y: 88, y2: 100, text: 'Wi-Fi · CID 7', tone: 'grey' },
-        { t: 'msg', id: 'q2', from: 'c', to: 's', y: 128, y2: 140, text: 'LTE · CID 7', tone: 'red' },
+        { t: 'msg', id: 'q2', from: 'c', to: 's', y: 128, y2: 140, text: 'LTE · CID 8', tone: 'red' },
         { t: 'msg', id: 'q3', from: 's', to: 'c', y: 168, y2: 180, text: 'PATH_CHALLENGE', tone: 'red' },
       ],
     },

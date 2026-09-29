@@ -21,7 +21,7 @@ export const addressSpace: FlowDef = {
       add: [
         { t: 'text', id: 'ta', x: colA + colW / 2, y: 16, text: 'process A' },
         box('ka', colA, 30, colW, 80, 'kernel', { label: 'ffff8000… and up', sub: 'supervisor only', tone: 'red' }),
-        box('ua', colA, 154, colW, 100, 'user', { label: '0 … 00007fff…', sub: '~128 TB, A’s pages' }),
+        box('ua', colA, 154, colW, 100, 'user', { label: '0 … 00007fff…', sub: '~128 TB (4-level paging)' }),
         { t: 'text', id: 'cpl', x: colA + colW / 2, y: 272, text: 'your code runs at CPL 3', tone: 'grey', size: 13 },
       ],
     },
@@ -30,7 +30,7 @@ export const addressSpace: FlowDef = {
       add: [
         { t: 'text', id: 'tb', x: colB + colW / 2, y: 16, text: 'process B' },
         box('kb', colB, 30, colW, 80, 'kernel', { label: 'ffff8000… and up', sub: 'supervisor only', tone: 'red' }),
-        box('ub', colB, 154, colW, 100, 'user', { label: '0 … 00007fff…', sub: '~128 TB, B’s pages' }),
+        box('ub', colB, 154, colW, 100, 'user', { label: '0 … 00007fff…', sub: '~128 TB (4-level paging)' }),
         { t: 'line', id: 'same', x1: colA + colW, y1: 70, x2: colB, y2: 70, text: 'same' },
       ],
       set: { ta: { tone: 'grey' }, cpl: { tone: 'grey' } },
@@ -159,7 +159,7 @@ export const door: FlowDef = {
       stop: {
         title: 'Seccomp vs io_uring',
         edge: true,
-        body: <p>Filters see only the entry call, so io_uring can bypass a per-syscall denylist. Mitigations: filter it out entirely, or set the sysctl <code>kernel.io_uring_disabled</code>.</p>,
+        body: <p>Filters see only the entry call, so io_uring can bypass a per-syscall denylist. Mitigations: filter it out entirely, or set the sysctl <code>kernel.io_uring_disabled</code> (Linux 6.6+).</p>,
       },
     },
     {
@@ -183,13 +183,13 @@ const ticks: [number, string][] = [
   [100000, '100 µs'],
 ]
 const rows = [
-  { id: 'v', ns: 70, text: 'time.Now(): 2 vDSO calls, ~70 ns' },
-  { id: 'r', ns: 130, text: 'raw syscall getppid, ~130 ns' },
-  { id: 'g', ns: 220, text: 'Go syscall.Syscall, ~220 ns' },
-  { id: 'x', ns: 1800, text: 'pipe ping-pong switch, ~1.8 µs' },
-  { id: 's', ns: 23100, text: 'getppid under strace, ~23 µs' },
-  { id: 'w', ns: 4645, text: '16 × 1-byte Write, ~4.6 µs' },
-  { id: 'wv', ns: 423, text: 'one writev, 16 buffers, ~0.42 µs' },
+  { id: 'v', ns: 65, text: 'time.Now(): 2 vDSO calls, ~65 ns' },
+  { id: 'r', ns: 120, text: 'raw syscall getppid, ~120 ns' },
+  { id: 'g', ns: 200, text: 'Go syscall.Syscall, ~200 ns' },
+  { id: 'x', ns: 2250, text: 'pipe ping-pong switch, ~2.3 µs' },
+  { id: 's', ns: 40000, text: 'getppid under strace, ~25–60 µs' },
+  { id: 'w', ns: 4450, text: '16 × 1-byte Write, ~4.5 µs' },
+  { id: 'wv', ns: 310, text: 'one writev, 16 buffers, ~0.3 µs' },
 ]
 const rowY = (i: number) => 64 + i * 40
 const barEls = (id: string): El[] => {
@@ -224,17 +224,17 @@ export const cost: FlowDef = {
       },
     },
     {
-      caption: 'A real syscall (`getppid`) costs ~130 ns here. The mode switch itself is cheap; the price is entry work and cold caches.',
+      caption: 'A real syscall (`getppid`) costs ~120 ns here. The mode switch itself is cheap; the price is entry work and cold caches.',
       add: barEls('r'),
       set: grey('v'),
     },
     {
-      caption: 'Go’s `syscall.Syscall` adds `entersyscall` and `exitsyscall` bookkeeping, ~90 ns more. Quote ~100–300 ns, not one constant.',
+      caption: 'Go’s `syscall.Syscall` adds `entersyscall` and `exitsyscall` bookkeeping, ~80 ns more. Quote ~100–300 ns, not one constant.',
       add: barEls('g'),
       set: grey('r'),
     },
     {
-      caption: 'A context switch, where another task gets the CPU, is a different thing: ~1.8 µs via pipe ping-pong on one CPU, 12.5 µs across CPUs.',
+      caption: 'A context switch, where another task gets the CPU, is a different thing: ~2 µs via pipe ping-pong on one CPU, ~15 µs across CPUs.',
       add: barEls('x'),
       set: grey('g'),
       stop: {
@@ -243,7 +243,7 @@ export const cost: FlowDef = {
       },
     },
     {
-      caption: 'Under `strace -f` the same call costs ~23 µs, about 200× slower: ptrace stops the process twice per syscall and wakes the tracer.',
+      caption: 'Under `strace -f` the same call costs 25–60 µs across runs, hundreds of times slower: ptrace stops the process twice per syscall and wakes the tracer.',
       add: barEls('s'),
       set: grey('x'),
       stop: {
@@ -255,13 +255,13 @@ export const cost: FlowDef = {
     {
       caption: 'Mitigations (KPTI page-table swaps, Spectre defenses) add entry and exit work only on CPUs that need them. Cost scales with syscall rate; no single number.',
       add: [
-        { t: 'line', id: 'kp', x1: xOf(130), y1: rowY(1) + 17, x2: xOf(130) + 60, y2: rowY(1) + 17, arrow: true, tone: 'red', dashed: true },
-        { t: 'text', id: 'kpt', x: xOf(130) + 68, y: rowY(1) + 17, text: '+ mitigations', anchor: 'start', tone: 'red', size: 13 },
+        { t: 'line', id: 'kp', x1: xOf(120), y1: rowY(1) + 17, x2: xOf(120) + 60, y2: rowY(1) + 17, arrow: true, tone: 'red', dashed: true },
+        { t: 'text', id: 'kpt', x: xOf(120) + 68, y: rowY(1) + 17, text: '+ mitigations', anchor: 'start', tone: 'red', size: 13 },
       ],
       set: grey('s'),
     },
     {
-      caption: 'Fewer crossings win: 16 one-byte writes cost ~4.6 µs, one `writev` ~0.42 µs. `io_uring` batches further through shared rings.',
+      caption: 'Fewer crossings win: 16 one-byte writes cost ~4.5 µs, one `writev` ~0.3 µs. `io_uring` batches further through shared rings.',
       drop: ['kp', 'kpt'],
       add: [...barEls('w'), ...barEls('wv')],
       set: { ...grey('r'), lw: { tone: 'red' }, bw: { tone: 'red' } },
@@ -306,7 +306,7 @@ export const handoff: FlowDef = {
       stop: {
         title: 'When sysmon waits',
         edge: true,
-        body: <p>Empty local queue, an idle P and under 10 ms: no retake. So “20 µs” is only the tick floor. Measured: queued G2 ran after ~100 µs median; G2 on the global queue only, ~13 ms median.</p>,
+        body: <p>Empty local queue, an idle P and under 10 ms: no retake. So “20 µs” is only the tick floor. Measured on one VM (GOMAXPROCS=1, G2 queued locally): G2 ran after 25–250 µs, median ~150–250 µs.</p>,
       },
     },
     {
@@ -324,7 +324,7 @@ export const handoff: FlowDef = {
       add: [g('g1b', 5, 372, 140, 44, 'G1: no P', { sub: 'global queue', tone: 'red' })],
     },
     {
-      caption: '`RawSyscall` skips `entersyscall`: the scheduler thinks G1 is running Go code. After 10 ms sysmon sends `SIGURG`, and the call returns `EINTR`.',
+      caption: '`RawSyscall` skips `entersyscall`: the scheduler thinks G1 is running Go code. After ≥10 ms sysmon sends `SIGURG` (measured 13–25 ms), and the call returns `EINTR`.',
       drop: ['g1', 'hold', 'pk', 'sm1', 'sm2', 'rk', 'hd', 'g2', 'g1b', 'm2'],
       set: { q: { tone: 'ink' } },
       add: [g('r1', 5, 76, 130, 44, 'RawSyscall', { sub: 'no entersyscall' }), msg('su', 'sm', 'm1', 170, 'SIGURG', { tone: 'red' }), g('r2', 5, 200, 130, 40, 'EINTR', { tone: 'red' })],

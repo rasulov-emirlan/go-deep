@@ -99,9 +99,9 @@ export const failoverFlow: FlowDef = {
       },
     },
     {
-      caption: 'Fencing: followers refuse anything stamped with an old epoch, and a leader that cannot reach a quorum must stop writing.',
+      caption: 'Fencing: after the link heals, followers refuse anything stamped with an old epoch, and a leader that cannot reach a quorum must stop writing.',
       add: [msg('old', 'ld', 'f2', 200, 224, 'WAL e1', { lost: true })],
-      set: { ld: { sub: 'fenced', tone: 'grey' } },
+      set: { ld: { sub: 'fenced', tone: 'grey' }, cut: { tone: 'grey' } },
       stop: {
         title: 'The paused leader',
         edge: true,
@@ -165,9 +165,9 @@ export const counterFlow: FlowDef = {
       caption: 'N=3 copies, W=3 acks, R=2 replies per read: W+R > N. The client sends v1 to all three; it reaches A fast, B and C very slowly.',
       add: [
         lane('cl', X.cl, 'Client', 325),
-        lane('a', X.a, 'A', 325),
-        lane('b', X.b, 'B', 325),
-        lane('c', X.c, 'C', 325),
+        lane('a', X.a, 'A', 325, { sub: 'v0' }),
+        lane('b', X.b, 'B', 325, { sub: 'v0' }),
+        lane('c', X.c, 'C', 325, { sub: 'v0' }),
         msg('wa', 'cl', 'a', 56, 74, 'v1', { dashed: true }),
         msg('wb', 'cl', 'b', 56, 270, '', { dashed: true }),
         msg('wc', 'cl', 'c', 56, 292, '', { dashed: true }),
@@ -177,14 +177,18 @@ export const counterFlow: FlowDef = {
     },
     {
       caption: 'Client X reads A, which already has v1.',
-      add: [msg('xq1', 'cl', 'a', 96, 108, 'X read'), msg('xa1', 'a', 'cl', 112, 124, 'v1', { tone: 'red' })],
+      drop: ['wa', 'wb', 'wc', 'wbt', 'wct'],
+      set: { a: { sub: 'v1' } },
+      add: [txt('ib', 410, 74, 'v1 still in flight to B, C', { tone: 'grey' }), msg('xq1', 'cl', 'a', 110, 122, 'X read'), msg('xa1', 'a', 'cl', 128, 140, 'v1', { tone: 'red' })],
     },
     {
       caption: 'X also asks B (R=2), which still has v0. X returns the newest of the two: v1.',
+      drop: ['xq1', 'xa1'],
       add: [msg('xq2', 'cl', 'b', 138, 156, 'X read'), msg('xa2', 'b', 'cl', 160, 178, 'v0'), txt('xr', X.cl, 200, 'X gets v1')],
     },
     {
       caption: 'Y starts after X has finished, and asks B. B still has v0.',
+      drop: ['xq2', 'xa2'],
       add: [msg('yq1', 'cl', 'b', 216, 230, 'Y read'), msg('ya1', 'b', 'cl', 234, 246, 'v0')],
     },
     {
@@ -193,7 +197,9 @@ export const counterFlow: FlowDef = {
     },
     {
       caption: 'The write completes only now, after both reads. Until it completes, quorum overlap gives no ordering guarantee.',
-      set: { wb: { dashed: false, tone: 'red' }, wc: { dashed: false, tone: 'red' }, wbt: { tone: 'red' }, wct: { tone: 'red' } },
+      drop: ['yq1', 'ya1', 'yq2', 'ya2', 'ib'],
+      set: { b: { sub: 'v1' }, c: { sub: 'v1' } },
+      add: [txt('done', 340, 100, 'W=3 acks in: write completes', { tone: 'red' })],
       stop: {
         title: 'More ways quorums lie',
         edge: true,
@@ -247,7 +253,7 @@ export const handoffFlow: FlowDef = {
       add: [lane('cl', G5.cl, 'Client', 250), lane('a', G5.a, 'A', 250), lane('b', G5.b, 'B', 250), lane('c', G5.c, 'C', 250, { dead: true }), msg('w1', 'cl', 'a', 62, 74, 'v1'), msg('w2', 'cl', 'b', 82, 96, 'v1')],
     },
     {
-      caption: 'Sloppy quorum: to stay writable, the third copy goes to stand-in D with a hint “for C”. D is not in K’s read set, so W+R>N no longer guarantees overlap.',
+      caption: 'Sloppy quorum (Dynamo, Riak): the third copy goes to stand-in D with a hint “for C”. D is outside K’s read set, so W+R>N no longer guarantees overlap.',
       add: [lane('d', G5.d, 'D', 250, { sub: 'stand-in', w: 84 }), msg('w3', 'cl', 'd', 118, 138, 'v1 hint:C', { tone: 'red' })],
     },
     {
@@ -270,7 +276,7 @@ export const handoffFlow: FlowDef = {
       stop: {
         title: 'C down for 5 hours',
         edge: true,
-        body: 'Writes after hour 3 were never hinted, so C stays stale until nodetool repair. Note: CL ANY counts a stored hint as an ack.',
+        body: 'Writes after hour 3 were never hinted, so C stays stale until nodetool repair. Cassandra keeps hints on the coordinator, not a stand-in node; CL ANY counts a stored hint as an ack.',
       },
     },
   ],
@@ -398,14 +404,15 @@ export const isrFlow: FlowDef = {
     {
       caption: 'F2 stops fetching. After replica.lag.time.max.ms (30 s by default) the leader drops it from the ISR. Until then writes wait for F2.',
       add: [txt('sil', X.c, 180, 'silent 30 s', { tone: 'red' })],
-      set: { f2: { tone: 'grey' }, isr: st('ISR = {Leader, F1}', 'min.insync.replicas = 2', 'red') },
+      set: { f2: { tone: 'grey' }, isr: st('ISR = {Leader, F1, F2}', 'F2 silent: writes wait for it', 'red') },
     },
     {
-      caption: 'm2 needs acks only from Leader and F1. ISR size 2 still meets min.insync.replicas 2, so the write succeeds.',
+      caption: 'F2 is now out of the ISR, so m2 needs acks only from Leader and F1. ISR size 2 still meets min.insync.replicas 2: success.',
+      set: { isr: st('ISR = {Leader, F1}', 'min.insync.replicas = 2', 'red') },
       add: [msg('m2', 'pr', 'ld', 196, 208, 'm2'), msg('p3', 'ld', 'f1', 214, 228, 'm2'), msg('k2', 'ld', 'pr', 236, 248, 'ack')],
     },
     {
-      caption: 'F1 dies: ISR = {Leader}, below the minimum. Kafka rejects m3 with NotEnoughReplicas: durability over availability.',
+      caption: 'F1 dies and leaves the ISR: {Leader} alone is below the minimum. Kafka rejects m3 with NotEnoughReplicas: durability over availability.',
       add: [msg('m3', 'pr', 'ld', 264, 276, 'm3'), msg('e3', 'ld', 'pr', 292, 304, 'rejected', { tone: 'red' })],
       set: { f1: { dead: true }, isr: st('ISR = {Leader}', 'size 1 < min 2: writes rejected', 'red') },
       stop: {
@@ -426,7 +433,7 @@ export const isrFlow: FlowDef = {
       },
     },
     {
-      caption: 'Kafka needs f+1 copies to survive f failures but waits for its slowest ISR member. Raft needs 2f+1 and waits only for a majority.',
+      caption: 'Kafka needs f+1 copies to survive f failures without losing committed data, but waits for its slowest ISR member. Raft needs 2f+1 and waits only for a majority.',
       drop: ['pr', 'ld', 'f1', 'f2', 'isr', 'm1', 'p1', 'p2', 'k1', 'sil', 'm2', 'p3', 'k2', 'm3', 'e3', 'u0', 'u1'],
       add: [
         { t: 'box', id: 'kb', x: 15, y: 150, w: 255, h: 130, label: 'Kafka ISR', text: 'f+1 copies survive\nf failures. Latency:\nslowest ISR member.' },

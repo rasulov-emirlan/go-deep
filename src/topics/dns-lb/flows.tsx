@@ -140,7 +140,7 @@ export const l4Flow: FlowDef = {
     },
     {
       caption: 'Fix 1: server MaxConnectionAge makes it send GOAWAY (±10 % jitter). The client reconnects and the LB can pick a new pod.',
-      set: { lb0: { tone: 'grey', dashed: true, text: 'GOAWAY' }, p0: { tone: 'grey', text: 'pod A · 0%' }, p3: { tone: 'ink', dashed: false, text: 'pod D · 100%' } },
+      set: { lb0: { tone: 'grey', dashed: true, text: 'old conn ends' }, p0: { tone: 'grey', text: 'pod A · 0%' }, p3: { tone: 'ink', dashed: false, text: 'pod D · 100%' } },
       add: fan('lb', 275, [3], 'red'),
       stop: {
         title: 'DNS is not polled',
@@ -222,16 +222,16 @@ export const retryFlow: FlowDef = {
   h: 300,
   steps: [
     {
-      caption: 'The server closed an idle keep-alive connection. The Go client’s pool has not noticed yet.',
+      caption: 'The server closes an idle keep-alive connection. Its FIN is still in flight when the Go client reuses that connection.',
       add: [
         { id: 'c', t: 'lane', x: 80, y: 8, len: 280, text: 'Go client', w: 110 },
         { id: 's', t: 'lane', x: 480, y: 8, len: 280, text: 'server' },
-        { id: 'fin', t: 'msg', from: 's', to: 'c', y: 80, y2: 100, text: 'FIN (idle)', tone: 'grey', dashed: true },
+        { id: 'fin', t: 'msg', from: 's', to: 'c', y: 105, y2: 150, text: 'FIN (idle)', tone: 'grey', dashed: true },
       ],
     },
     {
-      caption: 'The next request reuses that dead connection and fails before any response byte.',
-      add: [{ id: 'g1', t: 'msg', from: 'c', to: 's', y: 135, y2: 155, text: 'GET /a', tone: 'red', lost: true }],
+      caption: 'The next request goes out just as the FIN lands, and fails before any response byte.',
+      add: [{ id: 'g1', t: 'msg', from: 'c', to: 's', y: 128, y2: 148, text: 'GET /a', tone: 'red', lost: true, below: true }],
     },
     {
       caption: 'GET is replayable and the connection was reused, so the Transport retries on a new connection. The app never sees the error.',

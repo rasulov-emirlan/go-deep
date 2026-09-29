@@ -21,7 +21,7 @@ export default function Page() {
       <TopicHero slug="failure-detection" title="Failure detection &amp; partitions" lead="Slow or dead? Heartbeats, gossip, gray failures and split brain." toc={toc} />
 
       <Section id="silence" n="01" kicker="Timeouts · phi-accrual" title="A timeout is only a guess">
-        <p>A dead node, a slow node and a lost packet all look the same from outside. TCP will not tell you either: an idle connection to a dead peer can stay “open” for hours (Linux keepalive starts at 7200 s), so heartbeats live in the application.</p>
+        <p>A dead node, a slow node and a lost packet all look the same from outside. TCP will not tell you either: an idle connection to a dead peer can stay “open” for hours (Linux TCP keepalive is off unless the program enables it, then starts at 7200 s; Go’s dialer enables it at 15 s), so heartbeats live in the application.</p>
         <Flow title="Slow or dead?" def={slowOrDead} />
         <Flow title="Fixed timeout vs phi-accrual" def={phiAccrual} />
       </Section>
@@ -32,7 +32,7 @@ export default function Page() {
       </Section>
 
       <Section id="partial" n="03" kicker="Gray failure · partial partitions" title="Half-broken is worse than broken">
-        <p>One Microsoft datacenter study counted 5.2 failing devices and 40.8 failing links per day on average (Bailis &amp; Kingsbury). Most trouble is partial, one-way or gray, not a clean cut.</p>
+        <p>A study of several Microsoft datacenters counted 5.2 failing devices and 40.8 failing links per day on average (as reported by Bailis &amp; Kingsbury). Most trouble is partial, one-way or gray, not a clean cut.</p>
         <Flow title="Gray failure: up, but useless" def={gray} />
         <Flow title="Partitions vs a leader" def={partitions} />
       </Section>

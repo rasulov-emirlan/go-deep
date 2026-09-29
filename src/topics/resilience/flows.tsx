@@ -75,31 +75,31 @@ export const deadlineFlow: FlowDef = {
       ],
     },
     {
-      caption: 'A does 300 ms of its own work. Only about 700 ms is left to hand on.',
+      caption: 'A does 300 ms of its own work. Only about 670 ms is left to hand on, counting 30 ms in transit.',
       add: [
-        { t: 'box', id: 'wa', x: LX.a - 8, y: ty(30), w: 16, h: ty(300) - ty(30), tone: 'soft' },
-        { t: 'text', id: 'twa', x: LX.a + 16, y: ty(150) + 4, text: 'A works 300ms', size: 13, anchor: 'start', tone: 'grey' },
+        { t: 'box', id: 'wa', x: LX.a - 8, y: ty(30), w: 16, h: ty(330) - ty(30), tone: 'soft' },
+        { t: 'text', id: 'twa', x: LX.a + 16, y: ty(180) + 4, text: 'A works 300ms', size: 13, anchor: 'start', tone: 'grey' },
       ],
     },
     {
       caption: 'A calls B with the remainder, not a fresh 1 s. gRPC sends it as a relative `grpc-timeout` header, because clocks are not synced.',
       add: [
-        { t: 'text', id: 'k300', x: 30, y: ty(300) + 4, text: '300', size: 13, tone: 'grey' },
-        { t: 'msg', id: 'm2', from: 'a', to: 'b', y: ty(300), y2: ty(330), text: '≈690ms left' },
+        { t: 'text', id: 'k300', x: 30, y: ty(330) + 4, text: '330', size: 13, tone: 'grey' },
+        { t: 'msg', id: 'm2', from: 'a', to: 'b', y: ty(330), y2: ty(360), text: '≈670ms left' },
       ],
     },
     {
-      caption: 'B works 200 ms, then asks the DB with about 470 ms left. Nested deadlines only shrink.',
+      caption: 'B works 200 ms, then asks the DB with about 440 ms left. Nested deadlines only shrink.',
       add: [
-        { t: 'box', id: 'wb', x: LX.b - 8, y: ty(330), w: 16, h: ty(530) - ty(330), tone: 'soft' },
-        { t: 'text', id: 'k500', x: 30, y: ty(530) + 4, text: '530', size: 13, tone: 'grey' },
-        { t: 'msg', id: 'm3', from: 'b', to: 'db', y: ty(530), y2: ty(560), text: '≈470ms left' },
+        { t: 'box', id: 'wb', x: LX.b - 8, y: ty(360), w: 16, h: ty(560) - ty(360), tone: 'soft' },
+        { t: 'text', id: 'k500', x: 30, y: ty(560) + 4, text: '560', size: 13, tone: 'grey' },
+        { t: 'msg', id: 'm3', from: 'b', to: 'db', y: ty(560), y2: ty(590), text: '≈440ms left' },
       ],
     },
     {
       caption: 'The DB is slow. At 1000 ms the deadline fires and the edge returns an error to the user.',
       add: [
-        { t: 'box', id: 'wd', x: LX.db - 8, y: ty(560), w: 16, h: ty(1000) - ty(560), tone: 'red' },
+        { t: 'box', id: 'wd', x: LX.db - 8, y: ty(590), w: 16, h: ty(1000) - ty(590), tone: 'red' },
         { t: 'text', id: 'giveup', x: LX.edge, y: ty(1000) + 22, text: 'gives up', size: 13, tone: 'red' },
       ],
       set: { m3: { tone: 'red' } },
@@ -108,8 +108,8 @@ export const deadlineFlow: FlowDef = {
       caption: 'Now suppose A had passed `context.Background()` to B. B and the DB never learn of the deadline and keep working for nobody.',
       add: [{ t: 'text', id: 'zombie', x: 425, y: ty(1000) + 32, text: 'zombie work', size: 13, tone: 'red' }],
       set: {
-        wb: { h: ty(1085) - ty(330), tone: 'red' },
-        wd: { h: ty(1085) - ty(560), tone: 'red' },
+        wb: { h: ty(1085) - ty(360), tone: 'red' },
+        wd: { h: ty(1085) - ty(590), tone: 'red' },
       },
       stop: {
         title: 'Background() drops it',
@@ -122,13 +122,13 @@ export const deadlineFlow: FlowDef = {
       drop: ['zombie'],
       add: [{ t: 'text', id: 'cancel', x: 425, y: ty(1000) + 32, text: '✕ cancelled', size: 13, tone: 'grey' }],
       set: {
-        wb: { h: ty(1000) - ty(330), tone: 'grey' },
-        wd: { h: ty(1000) - ty(560), tone: 'grey' },
+        wb: { h: ty(1000) - ty(360), tone: 'grey' },
+        wd: { h: ty(1000) - ty(590), tone: 'grey' },
       },
     },
     {
-      caption: 'A child timeout can only shorten the parent’s deadline: asking B for 5 s still gets the 690 ms left. Leave headroom for your own work.',
-      set: { m2: { text: '5s → 690ms', tone: 'red' } },
+      caption: 'A child timeout can only shorten the parent’s deadline: asking B for 5 s still gets the 670 ms left. Leave headroom for your own work.',
+      set: { m2: { text: '5s → 670ms', tone: 'red' } },
       stop: {
         title: 'The earlier deadline wins',
         body: (
@@ -229,12 +229,12 @@ export const amplifyFlow: FlowDef = {
       },
     },
     {
-      caption: 'Fix two: a retry budget lets retries run only while they stay under a share of requests, say 10%. Worst case ≈ 1.1×. gRPC uses a token bucket.',
+      caption: 'Fix two: a retry budget allows retries only while they stay under a share of requests, say 10%. Worst case ≈ 1.1× per budgeted layer.',
       set: {
         a1: { text: '≤10% retries', tone: 'ink' },
         e1: { text: '1.1×' },
-        e2: { text: '1.1×' },
-        e3: { text: '1.1×' },
+        e2: { text: '×1' },
+        e3: { text: '×1' },
         g: { d: grid(1) },
         big: { text: '≈1.1×' },
       },
@@ -243,7 +243,7 @@ export const amplifyFlow: FlowDef = {
       caption: 'Fix three: the client throttles itself. The more the backend rejects, the more requests it drops locally, with no coordination.',
       set: {
         a1: { text: 'drops locally', tone: 'red' },
-        big: { text: '→ 1×' },
+        big: { text: '↓' },
       },
       stop: {
         title: 'Adaptive throttling',
@@ -307,7 +307,7 @@ export const jitterFlow: FlowDef = {
       set: { h: { d: hist('expo') }, pk: { text: 'peak 100' } },
     },
     {
-      caption: 'Full jitter picks a random wait between 0 and the backoff cap for that attempt. The pulses smear into a low, wide stream.',
+      caption: 'Full jitter picks a random wait between 0 and that attempt’s backoff time. The pulses smear into a low, wide stream.',
       set: { h: { d: hist('full'), tone: 'ink' }, pk: { text: `peak ${pk('full')}`, tone: 'ink' } },
     },
     {
@@ -324,7 +324,7 @@ export const jitterFlow: FlowDef = {
         body: (
           <>
             <p>Jitter shortens some waits but breaks the alignment. Fewer retries collide, so fewer get rejected and re-sent.</p>
-            <p>In a toy server serving one call per tick (base 2, cap 100), 100 clients made 5,050 calls without jitter and 528 with full jitter.</p>
+            <p>In a toy server serving one call per tick (base 2, cap 100), 100 clients made 5,050 calls without jitter and about 550 with full jitter (average of 50 seeded runs).</p>
           </>
         ),
       },
@@ -354,7 +354,7 @@ const bnode = (id: string, p: Pt, text: string, tone: Tone): El => ({ t: 'node',
 
 const strip = (): El[] => {
   // 20 calls, 8 failed (40%), never more than 2 in a row
-  const f = '00100101001001010010'.split('').map((c) => c === '1')
+  const f = '00110010100110010100'.split('').map((c) => c === '1')
   // 1 = fail
   return f.map((bad, i) => ({ t: 'box', id: 'c' + i, x: 40 + i * 24, y: 70, w: 22, h: 26, text: bad ? '✗' : '✓', tone: bad ? 'red' : 'grey' }) as El)
 }
@@ -412,7 +412,7 @@ export const breakerFlow: FlowDef = {
       set: { c: { tone: 'grey' }, o: { tone: 'red' }, ehc: { tone: 'grey' }, lhc: { tone: 'grey' }, no: { tone: 'red' } },
     },
     {
-      caption: 'A steady 40% error rate never makes 6 in a row, so the consecutive rule stays CLOSED. A rate-based breaker looks at the mix instead.',
+      caption: 'Failures spread evenly at 40% never make 6 in a row, so the consecutive rule stays CLOSED. A rate-based breaker looks at the mix.',
       drop: ['c', 'o', 'h', 'nc', 'no', 'cnt', 'eco', 'lco', 'cd', 'eoh', 'loh', 'nh', 'ehc', 'lhc', 'eho', 'lho'],
       add: [
         ...strip(),
@@ -425,7 +425,7 @@ export const breakerFlow: FlowDef = {
       stop: {
         title: 'Consecutive vs rate',
         edge: true,
-        body: 'Consecutive trips fast when a dependency is hard down but is blind to partial failure. Rate needs volume: with minimumNumberOfCalls 100, a quiet service never trips.',
+        body: 'Consecutive trips fast when a dependency is hard down but is mostly blind to partial failure (random runs of 6 can still trip it). Rate needs volume: with minimumNumberOfCalls 100, a quiet service never trips.',
       },
     },
   ],
@@ -457,7 +457,7 @@ export const overloadFlow: FlowDef = {
       stop: {
         title: 'Why latency explodes',
         edge: true,
-        body: 'Little’s law: requests in the system = arrival rate × wait. Above 100% utilisation nothing drains the queue, so wait grows without bound and goodput falls toward zero.',
+        body: 'Little’s law: requests in the system = arrival rate × wait. Above 100% utilisation nothing drains the queue, so wait grows without bound. With a FIFO queue and client timeouts, goodput falls toward zero.',
       },
     },
     {
@@ -489,7 +489,7 @@ default:
       ],
     },
     {
-      caption: 'Under overload, shed the least important work first, at the front door and cheaply. Tell clients “overloaded, do not retry” (`429`, `Retry-After`).',
+      caption: 'Under overload, shed the least important work first, at the front door and cheaply. Tell clients “overloaded, do not retry” (`429` or `503` with `Retry-After`).',
       drop: ['ya', 'xa', 'yt', 'saw', 'xt'],
       add: [
         { t: 'box', id: 'srv2', x: 440, y: 30, w: 100, h: 270, text: 'Server', sub: 'overloaded', tone: 'red' },
@@ -554,12 +554,12 @@ export const hedgeFlow: FlowDef = {
       ],
     },
     {
-      caption: 'The Tail at Scale paper reports a BigTable test where hedging after 10 ms cut the 99.9th percentile from 1,800 ms to 74 ms for about 2% extra requests.',
+      caption: 'The Tail at Scale paper reports a BigTable test: hedging after 10 ms cut the p99.9 of a 1,000-value read from 1,800 ms to 74 ms, for 2% extra requests.',
       drop: ['cl', 'r1', 'r2', 'q1', 'slw', 'p95', 'p95t', 'q2', 'a2', 'x1'],
       add: [
         { t: 'box', id: 'hb1', x: 40, y: 70, w: 210, h: 90, label: 'p99.9 no hedge', text: '1,800 ms', tone: 'grey' },
         { t: 'box', id: 'hb2', x: 300, y: 70, w: 210, h: 90, label: 'hedge at 10 ms', text: '74 ms', sub: '≈2% extra load', tone: 'red' },
-        { t: 'text', id: 'src', x: 280, y: 200, text: 'reported, not measured here', size: 13, tone: 'grey', mono: false },
+        { t: 'text', id: 'src', x: 280, y: 200, text: 'reported for a 1,000-key read, not measured here', size: 13, tone: 'grey', mono: false },
       ],
     },
     {

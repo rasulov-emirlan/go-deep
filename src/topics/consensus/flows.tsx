@@ -103,8 +103,8 @@ export const quorum: FlowDef = new B(300)
     add: [
       LA('s3', X.s3, 'S3', 'replica', { dead: true }),
       msg('w2', 'c', 's1', 90, 106, 'write x=1'),
-      msg('r2', 's1', 's2', 130, 152, 'copy'),
-      msg('r3', 's1', 's3', 130, 152, 'copy', { lost: true, tone: 'red' }),
+      msg('r2', 's1', 's2', 140, 162, 'copy'),
+      msg('r3', 's1', 's3', 108, 130, 'copy', { lost: true, tone: 'red' }),
       txt('stall', 250, 250, 'no ack: waiting for S3', { tone: 'red' }),
     ],
   })
@@ -202,8 +202,9 @@ export const election: FlowDef = new B(372)
     add: [msg('gv', 'l1', 'l3', 282, 304, 'vote granted')],
   })
   .step('The network heals. S2 sees term 2, higher than its own, adopts it and steps down. Any higher term does that.', {
+    drop: ['x1', 'x3', 'rq1', 'rq2', 'gv'],
     set: { n2: { text: 'T2', tone: 'red' }, l2: { sub: 'follower', tone: 'ink' } },
-    add: [msg('hb', 'l3', 'l2', 322, 342, 'heartbeat T2', { tone: 'red' })],
+    add: [msg('hb', 'l3', 'l2', 232, 252, 'heartbeat T2', { tone: 'red' })],
   })
   .def()
 
@@ -232,14 +233,14 @@ export const prevote: FlowDef = new B(332)
   .step('The link heals. S3’s RequestVote arrives carrying term 9.', {
     add: [msg('rv', 'l3', 'l2', 236, 252, 'RequestVote', { tone: 'red' })],
   })
-  .step('S2 sees 9 > 5, adopts it and steps down, though it refuses the vote (S3’s log is stale). No leader until a new election.', {
+  .step('S2 sees 9 > 5, adopts it and steps down. Here it refuses the vote too, because S3 missed committed entries. No leader until a new election.', {
     set: { n2: { text: 'T9', tone: 'red' }, l2: { sub: 'follower', tone: 'ink' } },
     add: [msg('no', 'l2', 'l3', 276, 292, 'no vote, T9')],
   })
   .step('With Pre-Vote, S3 first sends PreVote (“would you vote for me?”), which changes no term. It gets no answer, so it stays at term 5.', {
     drop: ['rx', 'rv', 'no'],
     set: { n2: { text: 'T5', tone: 'ink' }, l2: { sub: 'leader' }, n3: { text: 'T5' }, l3: { sub: 'follower' } },
-    add: [msg('px', 'l3', 'l2', 204, 220, 'PreVote', { lost: true, tone: 'red' })],
+    add: [msg('px', 'l3', 'l2', 204, 220, 'PreVote', { lost: true, tone: 'red' }), txt('pvl', X.s1, 300, 'with Pre-Vote', { tone: 'red' })],
   })
   .step('The link heals. S2 refuses S3’s PreVote. S3 stays a follower at term 5 and the healthy leader is never disturbed.', {
     add: [msg('pv', 'l3', 'l2', 244, 260, 'PreVote', { tone: 'red' }), msg('pn', 'l2', 'l3', 284, 300, 'no')],
@@ -587,12 +588,12 @@ export const membership: FlowDef = new B(290)
   })
   .step('Joint consensus: while C_old,new is in force, every vote and commit needs a majority of both. {S1,S2} has no C_new vote, so it can’t decide alone.', {
     drop: ['a1', 'a2'],
-    set: { m1: { tone: 'ink' }, m2: { tone: 'ink' }, m4: { tone: 'ink', dashed: true }, m5: { tone: 'ink', dashed: true }, rn: { tone: 'ink' } },
+    set: { m1: { tone: 'ink' }, m2: { tone: 'ink' }, m4: { tone: 'ink', dashed: true }, m5: { tone: 'ink', dashed: true } },
     add: [txt('jt', 300, 240, 'needs 2 of C_old AND 2 of C_new', { tone: 'red' })],
   })
   .step('The leader then appends C_new; a server uses the newest config in its log the moment it is appended. When C_new commits, S1 and S2 leave.', {
     drop: ['ro', 'lo'],
-    set: { m1: { tone: 'grey', dashed: true }, m2: { tone: 'grey', dashed: true }, m4: { dashed: false }, m5: { dashed: false }, rn: { tone: 'red' }, jt: { text: 'needs 2 of C_new only' } },
+    set: { m1: { tone: 'grey', dashed: true }, m2: { tone: 'grey', dashed: true }, m4: { dashed: false }, m5: { dashed: false }, jt: { text: 'needs 2 of C_new only' } },
   })
   .step('Alternative: change one server at a time. Majorities of 3 (2) and 4 (3) always overlap, since 2 + 3 > 4, so no joint phase is needed.', {
     drop: 'all',
@@ -632,7 +633,7 @@ export const membership: FlowDef = new B(290)
       edge: true,
       body: (
         <>
-          <p>Fix (Ongaro&rsquo;s thesis): ignore RequestVote while a leader was heard from within the minimum election timeout. etcd-raft implements this as a lease check.</p>
+          <p>Pre-Vote does not fix this: the removed server&rsquo;s log can be as up to date as anyone&rsquo;s. Fix (Ongaro&rsquo;s thesis): ignore RequestVote while a leader was heard from within the minimum election timeout. etcd-raft does this as a lease check, which needs CheckQuorum.</p>
         </>
       ),
     },

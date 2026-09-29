@@ -128,7 +128,7 @@ export const isolation: FlowDef = {
       set: { 'v-note': { tone: 'grey' } },
     },
     {
-      caption: 'Kata Containers puts each pod in a lightweight VM (not re-checked here). Firecracker is a minimal KVM VMM for fast microVMs, used by Lambda and Fargate.',
+      caption: 'Kata Containers puts each pod in a lightweight VM. Firecracker is a minimal KVM VMM for fast microVMs, used by Lambda and Fargate.',
       set: { 'g-note': { tone: 'grey' }, 'v-title': { text: 'Kata · microVM', tone: 'red' }, 'v-h': { text: 'VMM', sub: 'Firecracker, QEMU' } },
       stop: {
         title: 'Rule of thumb',
@@ -157,7 +157,7 @@ export const memory: FlowDef = {
       ],
     },
     {
-      caption: 'Writing a 30 MB file fills the page cache, and cache is charged to the same bucket. Measured on cgroup v1: cache 31.5 MB, dirty 31.5 MB, RSS 168 KB.',
+      caption: 'Writing a 30 MB file fills the page cache, and cache is charged to the same bucket. Measured on cgroup v1: cache 31.5 MB, dirty 31.5 MB, RSS under 200 KB.',
       add: [{ t: 'box', id: 'cache', x: 130, y: 62, w: 264, h: 50, text: 'page cache', sub: '30 MB, all dirty', tone: 'soft' }],
       set: { status: { text: '38 / 50 MB charged' } },
     },
@@ -166,7 +166,7 @@ export const memory: FlowDef = {
       set: { heap: { w: 176, sub: '20 MB' }, cache: { x: 236 }, status: { text: '50 / 50 MB: at the limit', tone: 'red' } },
     },
     {
-      caption: 'Clean cache can simply be dropped. Dirty pages must be written to disk first, so the allocation waits: a latency spike, not a kill.',
+      caption: 'Clean cache can simply be dropped. Dirty pages must be written to disk first, so the allocation waits: a latency spike, usually not a kill.',
       set: { cache: { tone: 'red', sub: 'dirty: write out first' }, status: { text: 'app stalls in reclaim\nno kill yet', tone: 'red' } },
       stop: {
         title: 'Stall, not kill',
@@ -259,12 +259,12 @@ export const cpu: FlowDef = {
       },
     },
     {
-      caption: 'Measured with Go 1.24 on a 0.5 CPU quota: 28 of 31 periods throttled; a 4-goroutine spin took 2.81 s instead of 0.73 s.',
+      caption: 'Measured with Go 1.24 on a 0.5 CPU quota (cgroup v1): 26 of 28 periods throttled; a 4-goroutine spin took 2.6 s instead of 0.5 s.',
       drop: ['req'],
-      set: { budtxt: { text: 'cpu.stat: 28 of 31 periods throttled' } },
+      set: { budtxt: { text: 'cpu.stat: 26 of 28 periods throttled' } },
     },
     {
-      caption: 'Fix: set GOMAXPROCS near the limit (Go 1.25+ derives it from the cgroup CPU limit; earlier, `automaxprocs`). Or keep a request, drop the limit.',
+      caption: 'Fix: set GOMAXPROCS near the limit. Go 1.25+ derives it from the cgroup CPU limit, rounded up, minimum 2; earlier, use `automaxprocs`. Or drop the limit.',
       drop: ['t1', 't2', 't3', 'f0', 'f1', 'f2', 'f3'],
       set: { t0: { tone: 'ink' }, bud: { w: 348, tone: 'ink' }, budtxt: { text: 'budget left: 38 ms of CPU', tone: 'ink' } },
     },
@@ -277,7 +277,7 @@ export const pid1: FlowDef = {
   h: 320,
   steps: [
     {
-      caption: '`CMD ./app` (shell form) makes `/bin/sh -c` PID 1 and the app its child, PID 7. `docker stop` signals PID 1, not the app.',
+      caption: '`CMD ./app` (shell form) runs `/bin/sh -c ./app`. With dash, the shell stays PID 1 and the app is its child, PID 7. `docker stop` signals PID 1.',
       add: [
         lane('d', 'docker', LX.d, 300),
         lane('p', 'PID 1', LX.p, 300, { w: 110, sub: '/bin/sh -c' }),
@@ -302,7 +302,7 @@ export const pid1: FlowDef = {
         edge: true,
         body: (
           <>
-            <p>Make your binary PID 1, or use an init.</p>
+            <p>Make your binary PID 1, or use an init. Some shells (bash -c with one command) exec it directly; dash does not. Check with <code>ps</code>.</p>
             <Code>{`
 CMD ["./app"]     # app is PID 1
 exec ./app        # in a shell script
@@ -420,7 +420,7 @@ export const k8s: FlowDef = {
       },
     },
     {
-      caption: 'QoS class follows from requests and limits. In a node-level OOM the kernel kills the highest `oom_score_adj` first: BestEffort, then Burstable.',
+      caption: 'QoS class follows from requests and limits. In a node-level OOM the kernel scores memory use plus `oom_score_adj`: BestEffort pods are the likeliest victims, then Burstable.',
       drop: ['k1', 'l1', 'v1', 'k2', 'l2', 'v2', 'k3', 'l3', 'v3'],
       add: [
         { t: 'box', id: 'q1', x: 20, y: 30, w: 520, h: 56, text: 'Guaranteed · adj −997', sub: 'every container: limit = request, CPU and memory' },
@@ -432,7 +432,7 @@ export const k8s: FlowDef = {
       caption: 'Before the kernel OOMs, the kubelet evicts under node pressure: pods over their requests go first (by priority, then overage). QoS alone doesn’t decide.',
       drop: ['q1', 'q2', 'q3'],
       add: [
-        { t: 'box', id: 'e1', x: 20, y: 40, w: 520, h: 64, text: 'evicted first', sub: 'usage above requests, any QoS class', tone: 'red' },
+        { t: 'box', id: 'e1', x: 20, y: 40, w: 520, h: 64, text: 'evicted first', sub: 'BestEffort/Burstable using more than requested', tone: 'red' },
         { t: 'line', id: 'earrow', x1: 280, y1: 108, x2: 280, y2: 146, arrow: true, tone: 'grey' },
         { t: 'box', id: 'e2', x: 20, y: 150, w: 520, h: 64, text: 'evicted last', sub: 'usage within requests, incl. Guaranteed', tone: 'grey' },
       ],

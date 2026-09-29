@@ -32,9 +32,9 @@ export const ladder: FlowDef = {
       ],
     },
     {
-      caption: 'Sequential: everyone sees one order that keeps each client’s own order, but ignores the clock.',
+      caption: 'Sequential: everyone sees one order that keeps each client’s own order, ignoring the clock. Linearizable implies it; serializable does not.',
       set: { r1a: { tone: 'ink' }, r1b: { tone: 'ink' } },
-      add: [down('a3', 150, 68), down('a4', 410, 68), row('r2', 130, 130, 300, 'sequential', 'client order, no clock')],
+      add: [down('a3', 150, 68), row('r2', 130, 130, 300, 'sequential', 'client order, no clock')],
     },
     {
       caption: 'Causal: if a happened before b, everyone sees a first; unrelated writes may differ. Below it, per-client session guarantees.',
@@ -123,7 +123,7 @@ export const serVsStrict: FlowDef = {
       ],
     },
     {
-      caption: 'Strict serializable adds real time: T2 began after T1 committed, so it must see T1. This history is banned. etcd’s KV operations promise this.',
+      caption: 'Strict serializable adds real time: T2 began after T1 committed, so it must see T1. This history is banned. etcd’s default KV calls promise this.',
       set: { t2: { tone: 'red' }, s1: { tone: 'red' }, s2: { tone: 'red' } },
       add: [{ t: 'line', id: 'rt', x1: 210, y1: 48, x2: 270, y2: 108, arrow: true, tone: 'red' }, label('t1f', 345, 80, 'T1 came first', 'red'), label('nos', 450, 183, 'not strict', 'red')],
       stop: {
@@ -420,7 +420,7 @@ export const pacelc: FlowDef = {
       add: [
         { t: 'box', id: 'pp', x: 20, y: 20, w: 250, h: 60, label: 'IF PARTITION', text: 'A or C' },
         { t: 'box', id: 'ee', x: 290, y: 20, w: 250, h: 60, label: 'ELSE', text: 'Latency or C' },
-        { t: 'box', id: 'x1', x: 20, y: 110, w: 520, h: 52, text: 'PA/EL', sub: 'Dynamo · Cassandra · SimpleDB' },
+        { t: 'box', id: 'x1', x: 20, y: 110, w: 520, h: 52, text: 'PA/EL', sub: 'Dynamo · Cassandra · Riak' },
         { t: 'box', id: 'x2', x: 20, y: 176, w: 520, h: 52, text: 'PC/EL', sub: 'PNUTS' },
         { t: 'box', id: 'x3', x: 20, y: 242, w: 520, h: 56, text: 'per request', sub: 'DynamoDB ConsistentRead · Cassandra level', tone: 'red' },
       ],
@@ -464,7 +464,7 @@ export const quorum: FlowDef = {
       caption: 'Only consensus fixes it. Cassandra LWT runs Paxos. MongoDB `majority` reads can still lag; `linearizable` confirms with a majority.',
       drop: ['bx', 'by'],
       add: [
-        { t: 'box', id: 'f1', x: 10, y: 244, w: 540, h: 42, text: 'Cassandra LWT (SERIAL)', sub: 'Paxos, ~4 round trips: linearizable CAS' },
+        { t: 'box', id: 'f1', x: 10, y: 244, w: 540, h: 42, text: 'Cassandra LWT (SERIAL)', sub: 'classic Paxos, ~4 round trips: linearizable CAS' },
         { t: 'box', id: 'f2', x: 10, y: 294, w: 540, h: 42, text: 'Mongo linearizable read', sub: 'one document, primary only, set maxTimeMS' },
       ],
     },
@@ -497,7 +497,7 @@ export const nemesis: FlowDef = {
       add: [
         lane('ne', 400, 'Nemesis', 185),
         { t: 'msg', id: 'n1', from: 'ne', to: 'cu', y: 80, text: 'cut link', tone: 'red' },
-        { t: 'msg', id: 'n2', from: 'cl', to: 'cu', y: 132, text: 'write 8', lost: true },
+        { t: 'msg', id: 'n2', from: 'cl', to: 'cu', y: 132, text: 'write 8 ?', dashed: true },
       ],
       stop: {
         title: 'Timed out is not failed',

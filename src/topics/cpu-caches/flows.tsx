@@ -24,11 +24,11 @@ export const ladder: FlowDef = {
       add: [name('n1', rowY(0), 'L1'), bar('b1', X0, rowY(0) - 14, 1 * S), text('v1', X0 + 12, rowY(0), '≈1 ns · 4–5 cycles', { anchor: 'start' })],
     },
     {
-      caption: 'L2 is bigger and a few times slower. Each level down holds more, answers later, and is usually shared by more cores.',
+      caption: 'L2 is bigger and a few times slower. Each level down holds more and answers later.',
       add: [name('n2', rowY(1), 'L2'), bar('b2', X0, rowY(1) - 14, 4 * S), text('v2', X0 + 24, rowY(1), '≈3–5 ns', { anchor: 'start' })],
     },
     {
-      caption: 'L3 is shared by the cores of a socket. Still on the chip, still tens of times smaller than what comes next.',
+      caption: 'L3 is shared by many cores of a socket. Still on the chip, so several times faster than DRAM, but slower than L2.',
       add: [name('n3', rowY(2), 'L3'), bar('b3', X0, rowY(2) - 14, 15 * S), text('v3', X0 + 57, rowY(2), '≈10–20 ns · shared', { anchor: 'start' })],
     },
     {
@@ -44,7 +44,7 @@ export const ladder: FlowDef = {
       add: [name('n5', rowY(4), 'Far'), bar('b5', X0 + 20, rowY(4) - 14, 135 * S, { tone: 'red', dashed: true, text: '≈1.5–2× DRAM' })],
     },
     {
-      caption: 'Measured on a 4-core box: a random pointer chase over 512 MiB ran about 80–110× slower per load than one that fits in L1.',
+      caption: 'Measured on a 4-core box: a random pointer chase over 512 MiB (TLB misses included) ran about 80–110× slower per load than one that fits in L1.',
       add: [
         text('h1', 280, 290, 'if 1 ns were 1 s: L3 ≈ 15 s, DRAM ≈ 1.5 min', { tone: 'grey' }),
         text('h2', 280, 316, 'chase, 4-core box: L1-size vs 512 MiB\n≈ 1 : 80–110', { tone: 'red' }),
@@ -181,7 +181,7 @@ export const branch: FlowDef = {
       set: { br: { tone: 'red', text: 'not taken!' }, g0: { tone: 'red' }, g1: { tone: 'red' }, g2: { tone: 'red' }, gl: { text: 'flush ≈15–20 cycles', tone: 'red' } },
     },
     {
-      caption: 'In Go, `if v >= 128 { t += v }` compiles to a branchless conditional move. There is no branch to predict: sorted and unsorted ran about equal.',
+      caption: 'In Go on amd64 and arm64, `if v >= 128 { t += v }` compiles to a branchless conditional move. There is no branch to predict: sorted and unsorted ran about equal.',
       drop: [...stages.map((_, i) => `st${i}`), 'br', 'g0', 'g1', 'g2', 'gl'],
       add: [
         name('k1', 60, 'unsorted'),
@@ -195,7 +195,7 @@ export const branch: FlowDef = {
         title: 'The branch may be gone',
         body: (
           <>
-            <p>The classic “sorted is faster” demo can show nothing in Go. Check the assembly before trusting it.</p>
+            <p>The classic “sorted is faster” demo can show nothing in Go (CMOV seen on Go 1.24 to 1.26). Check the assembly before trusting it.</p>
             <Code>{`go build -gcflags=-S . 2>&1 |
   grep CMOV`}</Code>
           </>
@@ -203,10 +203,10 @@ export const branch: FlowDef = {
       },
     },
     {
-      caption: 'Force a real branch (a `//go:noinline` call in the taken path): unsorted is 3.4–4× slower. The predictor learns sorted data. Caches are not why.',
+      caption: 'Force a real branch (a `//go:noinline` call in the taken path): unsorted is about 3–4× slower. The predictor learns sorted data. Caches are not why.',
       add: [
         name('k3', 176, 'unsorted'),
-        bar('u3', 100, 162, 249, { tone: 'red', text: '≈3.4–4×' }),
+        bar('u3', 100, 162, 249, { tone: 'red', text: '≈3–4×' }),
         name('k4', 216, 'sorted'),
         bar('u4', 100, 202, 63),
         text('cap', 280, 270, 'N = 65536, 4-core box', { tone: 'grey' }),
@@ -257,7 +257,7 @@ export const mesi: FlowDef = {
       stop: {
         edge: true,
         title: 'Writing to E is free',
-        body: <p>An Exclusive line turns Modified silently, with no traffic. Only a write to a Shared line pays the invalidate round trip.</p>,
+        body: <p>An Exclusive line turns Modified silently, with no traffic. A write to a Shared line pays the invalidate round trip; to an Invalid one, a full miss. Intel uses MESIF, AMD MOESI.</p>,
       },
     },
     {
@@ -303,14 +303,14 @@ export const counter: FlowDef = {
   h: 300,
   steps: [
     {
-      caption: 'Uncontended, `atomic.Add` is about 20–28× a plain add, even with the line in L1. It needs the line Modified and, on x86, drains the store buffer.',
+      caption: 'Uncontended, `atomic.Add` is about 15–28× a plain add, even with the line in L1. It needs the line Modified and, on x86, drains the store buffer.',
       add: [
         name('a1', 50, 'plain c++'),
         bar('x1', 110, 36, 10),
         text('y1', 128, 50, '1×', { anchor: 'start' }),
         name('a2', 110, 'atomic.Add'),
         bar('x2', 110, 96, 240, { tone: 'red' }),
-        text('y2', 358, 110, '≈20–28×', { anchor: 'start' }),
+        text('y2', 358, 110, '≈15–28×', { anchor: 'start' }),
         text('c1', 280, 190, 'single goroutine, 4-core box', { tone: 'grey' }),
       ],
     },
@@ -348,7 +348,7 @@ export const counter: FlowDef = {
       ],
     },
     {
-      caption: 'At 4 cores, relative to one shared atomic: false-shared shards cost the same, a mutex 2.5–3×, and padded shards are 3–6× faster.',
+      caption: 'At 4 cores, relative to one shared atomic: false-shared shards cost the same, a mutex 2.5–3×, and padded shards are 5–7× faster.',
       drop: ['d1', 'z1', 'e1', 'd2', 'z2', 'e2', 'd3', 'z3', 'e3', 'c2'],
       add: [
         name('f1', 50, 'shared atomic'),
@@ -361,8 +361,8 @@ export const counter: FlowDef = {
         bar('g3', 150, 136, 275, { tone: 'red' }),
         text('h3', 433, 150, '≈2.5–3×', { anchor: 'start' }),
         name('f4', 200, 'padded shards'),
-        bar('g4', 150, 186, 22),
-        text('h4', 182, 200, '3–6× faster', { anchor: 'start' }),
+        bar('g4', 150, 186, 16),
+        text('h4', 182, 200, '5–7× faster', { anchor: 'start' }),
         text('c3', 280, 258, 'time per op at 4 cores, shared atomic = 1×', { tone: 'grey' }),
       ],
       stop: {
@@ -424,7 +424,7 @@ export const storeBuffer: FlowDef = {
       add: [msg('dr1', 't1', 'mem', 306, 'x=1'), msg('dr2', 't2', 'mem', 306, 'y=1')],
     },
     {
-      caption: 'A fence between store and load (`MFENCE`, a `LOCK` op, a Go atomic) drains the buffer first. Now at least one load sees 1.',
+      caption: 'A fence between store and load (`MFENCE`, a `LOCK` op, a Go atomic store) drains the buffer first. Now at least one load sees 1.',
       drop: ['ld1', 'rp1', 'ld2', 'rp2', 'dr1', 'dr2'],
       add: [
         { t: 'box', id: 'f1', x: 25, y: 132, w: 130, h: 30, tone: 'red', text: 'fence' },
@@ -456,7 +456,7 @@ export const goModel: FlowDef = {
       add: [...mp(), msg('a1', 'p', 'mem', 100, 'data=42'), msg('a2', 'p', 'mem', 138, 'flag=1')],
     },
     {
-      caption: 'x86-TSO never reorders a store with an older store, or a load with an older load. A consumer that sees the flag also sees the data.',
+      caption: 'On ordinary memory, x86-TSO never reorders a store with an older store, or a load with an older load. A consumer that sees the flag also sees the data.',
       add: [msg('b1', 'c', 'mem', 190, 'read flag'), msg('b2', 'mem', 'c', 222, '1'), msg('b3', 'c', 'mem', 254, 'read data'), msg('b4', 'mem', 'c', 286, '42')],
     },
     {

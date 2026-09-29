@@ -153,7 +153,7 @@ WHERE id=$3 AND token <= $2
       stop: {
         title: 'Redis has no token',
         edge: true,
-        body: <><code>SET NX</code> returns a random string, not an increasing number. A separate <code>INCR</code> is not atomic with the grant, and it can go wrong across a failover.</>,
+        body: <>The value a Redlock client stores is a random string, not an increasing number. A separate <code>INCR</code> is not atomic with the grant, and it can go wrong across a failover.</>,
       },
     },
     {
@@ -216,7 +216,7 @@ export const etcdLock: FlowDef = {
       stop: {
         title: 'etcd’s timer numbers',
         edge: true,
-        body: <>A session defaults to a 60 s TTL. etcd raises tiny TTLs to a minimum: 1.5 s with default settings.</>,
+        body: <>A session defaults to a 60 s TTL. etcd raises tiny TTLs to a minimum: 1.5 s rounded up to 2 s with default settings.</>,
       },
     },
     {
@@ -262,8 +262,8 @@ export const leader: FlowDef = {
     {
       caption: 'A renews on a timer: every 2 s (`RetryPeriod`) in Kubernetes defaults. Each renewal extends the lease to 15 s (`LeaseDuration`).',
       add: [
-        { t: 'msg', id: 'm3', from: 'a', to: 'lease', y: 135, text: 'renew 2s' },
-        { t: 'msg', id: 'm4', from: 'a', to: 'lease', y: 165, text: 'renew 4s' },
+        { t: 'msg', id: 'm3', from: 'a', to: 'lease', y: 135, text: 'renew at t=2s' },
+        { t: 'msg', id: 'm4', from: 'a', to: 'lease', y: 165, text: 'renew at t=4s' },
       ],
     },
     {
@@ -333,7 +333,7 @@ export const kinds: FlowDef = {
     {
       caption: 'Data in Postgres: take `pg_advisory_xact_lock` in the same transaction as the write. If the connection dies, the transaction aborts: the database fences itself.',
       add: [
-        { t: 'line', id: 'l4', x1: 425, y1: 296, x2: 425, y2: 340, arrow: true, text: 'one DB' },
+        { t: 'line', id: 'l4', x1: 425, y1: 296, x2: 425, y2: 340, arrow: true, text: 'else: one DB' },
         { t: 'box', id: 'pg', x: 300, y: 342, w: 250, h: 70, label: 'SAME TRANSACTION', text: 'advisory xact lock', sub: 'lock + write together' },
       ],
       stop: {
@@ -345,7 +345,7 @@ export const kinds: FlowDef = {
     {
       caption: 'A third-party API that ignores tokens cannot be fenced. Use an idempotency key. Fencing works only if every resource checks.',
       add: [
-        { t: 'line', id: 'l5', x1: 425, y1: 412, x2: 425, y2: 456, arrow: true, text: 'outside DB' },
+        { t: 'line', id: 'l5', x1: 425, y1: 412, x2: 425, y2: 456, arrow: true, text: 'else: outside DB' },
         { t: 'box', id: 'ext', x: 300, y: 458, w: 250, h: 70, label: 'NO CHECK POSSIBLE', text: 'idempotency key', sub: 'the API dedupes' },
       ],
     },
@@ -389,7 +389,7 @@ export const redlock: FlowDef = {
         toNode('b2', 440, 3, 'red'),
         toNode('b3', 460, 4, 'red'),
       ],
-      set: { n3: { sub: 'key' }, n4: { sub: 'key' } },
+      set: { n2: { sub: 'key', tone: 'red', dashed: false }, n3: { sub: 'key' }, n4: { sub: 'key' } },
     },
     {
       caption: 'The critique’s first point: Redlock’s token is a random string, so a storage cannot tell which holder is newer.',
@@ -397,7 +397,7 @@ export const redlock: FlowDef = {
       stop: {
         title: 'The critique’s argument',
         edge: true,
-        body: <>The argument is that Redlock assumes bounded network delay, pauses and clock error, and real systems break all three. It also gives no fencing token. The suggested fix: a consensus system plus fencing. Paraphrased, not quoted.</>,
+        body: <>The argument is that any lock with an expiry needs a fencing check at the resource, and that Redlock rests on bounded network delay, pauses and clock error, which real systems break. It also gives no fencing token. Suggested fix: a consensus system such as ZooKeeper plus fencing; for efficiency-only locks a single Redis is enough. Paraphrased, not quoted.</>,
       },
     },
     {
@@ -406,14 +406,14 @@ export const redlock: FlowDef = {
       stop: {
         title: 'The reply’s argument',
         edge: true,
-        body: <>The argument is that bounded clock drift is enough, elapsed time is measured after acquiring, and a pause after the check hurts every lock, ZooKeeper too. A unique token plus compare-and-set can fence. Paraphrased, not quoted.</>,
+        body: <>The argument is that only bounded clock drift is needed, not synchronized clocks. The client measures elapsed time across the acquisition, so delays there are caught, and a pause after that check hurts every lock with an expiry. A unique token plus compare-and-set can fence, and a store that can compare tokens needs no strong lock. He conceded that Redis should use a monotonic clock. Paraphrased, not quoted.</>,
       },
     },
     {
       caption: 'They mostly disagree about the system model. Match the lock to what a double holder costs.',
       drop: ['crit', 'rep'],
       add: [
-        { t: 'box', id: 'v1', x: 10, y: 385, w: 265, h: 66, label: 'EFFICIENCY', text: 'Redlock or Redis OK', sub: 'a double run is cheap' },
+        { t: 'box', id: 'v1', x: 10, y: 385, w: 265, h: 66, label: 'EFFICIENCY', text: 'single Redis is enough', sub: 'a double run is cheap' },
         { t: 'box', id: 'v2', x: 285, y: 385, w: 265, h: 66, label: 'CORRECTNESS', text: 'etcd/ZK + fencing', sub: 'or CAS at the resource', tone: 'red' },
       ],
       stop: {

@@ -98,7 +98,7 @@ export const timeWait: FlowDef = {
         { t: 'msg', id: 'f1', from: 'c', to: 's', y: 66, y2: 84, text: 'FIN' },
         { t: 'msg', id: 'a1', from: 's', to: 'c', y: 104, y2: 122, text: 'ACK' },
       ],
-      set: { c: { sub: 'FIN_WAIT_2' } },
+      set: { c: { sub: 'FIN_WAIT_2' }, s: { sub: 'CLOSE_WAIT' } },
     },
     {
       caption: 'After the last ACK the active closer sits in TIME_WAIT for 60 s on Linux (2 x MSL, the longest a segment may live). That 4-tuple stays reserved.',
