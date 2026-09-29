@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Callout, Section } from '../../components/Lab'
 import { Code } from '../../components/Code'
 import { QuizList } from '../../components/Quiz'
@@ -279,6 +280,9 @@ for v := range ch { fmt.Println("recv", v) }`}
 
       <Section id="interview" n="10" kicker="Interview prep" title="Questions you will be asked">
         <Interview items={interview} prefix="scheduler" />
+        <p className="bank-link">
+          <Link to="/interview?cat=goroutines-scheduler">Drill the real interview questions on this topic →</Link>
+        </p>
         <Sources>
           <p>
             Go 1.26.4 source: <code>runtime/proc.go</code> (schedule, findRunnable, stealWork, sysmon, retake), <code>runtime2.go</code>, <code>preempt.go</code>, <code>signal_unix.go</code>,{' '}

@@ -15,6 +15,7 @@ Each topic: mental model → labs → puzzles → interview questions (progress 
 - `src/sim/` — pure, deterministic TS models of the runtime (unit-tested; the scheduler reproduces go1.26's verified 300-goroutine ordering).
 - `src/topics/<slug>/` — one folder per topic: `Page.tsx`, labs, `content.tsx` (quiz + interview).
 - `src/topics/registry.ts` — add a topic here; entries without `page` render as "coming soon".
+- `src/bank/` — the `/interview` question bank: `questions.json` (deduplicated, answered, puzzles run with `go run` / Postgres 18) and a Leitner spaced-repetition drill (`src/lib/srs.ts`). `scripts/assemble-bank.py` merges the per-category outputs and applies the cross-category merge table; the raw interview notes are not in the repo.
 - `research/` — source notes the content was written from (Go 1.26.4 source + primary docs).
 - `verify/` — Go programs behind every "what does this print" answer. Run `pnpm verify-go`.
 

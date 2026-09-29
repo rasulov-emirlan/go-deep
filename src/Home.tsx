@@ -27,6 +27,15 @@ export default function Home() {
       </div>
       <section className="section">
         <div className="wrap">
+          <Link to="/interview" className="bank-cta">
+            <span className="kicker red">New · question bank</span>
+            <b>Interview drill →</b>
+            <span>Hundreds of real Go interview questions, deduplicated and answered, with spaced-repetition flashcards.</span>
+          </Link>
+        </div>
+      </section>
+      <section className="section">
+        <div className="wrap">
           <span className="kicker red">Curriculum</span>
           <h2>Topics</h2>
           <div className="tgrid">

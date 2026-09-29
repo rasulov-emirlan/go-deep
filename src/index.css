@@ -270,3 +270,9 @@ details.sandbox > .sandbox-body { padding: 0 1rem 1rem; }
 .hero-gopher { position: absolute; right: 1.25rem; bottom: 1.5rem; width: min(26vw, 260px); pointer-events: none; }
 @media (max-width: 1000px) { .hero-gopher { position: static; width: 150px; display: block; margin: 0 0 1rem auto; } }
 .tcard-gopher { height: 64px; width: auto; align-self: flex-end; margin: -.4rem 0 -.2rem; }
+.bank-cta { display: grid; gap: .3rem; border: 1px solid var(--ink); padding: 1.1rem 1.25rem; text-decoration: none; max-width: 40rem; background: #fff; }
+.bank-cta b { font: 700 1.4rem var(--head); }
+.bank-cta span:last-child { color: var(--g500); font-size: .92rem; }
+.bank-cta:hover { border-color: var(--red); color: inherit; }
+.bank-cta:hover b { color: var(--red); }
+.bank-link { margin-top: 1.2rem; font: 500 .8rem var(--mono); text-transform: uppercase; letter-spacing: .06em; }

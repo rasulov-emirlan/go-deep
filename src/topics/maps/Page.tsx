@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Callout, Section } from '../../components/Lab'
 import { Code } from '../../components/Code'
 import { QuizList } from '../../components/Quiz'
@@ -189,6 +190,9 @@ type Map struct {
 
       <Section id="interview" n="09" kicker="Interview prep" title="Questions you will be asked">
         <Interview items={interview} prefix="maps" />
+        <p className="bank-link">
+          <Link to="/interview?cat=maps">Drill the real interview questions on this topic →</Link>
+        </p>
         <Sources>
           <p>
             Go 1.26.4 <code>internal/runtime/maps</code> (map.go, table.go, group.go, runtime*.go), <code>internal/abi/map.go</code>; Go 1.23 <code>runtime/map.go</code>; Michael Pratt,{' '}

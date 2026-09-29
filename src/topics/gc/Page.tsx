@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Callout, Section } from '../../components/Lab'
 import { Code } from '../../components/Code'
 import { QuizList } from '../../components/Quiz'
@@ -244,6 +245,9 @@ esc/main.go:21:14: x escapes to heap         // fmt.Println(x): x boxed into an 
 
       <Section id="interview" n="11" kicker="Interview prep" title="Questions you will be asked">
         <Interview items={interview} prefix="gc" />
+        <p className="bank-link">
+          <Link to="/interview?cat=memory-gc">Drill the real interview questions on this topic →</Link>
+        </p>
         <Sources>
           <p>
             Go 1.26.4 <code>runtime/mgc.go, mgcmark.go, mgcmark_greenteagc.go, mgcpacer.go, mgclimit.go, mbarrier.go, mgcsweep.go, mgcscavenge.go, malloc.go</code>;{' '}
