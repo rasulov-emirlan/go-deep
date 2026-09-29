@@ -172,15 +172,15 @@ WHERE id=$3 AND token <= $2
 /* ---------- 03a · etcd lock queue + lease keepalive ---------- */
 const C = { a: 70, b: 205, c: 345, etcd: 485 }
 export const etcdLock: FlowDef = {
-  h: 565,
+  h: 592,
   steps: [
     {
       caption: 'Three clients each put their own key under `/lock/`, attached to their lease: a timer they must keep renewing.',
       add: [
-        lane('a', 'Client A', C.a, 550),
-        lane('b', 'Client B', C.b, 550),
-        lane('c', 'Client C', C.c, 550),
-        lane('etcd', 'etcd', C.etcd, 550),
+        lane('a', 'Client A', C.a, 578),
+        lane('b', 'Client B', C.b, 578),
+        lane('c', 'Client C', C.c, 578),
+        lane('etcd', 'etcd', C.etcd, 578),
         { t: 'msg', id: 'p1', from: 'a', to: 'etcd', y: 72, text: 'put key+lease' },
         { t: 'msg', id: 'p2', from: 'b', to: 'etcd', y: 96, text: 'put key+lease' },
         { t: 'msg', id: 'p3', from: 'c', to: 'etcd', y: 120, text: 'put key+lease' },
@@ -232,8 +232,8 @@ export const etcdLock: FlowDef = {
       caption: 'A thaws and only learns on its next call: the lease is gone, `Session.Done()` closes. Work must be cancelled from that signal.',
       set: { hold: { text: 'awake', dashed: false } },
       add: [
-        { t: 'msg', id: 'k4', from: 'a', to: 'etcd', y: 538, text: 'keepalive', tone: 'red' },
-        { t: 'msg', id: 'k5', from: 'etcd', to: 'a', y: 560, text: 'lease gone', tone: 'red' },
+        { t: 'msg', id: 'k4', from: 'a', to: 'etcd', y: 550, text: 'keepalive', tone: 'red' },
+        { t: 'msg', id: 'k5', from: 'etcd', to: 'a', y: 574, text: 'lease gone', tone: 'red' },
       ],
       stop: {
         title: 'ZooKeeper: Disconnected ≠ Expired',

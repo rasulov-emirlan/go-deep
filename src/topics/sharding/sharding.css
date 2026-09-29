@@ -1,0 +1,11 @@
+/* sharding topic: ring lab */
+.sharding-lab { display: grid; gap: 1rem; }
+.sharding-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+.sharding-bars { position: relative; display: flex; align-items: stretch; gap: 4px; height: 9rem; border-bottom: 2px solid var(--ink); padding-top: .25rem; }
+.sharding-fair { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--g500); pointer-events: none; }
+.sharding-col { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; position: relative; min-width: 0; }
+.sharding-col em { position: absolute; top: 100%; left: 0; right: 0; text-align: center; font: 600 .7rem var(--mono); color: var(--g500); font-style: normal; padding-top: 2px; }
+.sharding-bar { background: var(--ink); display: block; transition: height .25s; }
+.sharding-bar.new { background: var(--red); }
+.sharding-lab { padding-bottom: .9rem; }
+@media (max-width: 480px) { .sharding-stats .stat b { font-size: 1.1rem; } }

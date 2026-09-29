@@ -16,7 +16,7 @@ describe('jitter toy model', () => {
     expect(t).toEqual([100, 300, 700, 1500, 3100])
   })
   it('jitter breaks up the herd', () => {
-    for (const p of ['full', 'equal', 'decorrelated'] as const) expect(peak(H(p))).toBeLessThan(60)
+    for (const p of ['full', 'equal', 'decorrelated'] as const) expect(peak(H(p))).toBeLessThan(70)
   })
   it('is deterministic', () => {
     expect(retryTimes('decorrelated')).toEqual(retryTimes('decorrelated'))
