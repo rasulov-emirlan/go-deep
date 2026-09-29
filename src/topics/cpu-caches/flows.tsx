@@ -46,8 +46,8 @@ export const ladder: FlowDef = {
     {
       caption: 'Measured on a 4-core box: a random pointer chase over 512 MiB (TLB misses included) ran about 80–110× slower per load than one that fits in L1.',
       add: [
-        text('h1', 280, 290, 'if 1 ns were 1 s: L3 ≈ 15 s, DRAM ≈ 1.5 min', { tone: 'grey' }),
-        text('h2', 280, 316, 'chase, 4-core box: L1-size vs 512 MiB\n≈ 1 : 80–110', { tone: 'red' }),
+        text('h1', 280, 282, 'if 1 ns were 1 s: L3 ≈ 15 s, DRAM ≈ 1.5 min', { tone: 'grey' }),
+        text('h2', 280, 322, 'chase, 4-core box: L1-size vs 512 MiB\n≈ 1 : 80–110', { tone: 'red' }),
       ],
       stop: {
         edge: true,
@@ -171,14 +171,14 @@ export const branch: FlowDef = {
       caption: 'A pipeline works on many instructions at once, 15–20 stages deep on modern cores. At a branch it does not wait: it guesses, and keeps fetching.',
       add: [
         ...stages.map((s, i) => ({ t: 'box', id: `st${i}`, x: stageX(i), y: 40, w: 84, h: 38, text: s }) as El),
-        { t: 'box', id: 'br', x: stageX(3), y: 110, w: 84, h: 38, text: 'if v>=128' },
+        { t: 'box', id: 'br', x: stageX(3), y: 110, w: 84, h: 38, text: 'v>=128' },
         ...[0, 1, 2].map((i) => ({ t: 'box', id: `g${i}`, x: stageX(i), y: 110, w: 84, h: 38, tone: 'grey', dashed: true, text: 'guess' }) as El),
         text('gl', 280, 190, 'predictor: “taken”, fetch that path', { tone: 'grey' }),
       ],
     },
     {
       caption: 'Wrong guess: the guessed work is thrown away and the pipeline refills. About 15–20 cycles lost. On random data, a branch is wrong about half the time.',
-      set: { br: { tone: 'red', text: 'not taken!' }, g0: { tone: 'red' }, g1: { tone: 'red' }, g2: { tone: 'red' }, gl: { text: 'flush ≈15–20 cycles', tone: 'red' } },
+      set: { br: { tone: 'red', text: 'not taken' }, g0: { tone: 'red' }, g1: { tone: 'red' }, g2: { tone: 'red' }, gl: { text: 'flush ≈15–20 cycles', tone: 'red' } },
     },
     {
       caption: 'In Go on amd64 and arm64, `if v >= 128 { t += v }` compiles to a branchless conditional move. There is no branch to predict: sorted and unsorted ran about equal.',
@@ -501,7 +501,7 @@ for !done {} // may spin forever`}</Code>
 /* ---------- 04 · NUMA and vCPUs ---------- */
 const socket = (id: string, y: number, label: string): El => ({ t: 'box', id, x: 10, y, w: 540, h: 120, tone: 'soft', label }) as El
 const cnode = (id: string, x: number, y: number, t: string, more: Partial<El> = {}): El => ({ t: 'node', id, x, y, r: 20, text: t, ...more }) as El
-const numaIds = ['sk0', 'sk1', 'c0', 'c1', 'c2', 'c3', 'd0', 'd1', 'loc', 'rem', 'rem2', 'hop', 'go', 'fix1', 'fix2', 'fixt']
+const numaIds = ['sk0', 'sk1', 'c0', 'c1', 'c2', 'c3', 'd0', 'd1', 'loc', 'rem', 'rem2', 'hop', 'hoplab', 'go', 'fix1', 'fix2', 'fixt']
 
 export const numa: FlowDef = {
   h: 350,
@@ -527,19 +527,19 @@ export const numa: FlowDef = {
     {
       caption: 'Linux places a page on the node of the thread that first writes it. One init thread fills the whole table, so all of it lands in DRAM 0.',
       drop: ['rem'],
-      set: { c0: { text: 'init', tone: 'red' }, d0: { tone: 'red', text: 'DRAM 0', sub: 'whole table' } },
+      set: { c0: { text: 'init', tone: 'red', r: 25 }, d0: { tone: 'red', text: 'DRAM 0', sub: 'whole table' } },
     },
     {
       caption: 'Workers on socket 1 read that table across the link on every access, all sharing it. A bigger machine, a slower service.',
       set: { c2: { text: 'w1' }, c3: { text: 'w2' } },
       add: [
-        { t: 'line', id: 'rem', x1: 152, y1: 276, x2: 425, y2: 117, arrow: true, tone: 'red', text: '≈1.5–2×' },
+        { t: 'line', id: 'rem', x1: 152, y1: 276, x2: 425, y2: 117, arrow: true, tone: 'red' },
         { t: 'line', id: 'rem2', x1: 78, y1: 266, x2: 380, y2: 117, arrow: true, tone: 'red' },
       ],
     },
     {
       caption: 'Go’s runtime is not NUMA-aware: goroutines move between threads on any node, and the heap is not split by node.',
-      add: [{ t: 'line', id: 'hop', x1: 130, y1: 106, x2: 130, y2: 260, arrow: true, dashed: true, text: 'goroutine hops' }],
+      add: [{ t: 'line', id: 'hop', x1: 130, y1: 106, x2: 130, y2: 260, arrow: true, dashed: true }, text('hoplab', 118, 190, 'goroutine hops', { anchor: 'end' })],
       stop: {
         edge: true,
         title: 'The fix is outside Go',

@@ -248,7 +248,7 @@ c.ProbeInterval = time.Second
 c.ProbeTimeout = 500*time.Millisecond
 c.IndirectChecks = 3
 c.SuspicionMult = 4
-c.AwarenessMaxMultiplier = 8 // all equal the defaults`}</Code>
+c.AwarenessMaxMultiplier = 8 // = defaults`}</Code>
           </>
         ),
       },

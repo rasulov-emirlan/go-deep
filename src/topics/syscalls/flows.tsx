@@ -102,11 +102,13 @@ export const crossing: FlowDef = {
     },
     {
       caption: 'No hardware stack switch. The entry stub picks the kernel stack and pushes every register (`pt_regs`). Spectre mitigations run here too.',
-      add: [msg('en', 'c', 'k', 186, 'entry_SYSCALL_64'), box('k1', 385, 200, 170, 56, 'swapgs\nkernel stack\nsave pt_regs')],
+      add: [msg('en', 'c', 'k', 186, 'entry_SYSCALL_64', { tone: 'red' }), box('k1', 385, 200, 170, 56, 'swapgs\nkernel stack\nsave pt_regs', { tone: 'red' })],
+      set: { c1: { tone: 'ink' } },
     },
     {
       caption: 'Seccomp, ptrace and audit hooks run first. Then the kernel indexes `sys_call_table` by `rax` and calls the handler.',
-      add: [box('k2', 385, 264, 170, 34, 'table[rax](regs)')],
+      add: [box('k2', 385, 264, 170, 34, 'table[rax](regs)', { tone: 'red' })],
+      set: { k1: { tone: 'ink' } },
     },
     {
       caption: 'A pointer argument is never trusted. The kernel range-checks it with `access_ok`, then copies with `copy_from_user`.',
@@ -114,6 +116,7 @@ export const crossing: FlowDef = {
         msg('ptr', 'u', 'k', 321, 'user pointer', { x2: 382, dashed: true }),
         box('k3', 385, 304, 170, 34, 'copy_from_user', { tone: 'red' }),
       ],
+      set: { k2: { tone: 'ink' } },
       stop: {
         title: 'Kernel pointer passed?',
         edge: true,
@@ -123,11 +126,12 @@ export const crossing: FlowDef = {
     {
       caption: 'Before returning, the kernel runs pending work: reschedule if the timer tick set `need_resched`, deliver signals.',
       add: [box('k4', 385, 346, 170, 48, 'need_resched?\nsignal pending?', { tone: 'red' })],
+      set: { k3: { tone: 'ink' } },
     },
     {
       caption: 'If the saved state is valid, the fast `sysret` restores `rcx` and `r11` and drops back to CPL 3. Otherwise a slower `iret` runs.',
-      add: [msg('rt1', 'k', 'c', 422, 'sysret'), msg('rt2', 'c', 'u', 446, 'rax = result')],
-      set: { c: { sub: 'CPL 3', tone: 'ink' } },
+      add: [msg('rt1', 'k', 'c', 422, 'sysret', { tone: 'red' }), msg('rt2', 'c', 'u', 446, 'rax = result', { tone: 'red' })],
+      set: { c: { sub: 'CPL 3', tone: 'ink' }, k4: { tone: 'ink' } },
     },
     {
       caption: 'A result in −4095…−1 means `-errno`. libc turns it into `errno` and −1; Go’s assembly negates it into a `syscall.Errno`.',
@@ -143,7 +147,7 @@ export const door: FlowDef = {
   steps: [
     {
       caption: 'seccomp-bpf puts a small filter at the door: a BPF program runs on every syscall entry and returns a verdict.',
-      add: [lane('a', 'App', 80, 310), lane('s', 'seccomp', 280, 310, { sub: 'BPF filter' }), lane('k', 'Kernel', 470, 310), msg('m1', 'a', 's', 82, 'write'), msg('m2', 's', 'k', 108, 'ALLOW')],
+      add: [lane('a', 'App', 80, 310), lane('s', 'seccomp', 280, 310, { sub: 'BPF' }), lane('k', 'Kernel', 470, 310), msg('m1', 'a', 's', 82, 'write'), msg('m2', 's', 'k', 108, 'ALLOW')],
     },
     {
       caption: 'Other verdicts: `ERRNO` fails the call, `KILL` ends the process, `TRAP` signals it, `USER_NOTIF` asks a supervisor. The handler never runs.',
@@ -151,11 +155,12 @@ export const door: FlowDef = {
     },
     {
       caption: 'It sees number, architecture and raw argument values, never pointed-to memory (no TOCTOU). Check `arch`: x86-64, i386, x32 number differently.',
-      add: [box('f1', 195, 200, 170, 50, 'nr, arch, args', { sub: 'no pointer reads' })],
+      add: [box('f1', 195, 200, 170, 50, 'nr, arch, args', { sub: 'no pointer reads', tone: 'red' })],
     },
     {
       caption: 'One `io_uring_enter` passes the filter, but the operations queued in the shared ring are not syscalls the filter ever sees.',
-      add: [msg('m5', 'a', 's', 270, 'io_uring_enter', { tone: 'red' }), msg('m6', 's', 'k', 292, 'ALLOW'), box('k1', 385, 200, 170, 50, 'ring ops run', { tone: 'red', sub: 'unfiltered' })],
+      drop: ['m1', 'm2', 'm3', 'm4', 'f1'],
+      add: [msg('m5', 'a', 's', 100, 'io_uring_enter', { tone: 'red' }), msg('m6', 's', 'k', 126, 'ALLOW'), box('k1', 385, 160, 170, 50, 'ring ops run', { tone: 'red', sub: 'unfiltered' })],
       stop: {
         title: 'Seccomp vs io_uring',
         edge: true,
@@ -164,8 +169,8 @@ export const door: FlowDef = {
     },
     {
       caption: 'gVisor goes further: its Sentry, a Go program in user space, answers the app’s syscalls, so the host kernel sees far fewer, at a speed cost.',
-      drop: ['s', 'k', 'm1', 'm2', 'm3', 'm4', 'm5', 'm6', 'f1', 'k1'],
-      add: [lane('sn', 'Sentry', 280, 310, { sub: 'user space' }), lane('h', 'Host', 470, 310, { sub: 'kernel' }), msg('g1', 'a', 'sn', 82, 'syscall'), box('g2', 195, 110, 170, 40, 'implements it', { tone: 'red' }), msg('g3', 'sn', 'h', 190, 'few own calls', { dashed: true })],
+      drop: ['s', 'k', 'm5', 'm6', 'k1'],
+      add: [lane('sn', 'Sentry', 280, 310, { sub: 'user' }), lane('h', 'Host', 470, 310, { sub: 'kernel' }), msg('g1', 'a', 'sn', 82, 'syscall'), box('g2', 195, 110, 170, 40, 'implements it', { tone: 'red' }), msg('g3', 'sn', 'h', 190, 'few own calls', { dashed: true })],
     },
   ],
 }
@@ -278,7 +283,7 @@ export const handoff: FlowDef = {
       caption: 'G1 runs on thread M1 with processor P1, the right to run Go code. G2 waits in P1’s local run queue.',
       add: [
         lane('m1', 'M1', 70, 408, { sub: 'thread' }),
-        lane('p1', 'P1', 210, 408, { sub: 'processor' }),
+        lane('p1', 'P1', 210, 408, { sub: 'runs Go' }),
         lane('sm', 'sysmon', 350, 408, { sub: 'no P' }),
         g('g1', 5, 76, 130, 40, 'G1 running'),
         g('q', 145, 76, 130, 40, 'runq: G2'),

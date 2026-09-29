@@ -39,7 +39,7 @@ export const worlds: FlowDef = {
       caption: 'Real design: each process gets its own virtual addresses. The MMU (translation hardware in the CPU) maps every access. Same 0x1000, different frames.',
       drop: ['la', 'lb', 'bad'],
       add: [
-        box('mmu', 200, 20, 110, 250, 'MMU', { label: 'per-process table' }),
+        box('mmu', 200, 20, 110, 250, 'MMU', { label: 'page table' }),
         ln('m1', 129, 62, 200, 62),
         ln('m2', 310, 62, 381, 72, { tone: 'red' }),
         ln('m3', 129, 152, 200, 152),
@@ -220,7 +220,7 @@ export const demand: FlowDef = {
         ln('q2', 179, 209, 215, 209, { tone: 'red' }),
         ln('r2', 345, 209, 381, 209, { tone: 'red' }),
       ],
-      set: { p0: { tone: 'ink' }, g: { text: 'minor fault: map only' } },
+      set: { p0: { tone: 'ink' }, f0: { tone: 'ink' }, r0b: { tone: 'ink' }, g: { text: 'minor fault: map only' } },
       stop: {
         title: 'Faults hide inside loads',
         edge: true,

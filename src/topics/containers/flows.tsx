@@ -180,7 +180,7 @@ export const memory: FlowDef = {
     },
     {
       caption: 'Writeback finishes, the pages turn clean, and the kernel drops them. The allocation succeeds. Nothing leaked: the “high usage” was mostly cache.',
-      set: { cache: { w: 88, tone: 'soft', sub: '10 MB, clean' }, status: { text: '30 / 50 MB: allocation succeeds', tone: 'ink' } },
+      set: { cache: { w: 88, tone: 'soft', text: 'cache', sub: '10 MB' }, status: { text: '30 / 50 MB: allocation succeeds', tone: 'ink' } },
     },
     {
       caption: 'The app keeps growing. Cache is already gone, and anonymous memory can’t be dropped (assuming no swap). Nothing reclaimable is left.',
