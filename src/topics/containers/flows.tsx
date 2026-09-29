@@ -25,18 +25,18 @@ export const costume: FlowDef = {
       caption: 'Flag one: a new PID namespace. The same process is PID 1 inside it, and still 4123 to the host. Namespaces change what a process can see.',
       add: [
         { t: 'box', id: 'pidbox', x: 200, y: 82, w: 160, h: 100, label: 'pid ns', tone: 'red', dashed: true, z: -1 },
-        { t: 'text', id: 'r-pid', x: 375, y: 105, text: 'pid: 1 (host: 4123)', anchor: 'start', tone: 'red' },
+        { t: 'text', id: 'r-pid', x: 368, y: 105, text: 'pid: 1 (host: 4123)', anchor: 'start', tone: 'red' },
       ],
     },
     {
       caption: 'Flag two: a new network namespace. It starts with only a loopback interface; a veth pair (a virtual cable) links it to the host.',
       set: { 'r-pid': { tone: 'grey' } },
-      add: [{ t: 'text', id: 'r-net', x: 375, y: 135, text: 'net: lo only', anchor: 'start', tone: 'red' }],
+      add: [{ t: 'text', id: 'r-net', x: 368, y: 135, text: 'net: lo only', anchor: 'start', tone: 'red' }],
     },
     {
       caption: 'Flag three: a mount namespace, then `pivot_root`. The image’s read-only layers, stacked by overlayfs, become `/`. Writes land in a throwaway layer.',
       set: { 'r-net': { tone: 'grey' } },
-      add: [{ t: 'text', id: 'r-mnt', x: 375, y: 165, text: 'mnt: image as /', anchor: 'start', tone: 'red' }],
+      add: [{ t: 'text', id: 'r-mnt', x: 368, y: 165, text: 'mnt: image as /', anchor: 'start', tone: 'red' }],
     },
     {
       caption: 'Five more namespaces each hide one more thing: hostname, SysV IPC, user IDs, the cgroup tree, monotonic clocks.',
@@ -72,7 +72,7 @@ export const costume: FlowDef = {
         { t: 'text', id: 'u1', x: 20, y: 108, text: 'memory.max', anchor: 'start', tone: 'red' },
         { t: 'text', id: 'u2', x: 20, y: 138, text: 'cpu.max', anchor: 'start', tone: 'red' },
         { t: 'text', id: 'u3', x: 20, y: 168, text: 'pids.max', anchor: 'start', tone: 'red' },
-        { t: 'text', id: 'h-see', x: 375, y: 78, text: 'namespaces: SEE', anchor: 'start', tone: 'grey' },
+        { t: 'text', id: 'h-see', x: 368, y: 78, text: 'namespaces: SEE', anchor: 'start', tone: 'grey' },
       ],
       stop: {
         title: 'docker exec = setns',
@@ -371,9 +371,12 @@ srv.Shutdown(shutdownCtx)
     },
     {
       caption: 'With `docker run --init`, tini is PID 1: it reaps every orphan with `wait()` and forwards signals to your app.',
-      drop: ['zom'],
-      set: { pp: { text: 'tini', sub: '--init' }, z2: { tone: 'grey' } },
-      add: [{ t: 'msg', id: 'z3', from: 'pp', to: 'ch', y: 205, text: 'wait()' }],
+      drop: ['zom', 'z1', 'z2'],
+      set: { pp: { text: 'tini', sub: '--init' }, ch: { sub: 'orphan' } },
+      add: [
+        { t: 'msg', id: 'z4', from: 'ch', to: 'pp', y: 92, text: 'orphan exits' },
+        { t: 'msg', id: 'z3', from: 'pp', to: 'ch', y: 140, text: 'wait() reaps' },
+      ],
     },
   ],
 }

@@ -264,7 +264,7 @@ export const replicaFlow: FlowDef = {
     },
     {
       caption: 'A machine twice as big gets twice the points, so it owns about twice the keys.',
-      set: { r1: { tone: 'ink', text: 'D gets 6 points\n(others 3)' } },
+      set: { p0: { tone: 'ink' }, p2: { tone: 'ink' }, p3: { tone: 'ink' }, p1: { tone: 'ink', dashed: false }, r1: { tone: 'ink', text: 'D gets 6 points\n(others 3)' } },
       add: ([135, 195, 255] as const).map((a, i): El => ({ t: 'node', id: `w${i}`, r: 10, text: 'D', tone: 'red', ...P(a) })),
     },
   ],
@@ -282,7 +282,7 @@ const slotX = (i: number) => 20 + 74 * i
 const SLOT_OWNER = 'BABACCA' // final Maglev table for M = 7 (slots 0..6)
 
 export const placeFlow: FlowDef = {
-  h: 300,
+  h: 250,
   steps: [
     {
       caption: 'Rendezvous hashing: score every node with hash(node, key). Highest score owns the key. No ring, no table. Cost: N hashes per lookup.',
@@ -300,12 +300,12 @@ export const placeFlow: FlowDef = {
       caption: 'Jump hash: buckets are numbered 0…n−1, no state. Grow to n+1 and exactly 1/(n+1) of the keys hop into the new bucket, from every old one.',
       drop: ['key', 'nA', 'nB', 'nC', 'nD', 'ru'],
       add: [
-        ...[0, 1, 2, 3, 4].map((i): El => ({ t: 'box', id: 'b' + i, x: jx(i), y: 110, w: jw, h: 50, text: String(i), sub: '1/5' })),
-        { t: 'box', id: 'b5', x: jx(5), y: 110, w: jw, h: 50, text: '5', sub: '+1/6', tone: 'red' },
-        ...[0, 1, 2, 3, 4].map((i): El => ({ t: 'line', id: 'g' + i, x1: jx(i) + jw / 2, y1: 160, x2: jx(i) + jw / 2, y2: 200, tone: 'red' })),
-        { t: 'line', id: 'bus', x1: jx(0) + jw / 2, y1: 200, x2: jx(5) + jw / 2, y2: 200, tone: 'red' },
-        { t: 'line', id: 'up', x1: jx(5) + jw / 2, y1: 200, x2: jx(5) + jw / 2, y2: 164, tone: 'red', arrow: true },
-        { t: 'text', id: 'jl', x: 280, y: 236, tone: 'red', text: 'each old bucket gives up 1/6 of what it holds' },
+        ...[0, 1, 2, 3, 4].map((i): El => ({ t: 'box', id: 'b' + i, x: jx(i), y: 90, w: jw, h: 50, text: String(i), sub: '1/6' })),
+        { t: 'box', id: 'b5', x: jx(5), y: 90, w: jw, h: 50, text: '5', sub: '1/6', tone: 'red' },
+        ...[0, 1, 2, 3, 4].map((i): El => ({ t: 'line', id: 'g' + i, x1: jx(i) + jw / 2, y1: 140, x2: jx(i) + jw / 2, y2: 178, tone: 'red' })),
+        { t: 'line', id: 'bus', x1: jx(0) + jw / 2, y1: 178, x2: jx(5) + jw / 2, y2: 178, tone: 'red' },
+        { t: 'line', id: 'up', x1: jx(5) + jw / 2, y1: 178, x2: jx(5) + jw / 2, y2: 144, tone: 'red', arrow: true },
+        { t: 'text', id: 'jl', x: 280, y: 212, tone: 'red', text: 'each old bucket gives up 1/6 of what it holds' },
       ],
     },
     {
@@ -313,9 +313,9 @@ export const placeFlow: FlowDef = {
       drop: [...[0, 1, 2, 3, 4].map((i) => 'g' + i), 'bus', 'up', 'jl'],
       set: { b2: { tone: 'grey', dashed: true, sub: 'dead' }, b5: { text: '5→2', sub: 'copy' } },
       add: [
-        { t: 'line', id: 'u1', x1: jx(5) + jw / 2, y1: 110, x2: jx(5) + jw / 2, y2: 70, tone: 'red' },
-        { t: 'line', id: 'u2', x1: jx(5) + jw / 2, y1: 70, x2: jx(2) + jw / 2, y2: 70, tone: 'red' },
-        { t: 'line', id: 'u3', x1: jx(2) + jw / 2, y1: 70, x2: jx(2) + jw / 2, y2: 114, tone: 'red', arrow: true },
+        { t: 'line', id: 'u1', x1: jx(5) + jw / 2, y1: 90, x2: jx(5) + jw / 2, y2: 50, tone: 'red' },
+        { t: 'line', id: 'u2', x1: jx(5) + jw / 2, y1: 50, x2: jx(2) + jw / 2, y2: 50, tone: 'red' },
+        { t: 'line', id: 'u3', x1: jx(2) + jw / 2, y1: 50, x2: jx(2) + jw / 2, y2: 94, tone: 'red', arrow: true },
       ],
       stop: {
         edge: true,
@@ -327,18 +327,18 @@ export const placeFlow: FlowDef = {
       caption: 'Maglev fills a table of 7 slots. Backends take turns claiming their next free preferred slot. Round 1: A takes 3, B takes 0, C takes 4.',
       drop: [...[0, 1, 2, 3, 4, 5].map((i) => 'b' + i), 'u1', 'u2', 'u3'],
       add: [
-        ...[0, 1, 2, 3, 4, 5, 6].map((i): El => ({ t: 'box', id: 's' + i, x: slotX(i), y: 60, w: 64, h: 56, label: String(i), text: i === 3 ? 'A' : i === 0 ? 'B' : i === 4 ? 'C' : '', tone: [3, 0, 4].includes(i) ? 'red' : 'grey', dashed: ![3, 0, 4].includes(i) })),
-        { t: 'text', id: 'pa', x: 20, y: 172, anchor: 'start', size: 14, text: 'A prefers: 3 0 4 1 5 2 6' },
-        { t: 'text', id: 'pb', x: 20, y: 200, anchor: 'start', size: 14, text: 'B prefers: 0 2 4 6 1 3 5' },
-        { t: 'text', id: 'pc', x: 20, y: 228, anchor: 'start', size: 14, text: 'C prefers: 3 4 5 6 0 1 2' },
+        ...[0, 1, 2, 3, 4, 5, 6].map((i): El => ({ t: 'box', id: 's' + i, x: slotX(i), y: 50, w: 64, h: 56, label: String(i), text: i === 3 ? 'A' : i === 0 ? 'B' : i === 4 ? 'C' : '', tone: [3, 0, 4].includes(i) ? 'red' : 'grey', dashed: ![3, 0, 4].includes(i) })),
+        { t: 'text', id: 'pa', x: 20, y: 150, anchor: 'start', size: 14, text: 'A prefers: 3 0 4 1 5 2 6' },
+        { t: 'text', id: 'pb', x: 20, y: 178, anchor: 'start', size: 14, text: 'B prefers: 0 2 4 6 1 3 5' },
+        { t: 'text', id: 'pc', x: 20, y: 206, anchor: 'start', size: 14, text: 'C prefers: 3 4 5 6 0 1 2' },
       ],
     },
     {
       caption: 'Rounds 2 and 3 fill the rest: 3/2/2 slots. Lookup is one array read: 1234 mod 7 = 2, slot 2 is B. A change means rebuilding the table.',
       set: Object.fromEntries(SLOT_OWNER.split('').map((l, i) => [`s${i}`, { text: l, tone: i === 2 ? 'red' : 'ink', dashed: false }])),
       add: [
-        { t: 'text', id: 'hh', x: slotX(2) + 32, y: 26, tone: 'red', text: '1234 mod 7 = 2' },
-        { t: 'line', id: 'hl', x1: slotX(2) + 32, y1: 38, x2: slotX(2) + 32, y2: 58, tone: 'red', arrow: true },
+        { t: 'text', id: 'hh', x: slotX(2) + 32, y: 18, tone: 'red', text: '1234 mod 7 = 2' },
+        { t: 'line', id: 'hl', x1: slotX(2) + 32, y1: 28, x2: slotX(2) + 32, y2: 48, tone: 'red', arrow: true },
       ],
     },
   ],
@@ -365,22 +365,23 @@ export const slotFlow: FlowDef = {
       add: [
         { t: 'text', id: 'nd', x: 280, y: 62, tone: 'red', text: 'D takes ~1/4 of each' },
         ...[0, 1, 2].map((i): El => ({ t: 'line', id: 'd' + i, x1: seg(i) + 85, y1: 172, x2: seg(i) + 85, y2: 206, tone: 'red' })),
-        { t: 'box', id: 'mD', x: 190, y: 206, w: 180, h: 38, text: 'master D', tone: 'red', dashed: true },
+        { t: 'box', id: 'mD', x: 60, y: 206, w: 440, h: 38, text: 'master D', tone: 'red', dashed: true },
       ],
     },
     {
       caption: 'Multi-key commands need one slot. `{tag}` hashes only the tag: {u1}:cart and {u1}:prefs share a slot. Without it: CROSSSLOT.',
       drop: ['nd', 'd0', 'd1', 'd2', 'mD', 'hd'],
+      set: { mA: { y: 150 }, mB: { y: 150 }, mC: { y: 150 } },
       add: [
-        { t: 'text', id: 'tg', x: 20, y: 34, anchor: 'start', text: '{u1}:cart   → slot 4574' },
-        { t: 'text', id: 'tg2', x: 20, y: 66, anchor: 'start', text: '{u1}:prefs  → slot 4574' },
-        { t: 'text', id: 'ng', x: 20, y: 96, anchor: 'start', tone: 'red', text: 'cart:u1 13083, prefs:u1 5853' },
+        { t: 'text', id: 'tg', x: 20, y: 24, anchor: 'start', text: '{u1}:cart   → slot 4574' },
+        { t: 'text', id: 'tg2', x: 20, y: 52, anchor: 'start', text: '{u1}:prefs  → slot 4574' },
+        { t: 'text', id: 'ng', x: 20, y: 84, anchor: 'start', tone: 'red', text: 'cart:u1 → 13083\nprefs:u1 → 5853  (no tag)' },
       ],
     },
     {
       caption: 'The price: a tag pins all its keys to one slot on one master. A whale tag is a hot shard, and a slot cannot be split.',
       set: { tg: { tone: 'grey' }, tg2: { tone: 'grey' }, ng: { tone: 'grey' }, mA: { tone: 'grey' }, mC: { tone: 'grey' }, mB: { tone: 'red', sub: 'all {bigcorp}' } },
-      add: [{ t: 'text', id: 'wh', x: 280, y: 214, tone: 'red', text: '{bigcorp}:* → slot 8179 → B only' }],
+      add: [{ t: 'text', id: 'wh', x: 280, y: 232, tone: 'red', text: '{bigcorp}:* → slot 8179 → B only' }],
       stop: {
         edge: true,
         title: 'Tags concentrate load',
@@ -408,6 +409,7 @@ export const reshardFlow: FlowDef = {
     },
     {
       caption: 'Then stream every later change (binlog, change data capture) so the new side catches up. Old stays the truth.',
+      set: { snap: { tone: 'ink' } },
       add: [{ t: 'msg', id: 'cdc', from: 'old', to: 'new', y: 176, y2: 190, text: 'change stream', tone: 'red', dashed: true }],
       stop: {
         edge: true,
@@ -417,6 +419,7 @@ export const reshardFlow: FlowDef = {
     },
     {
       caption: 'Verify before you switch: compare row counts and checksums on both sides.',
+      set: { cdc: { tone: 'ink' } },
       add: [{ t: 'text', id: 'vf', x: 385, y: 232, tone: 'red', text: 'verify rows\n+ checksums' }],
     },
     {
@@ -425,15 +428,18 @@ export const reshardFlow: FlowDef = {
       add: [{ t: 'msg', id: 'rd', from: 'app', to: 'new', y: 250, y2: 265, text: 'reads', tone: 'red' }],
     },
     {
-      caption: 'Then writes: block them briefly, let the stream drain, flip the routing. This pause is the only downtime.',
+      caption: 'Then writes: block them briefly, let the stream drain, flip the routing. Writes wait only for this short pause.',
+      set: { rd: { tone: 'ink' } },
       add: [{ t: 'msg', id: 'pause', from: 'app', to: 'old', y: 296, text: 'write paused', tone: 'red', lost: true }],
     },
     {
       caption: 'The app now writes to the new shards. The old ones are no longer the source of truth.',
+      set: { pause: { tone: 'ink' } },
       add: [{ t: 'msg', id: 'w2', from: 'app', to: 'new', y: 336, y2: 350, text: 'writes', tone: 'red' }],
     },
     {
       caption: 'Keep replication running backwards, new → old. If the cutover goes badly you can switch back without losing writes.',
+      set: { w2: { tone: 'ink' } },
       add: [{ t: 'msg', id: 'rev', from: 'new', to: 'old', y: 384, y2: 398, text: 'reverse stream', tone: 'red', dashed: true }],
     },
   ],
@@ -446,14 +452,15 @@ export const askFlow: FlowDef = {
       caption: 'Redis slot 7 is moving from A to B. A client asks A for a key that has already moved. A answers with a one-off redirect.',
       add: [
         { t: 'lane', id: 'c', x: 70, y: 10, len: 340, text: 'client' },
-        { t: 'lane', id: 'a', x: 280, y: 10, len: 340, text: 'A', sub: 'MIGRATING' },
-        { t: 'lane', id: 'b', x: 490, y: 10, len: 340, text: 'B', sub: 'IMPORTING' },
+        { t: 'lane', id: 'a', x: 280, y: 10, len: 340, text: 'A', sub: 'MIGRATING', w: 96 },
+        { t: 'lane', id: 'b', x: 490, y: 10, len: 340, text: 'B', sub: 'IMPORTING', w: 96 },
         { t: 'msg', id: 'g1', from: 'c', to: 'a', y: 90, y2: 100, text: 'GET k' },
         { t: 'msg', id: 'ask', from: 'a', to: 'c', y: 130, y2: 140, text: '-ASK 7 B', tone: 'red' },
       ],
     },
     {
       caption: 'The client sends ASKING to B, then repeats the command. B accepts it only because of ASKING.',
+      set: { ask: { tone: 'ink' } },
       add: [
         { t: 'msg', id: 'as', from: 'c', to: 'b', y: 176, y2: 190, text: 'ASKING', tone: 'red' },
         { t: 'msg', id: 'g2', from: 'c', to: 'b', y: 216, y2: 230, text: 'GET k' },
@@ -461,12 +468,13 @@ export const askFlow: FlowDef = {
     },
     {
       caption: 'B answers. The client’s slot table is not updated: the next request for slot 7 still goes to A first.',
+      set: { as: { tone: 'ink' } },
       add: [{ t: 'msg', id: 'v', from: 'b', to: 'c', y: 262, y2: 276, text: 'value' }],
     },
     {
       caption: 'When migration has finished, A answers -MOVED. That is permanent: the client rewrites its slot table.',
       drop: ['g1', 'ask', 'as', 'g2', 'v'],
-      set: { a: { sub: 'no longer owns 7' }, b: { sub: 'owns slot 7' } },
+      set: { a: { sub: 'migrated' }, b: { sub: 'owns 7' } },
       add: [
         { t: 'msg', id: 'g3', from: 'c', to: 'a', y: 100, y2: 110, text: 'GET k' },
         { t: 'msg', id: 'mv', from: 'a', to: 'c', y: 150, y2: 160, text: '-MOVED 7 B', tone: 'red' },
@@ -484,7 +492,7 @@ export const askFlow: FlowDef = {
 /* =====================================================================================
    05  what sharding costs
    ===================================================================================== */
-const bar = (id: string, x: number, w: number, hgt: number, tone: 'ink' | 'red' | 'grey'): El => ({ t: 'box', id, x, y: 190 - hgt, w, h: hgt, tone })
+const bar = (id: string, x: number, w: number, hgt: number, tone: 'soft' | 'red'): El => ({ t: 'box', id, x, y: 190 - hgt, w, h: hgt, tone })
 
 export const hotFlow: FlowDef = {
   h: 290,
@@ -493,18 +501,20 @@ export const hotFlow: FlowDef = {
       caption: 'Hashing evens out keys, not traffic. In a 10-node test with skewed (Zipf) traffic, one node took 27.3% of requests, not 10%.',
       add: [
         ...[0, 1, 2].map((i): El => ({ t: 'box', id: 'h' + i, x: 20 + 180 * i, y: 50, w: 160, h: 150, label: `shard ${i}` })),
-        bar('b0', 60, 80, 34, 'ink'),
-        bar('b1', 240, 80, 100, 'red'),
-        bar('b2', 420, 80, 30, 'ink'),
-        { t: 'text', id: 'hk', x: 280, y: 28, tone: 'red', text: 'one hot key → one shard' },
+        bar('b0', 60, 80, 34, 'soft'),
+        bar('b1', 240, 80, 84, 'red'),
+        bar('b2', 420, 80, 30, 'soft'),
+        { t: 'node', id: 'hk', r: 14, text: 'k', tone: 'red', x: 280, y: 84 },
+        { t: 'text', id: 'hkt', x: 280, y: 28, tone: 'red', text: 'one hot key → one shard' },
       ],
     },
     {
       caption: 'Reshard into six. The hot key still lives on exactly one shard, and that shard is still hot.',
       drop: ['h0', 'h1', 'h2', 'b0', 'b1', 'b2'],
+      set: { hk: { x: 232 } },
       add: [
         ...[0, 1, 2, 3, 4, 5].map((i): El => ({ t: 'box', id: 'q' + i, x: 12 + 90 * i, y: 50, w: 80, h: 150, label: `s${i}` })),
-        ...[0, 1, 2, 3, 4, 5].map((i) => bar('u' + i, 26 + 90 * i, 52, i === 2 ? 100 : 26, i === 2 ? 'red' : 'ink')),
+        ...[0, 1, 2, 3, 4, 5].map((i) => bar('u' + i, 26 + 90 * i, 52, i === 2 ? 84 : 26, i === 2 ? 'red' : 'soft')),
       ],
       stop: {
         title: 'How do you fix a hot key?',
@@ -513,6 +523,7 @@ export const hotFlow: FlowDef = {
     },
     {
       caption: 'Salt it: write k#0 … k#7 instead of k. Writes scatter across shards. In the test the hottest node fell from 27.3% to 19.0%.',
+      drop: ['hk', 'hkt'],
       set: { u2: { h: 40, y: 150 }, u0: { h: 44, y: 146 }, u4: { h: 44, y: 146 }, u5: { h: 36, y: 154 } },
       add: (
         [
@@ -551,16 +562,16 @@ export const scatterFlow: FlowDef = {
         { t: 'lane', id: 's1', x: 220, y: 10, len: 300, text: 'S1' },
         { t: 'lane', id: 's2', x: 350, y: 10, len: 300, text: 'S2' },
         { t: 'lane', id: 's3', x: 480, y: 10, len: 300, text: 'S3' },
-        { t: 'msg', id: 'q1', from: 'app', to: 's1', y: 75, y2: 90, text: 'query' },
-        { t: 'msg', id: 'q2', from: 'app', to: 's2', y: 75, y2: 105, text: 'query' },
-        { t: 'msg', id: 'q3', from: 'app', to: 's3', y: 75, y2: 120, text: 'query' },
+        { t: 'msg', id: 'q1', from: 'app', to: 's1', y: 75, y2: 90 },
+        { t: 'msg', id: 'q2', from: 'app', to: 's2', y: 75, y2: 110 },
+        { t: 'msg', id: 'q3', from: 'app', to: 's3', y: 75, y2: 130, text: 'query all' },
       ],
     },
     {
       caption: 'The answer arrives when the slowest shard replies. Latency is the max of N, not the average.',
       add: [
         { t: 'msg', id: 'r1', from: 's1', to: 'app', y: 150, y2: 165, text: 'rows' },
-        { t: 'msg', id: 'r2', from: 's2', to: 'app', y: 150, y2: 185, text: 'rows' },
+        { t: 'msg', id: 'r2', from: 's2', to: 'app', y: 150, y2: 185 },
         { t: 'msg', id: 'r3', from: 's3', to: 'app', y: 150, y2: 250, text: 'slow', tone: 'red' },
       ],
     },
@@ -577,53 +588,54 @@ export const scatterFlow: FlowDef = {
       caption: 'ORDER BY … LIMIT 10 OFFSET 1000: each shard must return its top 1010 rows, then the app merges. Deep pages get expensive.',
       drop: ['q1', 'q2', 'q3', 'r1', 'r2', 'r3', 'tail'],
       add: [
-        { t: 'msg', id: 'm1', from: 'app', to: 's1', y: 80, y2: 92, text: '1010' },
-        { t: 'msg', id: 'm2', from: 'app', to: 's2', y: 80, y2: 108, text: '1010' },
-        { t: 'msg', id: 'm3', from: 'app', to: 's3', y: 80, y2: 124, text: '1010' },
+        { t: 'msg', id: 'm1', from: 'app', to: 's1', y: 75, y2: 90 },
+        { t: 'msg', id: 'm2', from: 'app', to: 's2', y: 75, y2: 110 },
+        { t: 'msg', id: 'm3', from: 'app', to: 's3', y: 75, y2: 130, text: 'top 1010 each' },
         { t: 'text', id: 'mg', x: 60, y: 200, anchor: 'start', tone: 'red', text: 'merge 3 × 1010 rows,\nkeep 10' },
       ],
     },
   ],
 }
 
-const shardBox = (i: number, tone?: 'red'): El => ({ t: 'box', id: 'sh' + i, x: 20 + 180 * i, y: 70, w: 160, h: 70, label: `shard ${i + 1}`, text: 'rows', tone })
+const shardBox = (i: number): El => ({ t: 'box', id: 'sh' + i, x: 20 + 180 * i, y: 140, w: 160, h: 70, label: `shard ${i + 1}`, text: 'rows', sub: 'own index' })
+const IX = (i: number) => 100 + 180 * i
 
 export const indexFlow: FlowDef = {
-  h: 300,
+  h: 250,
   steps: [
     {
       caption: 'Local secondary index: each shard indexes its own rows. Writes stay on one shard, but looking up by email must ask every shard.',
       add: [
-        { t: 'text', id: 'q', x: 280, y: 22, text: 'WHERE email = x', tone: 'red' },
+        { t: 'text', id: 'q', x: 280, y: 20, text: 'WHERE email = x', tone: 'red' },
         ...[0, 1, 2].map((i) => shardBox(i)),
-        ...[0, 1, 2].map((i): El => ({ t: 'line', id: 'ql' + i, x1: 280 + (i - 1) * 60, y1: 34, x2: 100 + 180 * i, y2: 68, tone: 'red', arrow: true })),
-        ...[0, 1, 2].map((i): El => ({ t: 'box', id: 'li' + i, x: 50 + 180 * i, y: 200, w: 100, h: 34, text: 'own index', tone: 'grey' })),
+        ...[0, 1, 2].map((i): El => ({ t: 'line', id: 'ql' + i, x1: 280 + (i - 1) * 50, y1: 34, x2: IX(i), y2: 138, tone: 'red', arrow: true })),
       ],
     },
     {
       caption: 'Global index: the index is itself partitioned, by email. A lookup hits one index shard, then the one shard holding the row.',
       drop: ['ql0', 'ql1', 'ql2'],
-      set: { li0: { text: 'e: a–h', tone: 'ink' }, li1: { text: 'e: i–q', tone: 'red' }, li2: { text: 'e: r–z', tone: 'ink' } },
+      set: { sh0: { sub: '' }, sh1: { sub: '' }, sh2: { sub: '' } },
       add: [
-        { t: 'line', id: 'g1', x1: 280, y1: 34, x2: 280, y2: 198, tone: 'red', arrow: true },
-        { t: 'line', id: 'g2', x1: 230, y1: 200, x2: 130, y2: 142, tone: 'red', arrow: true },
+        ...(['e: a–h', 'e: i–q', 'e: r–z'] as const).map((t, i): El => ({ t: 'box', id: 'ix' + i, x: IX(i) - 50, y: 52, w: 100, h: 34, text: t, tone: i === 1 ? 'red' : 'ink' })),
+        { t: 'line', id: 'g1', x1: 280, y1: 34, x2: 280, y2: 50, tone: 'red', arrow: true },
+        { t: 'line', id: 'g2', x1: 250, y1: 86, x2: IX(0) + 20, y2: 138, tone: 'red', arrow: true },
       ],
     },
     {
       caption: 'The cost moves to writes. Inserting one row updates another shard’s index: a distributed transaction, or an index that lags a little.',
-      drop: ['g1', 'g2'],
-      set: { li0: { tone: 'ink' }, li1: { tone: 'ink' }, li2: { tone: 'red' } },
+      drop: ['g1', 'g2', 'q'],
+      set: { ix1: { tone: 'ink' }, ix2: { tone: 'red' } },
       add: [
-        { t: 'text', id: 'ins', x: 100, y: 22, tone: 'red', text: 'INSERT' },
-        { t: 'line', id: 'w1', x1: 100, y1: 34, x2: 100, y2: 68, tone: 'red', arrow: true },
-        { t: 'line', id: 'w2', x1: 150, y1: 142, x2: 470, y2: 198, tone: 'red', arrow: true, dashed: true },
+        { t: 'text', id: 'ins', x: IX(0), y: 20, tone: 'red', text: 'INSERT' },
+        { t: 'line', id: 'w1', x1: IX(0), y1: 30, x2: IX(0), y2: 138, tone: 'red', arrow: true },
+        { t: 'line', id: 'w2', x1: IX(0) + 40, y1: 138, x2: IX(2) - 10, y2: 88, tone: 'red', arrow: true, dashed: true },
       ],
     },
     {
       caption: 'Best fix is the key itself: pick it so a transaction stays on one shard, co-locate tables that join on it, copy small reference tables everywhere.',
-      drop: ['q', 'ins', 'w1', 'w2', 'li0', 'li1', 'li2'],
+      drop: ['ins', 'w1', 'w2', 'ix0', 'ix1', 'ix2'],
       set: Object.fromEntries([0, 1, 2].map((i) => [`sh${i}`, { text: 'user rows\n+ orders', tone: 'ink' }])),
-      add: [0, 1, 2].map((i): El => ({ t: 'box', id: 'ref' + i, x: 50 + 180 * i, y: 170, w: 100, h: 34, text: 'countries', tone: 'red', dashed: true })),
+      add: [0, 1, 2].map((i): El => ({ t: 'box', id: 'ref' + i, x: IX(i) - 50, y: 90, w: 100, h: 34, text: 'countries', tone: 'red', dashed: true })),
     },
   ],
 }

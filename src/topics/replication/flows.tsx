@@ -416,7 +416,7 @@ export const isrFlow: FlowDef = {
     },
     {
       caption: 'The leader dies. unclean=false: partition offline until Leader or an ISR member returns. unclean=true: F2 leads without m2.',
-      add: [txt('u0', X.a, 340, 'unclean=false:\nstays offline'), txt('u1', X.c, 340, 'unclean=true:\nF2 leads,\nm2 lost', { tone: 'red' })],
+      add: [txt('u0', X.a, 328, 'unclean=false:\nstays offline'), txt('u1', X.c, 328, 'unclean=true:\nF2 leads,\nm2 lost', { tone: 'red' })],
       drop: ['m1', 'p1', 'p2', 'k1'],
       set: { ld: { dead: true }, f2: { tone: 'red' } },
       stop: {

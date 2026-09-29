@@ -69,7 +69,7 @@ export const deadlineFlow: FlowDef = {
         lane('b', LX.b, 'Svc B', 350),
         lane('db', LX.db, 'DB', 350),
         { t: 'line', id: 'dl', x1: 20, y1: ty(1000), x2: 540, y2: ty(1000), tone: 'red', dashed: true },
-        { t: 'text', id: 'dlt', x: 100, y: ty(1000) - 6, text: 'deadline: 1000 ms', anchor: 'start', size: 13, tone: 'red' },
+        { t: 'text', id: 'dlt', x: 100, y: ty(1000) - 14, text: 'deadline: 1000 ms', anchor: 'start', size: 13, tone: 'red' },
         { t: 'text', id: 'k0', x: 30, y: ty(0) + 4, text: '0', size: 13, tone: 'grey' },
         { t: 'msg', id: 'm1', from: 'edge', to: 'a', y: ty(0), y2: ty(30), text: '≈1000ms left' },
       ],
@@ -150,7 +150,7 @@ defer cancel()
 /* ---------- 2. retry amplification ---------- */
 
 const BX = [20, 160, 300, 440]
-const grid = (n: number) => cells(n, 20, 190)
+const grid = (n: number) => cells(n, 20, 185, 9, 16, 4)
 
 export const amplifyFlow: FlowDef = {
   h: 330,
@@ -179,7 +179,7 @@ export const amplifyFlow: FlowDef = {
         l4: { tone: 'red' },
         e3: { text: '×3', tone: 'red' },
         a3: { text: '3 attempts', tone: 'red' },
-        g: { d: grid(3) },
+        g: { d: grid(3), tone: 'red' },
         big: { text: '3×', tone: 'red' },
       },
     },
@@ -189,7 +189,7 @@ export const amplifyFlow: FlowDef = {
         e2: { text: '×3', tone: 'red' },
         e3: { text: '×9', tone: 'red' },
         a2: { text: '3 attempts', tone: 'red' },
-        g: { d: grid(9) },
+        g: { d: grid(9), tone: 'red' },
         big: { text: '9×', tone: 'red' },
       },
     },
@@ -200,7 +200,7 @@ export const amplifyFlow: FlowDef = {
         e2: { text: '×9', tone: 'red' },
         e3: { text: '×27', tone: 'red' },
         a1: { text: '3 attempts', tone: 'red' },
-        g: { d: grid(27) },
+        g: { d: grid(27), tone: 'red' },
         big: { text: '27×', tone: 'red' },
       },
       stop: {
@@ -224,7 +224,7 @@ export const amplifyFlow: FlowDef = {
         a1: { text: '3 attempts', tone: 'ink' },
         a2: { text: '1 attempt', tone: 'grey' },
         a3: { text: '1 attempt', tone: 'grey' },
-        g: { d: grid(3) },
+        g: { d: grid(3), tone: 'ink' },
         big: { text: '3×', tone: 'ink' },
       },
     },
@@ -292,7 +292,7 @@ export const jitterFlow: FlowDef = {
         { t: 'text', id: 'x2', x: JX + 50 * JW, y: JBASE + 18, text: '2s', size: 13, tone: 'grey' },
         { t: 'text', id: 'x3', x: JX + 75 * JW, y: JBASE + 18, text: '3s', size: 13, tone: 'grey' },
         { t: 'text', id: 'yl', x: 20, y: 22, text: 'retries per 40 ms', size: 13, anchor: 'start', tone: 'grey' },
-        { t: 'path', id: 'h', d: `M${JX},${JBASE}v${-125}h${JW - 1}v125z`, tone: 'red', fill: true, width: 1 },
+        { t: 'path', id: 'h', d: `M${JX},${JBASE}v${-125}h${JW - 1}v125z`, tone: 'red', fill: true, width: 2.5 },
         { t: 'text', id: 'note', x: 60, y: 82, text: '100 fail together', size: 13, anchor: 'start', tone: 'red' },
       ],
     },
@@ -338,7 +338,7 @@ export const jitterFlow: FlowDef = {
         { t: 'text', id: 'f2', x: 20, y: 130, text: 'equal: temp/2 + rand(0, temp/2)', anchor: 'start', size: 15 },
         { t: 'text', id: 'f3', x: 20, y: 170, text: 'decorrelated:', anchor: 'start', size: 15 },
         { t: 'text', id: 'f4', x: 40, y: 198, text: 'min(cap, rand(base, prev·3))', anchor: 'start', size: 15 },
-        { t: 'text', id: 'f5', x: 20, y: 246, text: 'prev = the last sleep. Full and decorrelated do best in the toy.', anchor: 'start', size: 13, tone: 'grey', mono: false },
+        { t: 'text', id: 'f5', x: 20, y: 246, text: 'prev = the last sleep. All three beat no jitter by far.', anchor: 'start', size: 13, tone: 'grey', mono: false },
       ],
     },
   ],
@@ -369,7 +369,7 @@ export const breakerFlow: FlowDef = {
         bnode('o', O, 'OPEN', 'grey'),
         bnode('h', HO, 'HALF\nOPEN', 'grey'),
         { t: 'text', id: 'nc', x: C.x, y: C.y + 64, text: 'calls pass', size: 13, tone: 'grey' },
-        { t: 'text', id: 'no', x: O.x, y: O.y + 64, text: 'calls fail fast', size: 13, tone: 'grey' },
+        { t: 'text', id: 'no', x: O.x, y: 58, text: 'calls fail fast', size: 13, tone: 'grey' },
         { t: 'text', id: 'cnt', x: 20, y: 24, text: 'fails in a row: 0', anchor: 'start', size: 14 },
       ],
     },
@@ -379,7 +379,7 @@ export const breakerFlow: FlowDef = {
     },
     {
       caption: 'The 6th failure in a row trips it. Calls now fail at once with `ErrOpenState`: no goroutine waits out a 2 s timeout. Do not retry that error.',
-      add: [edge('eco', C, O, 'red'), { t: 'text', id: 'lco', x: 280, y: 100, text: '6th failure in a row', size: 14, tone: 'red' }, { t: 'text', id: 'cd', x: O.x, y: 50, text: 'cooldown 60 s', size: 13, tone: 'red' }],
+      add: [edge('eco', C, O, 'red'), { t: 'text', id: 'lco', x: 280, y: 100, text: '6th failure in a row', size: 14, tone: 'red' }, { t: 'text', id: 'cd', x: O.x, y: 36, text: 'cooldown 60 s', size: 13, tone: 'red' }],
       set: { c: { tone: 'grey' }, o: { tone: 'red' }, cnt: { text: 'fails in a row: 6' }, no: { tone: 'red' } },
       stop: {
         title: 'Late results ignored',
@@ -394,7 +394,11 @@ export const breakerFlow: FlowDef = {
       stop: {
         title: 'The second caller?',
         edge: true,
-        body: 'While the probe is in flight, other callers get `ErrTooManyRequests` at once. They do not queue. The breaker closes after MaxRequests consecutive successes.',
+        body: (
+          <>
+            While the probe is in flight, other callers get <code>ErrTooManyRequests</code> at once. They do not queue. The breaker closes after MaxRequests consecutive successes.
+          </>
+        ),
       },
     },
     {
@@ -475,26 +479,28 @@ default:
     },
     {
       caption: 'A fixed limit goes stale. Adaptive limits creep up while latency is healthy and cut back hard on timeouts (AIMD, borrowed from TCP).',
+      drop: ['in', 'q', 'qt', 'srv', 'mk', 'mkt', 'rej'],
       add: [
-        { t: 'line', id: 'ya', x1: 60, y1: 300, x2: 60, y2: 190, tone: 'grey', arrow: true },
-        { t: 'line', id: 'xa', x1: 60, y1: 300, x2: 520, y2: 300, tone: 'grey', arrow: true },
-        { t: 'text', id: 'yt', x: 70, y: 186, text: 'in-flight limit', size: 13, anchor: 'start', tone: 'grey' },
-        { t: 'path', id: 'saw', d: 'M60,280 L140,240 L190,262 L270,222 L320,246 L410,206 L460,230 L520,212', tone: 'red', width: 2.5 },
-        { t: 'text', id: 'xt', x: 520, y: 320, text: 'time →', size: 13, anchor: 'end', tone: 'grey' },
+        { t: 'line', id: 'ya', x1: 60, y1: 270, x2: 60, y2: 40, tone: 'grey', arrow: true },
+        { t: 'line', id: 'xa', x1: 60, y1: 270, x2: 520, y2: 270, tone: 'grey', arrow: true },
+        { t: 'text', id: 'yt', x: 72, y: 46, text: 'in-flight limit', size: 13, anchor: 'start', tone: 'grey' },
+        { t: 'path', id: 'saw', d: 'M60,240 L140,180 L190,214 L270,140 L320,176 L410,100 L460,140 L520,110', tone: 'red', width: 2.5 },
+        { t: 'text', id: 'xt', x: 520, y: 296, text: 'time →', size: 13, anchor: 'end', tone: 'grey' },
       ],
     },
     {
       caption: 'Under overload, shed the least important work first, at the front door and cheaply. Tell clients “overloaded, do not retry” (`429`, `Retry-After`).',
       drop: ['ya', 'xa', 'yt', 'saw', 'xt'],
       add: [
-        { t: 'msg', id: 'pc', x1: 60, x2: 470, y: 216, text: 'critical' },
-        { t: 'msg', id: 'pi', x1: 60, x2: 470, y: 256, text: 'interactive' },
-        { t: 'msg', id: 'pb', x1: 60, x2: 470, y: 296, text: 'batch shed first', lost: true, tone: 'red' },
+        { t: 'box', id: 'srv2', x: 440, y: 30, w: 100, h: 270, text: 'Server', sub: 'overloaded', tone: 'red' },
+        { t: 'msg', id: 'pc', x1: 20, x2: 438, y: 90, text: 'critical' },
+        { t: 'msg', id: 'pi', x1: 20, x2: 438, y: 170, text: 'interactive' },
+        { t: 'msg', id: 'pb', x1: 20, x2: 438, y: 250, text: 'batch: shed first', lost: true, tone: 'red' },
       ],
     },
     {
       caption: 'Bulkhead: each dependency gets its own limit, a semaphore or pool. Slow search fills its 10 slots and stops there.',
-      drop: ['in', 'q', 'qt', 'srv', 'mk', 'mkt', 'rej', 'pc', 'pi', 'pb'],
+      drop: ['srv2', 'pc', 'pi', 'pb'],
       add: [
         { t: 'box', id: 'app', x: 20, y: 30, w: 100, h: 250, text: 'Handlers' },
         { t: 'text', id: 'sr', x: 160, y: 56, text: 'search: 10 of 10 slots', size: 14, anchor: 'start', tone: 'red' },
@@ -517,8 +523,8 @@ export const hedgeFlow: FlowDef = {
       add: [
         { t: 'path', id: 'sq', d: cells(100, 60, 30, 10, 14, 4), width: 1.5, tone: 'grey' },
         { t: 'path', id: 'slow', d: cells(1, 60 + 4 * 18, 30 + 3 * 18, 10, 14, 4), fill: true, tone: 'red', width: 2 },
-        { t: 'text', id: 'p63', x: 400, y: 100, text: '1 − 0.99¹⁰⁰', size: 17, anchor: 'start' },
-        { t: 'text', id: 'p63b', x: 400, y: 150, text: '= 63%', size: 30, anchor: 'start', tone: 'red' },
+        { t: 'text', id: 'p63', x: 380, y: 100, text: '1 - 0.99^100', size: 15, anchor: 'start' },
+        { t: 'text', id: 'p63b', x: 380, y: 150, text: '= 63%', size: 30, anchor: 'start', tone: 'red' },
       ],
     },
     {
@@ -589,7 +595,7 @@ export const metastableFlow: FlowDef = {
         bnode('ml', ML, 'Load', 'ink'),
         bnode('mt', MT, 'Time-\nouts', 'grey'),
         bnode('mr', MR, 'Retries', 'grey'),
-        { t: 'text', id: 'ld', x: 280, y: 160, text: '70/s of 100/s', size: 14 },
+        { t: 'text', id: 'ld', x: 280, y: 200, text: '70/s of 100/s', size: 14 },
       ],
     },
     {
@@ -604,7 +610,7 @@ export const metastableFlow: FlowDef = {
     {
       caption: 'Every timeout becomes a retry. 70/s of demand turns into up to 210/s (3 attempts each) against 100/s of capacity.',
       add: [edge('e2', MT, MR, 'red'), edge('e3', MR, ML, 'red')],
-      set: { mr: { tone: 'red' }, ml: { tone: 'red' }, ld: { text: 'up to 210/s of 100/s', tone: 'red' } },
+      set: { mr: { tone: 'red' }, ml: { tone: 'red' }, ld: { text: 'up to 210/s\nof 100/s', tone: 'red' } },
     },
     {
       caption: 'The trigger is over. The loop is not: overload causes timeouts, timeouts cause retries, retries cause overload. Goodput stays near zero.',

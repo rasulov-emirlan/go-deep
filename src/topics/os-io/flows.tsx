@@ -84,7 +84,7 @@ export const epollScale: FlowDef = {
   steps: [
     {
       caption: '10,000 sockets, three have data (16 drawn). Trying a non-blocking `read()` on each would cost 10,000 syscalls. We want the kernel to say which.',
-      add: [...dotEls, { t: 'text', id: 'lab', x: 280, y: 124, text: 'each dot is a socket', tone: 'grey' }, { t: 'box', id: 'thr', x: 20, y: 235, w: 130, h: 34, text: 'your thread' }],
+      add: [...dotEls, { t: 'text', id: 'lab', x: 280, y: 68, text: 'each dot is a socket', tone: 'grey' }, { t: 'box', id: 'thr', x: 20, y: 235, w: 130, h: 34, text: 'your thread' }],
     },
     {
       caption: '`select` and `poll` take the whole list on every call and the kernel checks every fd, even for 3 ready. `select` also stops at 1,024 fds.',
@@ -123,7 +123,7 @@ export const epollScale: FlowDef = {
       stop: {
         title: 'Drain to EAGAIN',
         edge: true,
-        body: 'With `EPOLLET`, use non-blocking fds and read until `EAGAIN`, or you hang. Level is forgiving, but an fd you never read makes `epoll_wait` return at once, forever: a busy loop.',
+        body: <>With <code>EPOLLET</code>, use non-blocking fds and read until <code>EAGAIN</code>, or you hang. Level is forgiving, but an fd you never read makes <code>epoll_wait</code> return at once, forever: a busy loop.</>,
       },
     },
     {
@@ -137,7 +137,7 @@ export const epollScale: FlowDef = {
       stop: {
         title: 'Fixing the herd',
         edge: true,
-        body: '`EPOLLEXCLUSIVE` (Linux 4.5) wakes one or more waiters, not strictly one. `SO_REUSEPORT` gives each worker its own listener. Go has one epoll fd per process, so it has no herd.',
+        body: <><code>EPOLLEXCLUSIVE</code> (Linux 4.5) wakes one or more waiters, not strictly one. <code>SO_REUSEPORT</code> gives each worker its own listener. Go has one epoll fd per process, so it has no herd.</>,
       },
     },
   ],
@@ -172,7 +172,7 @@ export const netpollFile: FlowDef = {
       stop: {
         title: 'Why not pollable?',
         edge: true,
-        body: 'Ready means data is already buffered. A file read is data not yet read: the kernel would have to start the disk I/O first. `select` and `poll` call files always ready; Linux epoll refuses them.',
+        body: <>Ready means data is already buffered. A file read is data not yet read: the kernel would have to start the disk I/O first. <code>select</code> and <code>poll</code> call files always ready; Linux epoll refuses them.</>,
       },
     },
     {
@@ -239,7 +239,7 @@ export const writeCache: FlowDef = {
       stop: {
         title: 'When fsync lies',
         edge: true,
-        body: '`fsync` trusts the device. A drive or hypervisor that acks before persisting, or ignores flushes, breaks the promise. `fdatasync` skips metadata that is not needed to read the data back.',
+        body: <><code>fsync</code> trusts the device. A drive or hypervisor that acks before persisting, or ignores flushes, breaks the promise. <code>fdatasync</code> skips metadata that is not needed to read the data back.</>,
       },
     },
   ],
@@ -265,7 +265,7 @@ export const layers: FlowDef = {
       stop: {
         title: 'O_DIRECT is not durability',
         edge: true,
-        body: '`O_DIRECT` skips the page cache but promises no flush. It needs an aligned buffer, length and offset (else `EINVAL`), and you still need `fsync`.',
+        body: <><code>O_DIRECT</code> skips the page cache but promises no flush. It needs an aligned buffer, length and offset (else <code>EINVAL</code>), and you still need <code>fsync</code>.</>,
       },
     },
     {
@@ -333,7 +333,7 @@ export const zeroCopy: FlowDef = {
       stop: {
         title: 'Does bufio.Reader break it?',
         edge: true,
-        body: 'Not on Go 1.24: `bufio.Reader` hands over to the file\'s own `WriteTo` and `strace` still shows `sendfile`. A `bufio.Writer` on the conn does break it. Check with strace, do not guess.',
+        body: <>Not on Go 1.24: <code>bufio.Reader</code> hands over to the file's own <code>WriteTo</code> and <code>strace</code> still shows <code>sendfile</code>. A <code>bufio.Writer</code> on the conn does break it. Check with strace, do not guess.</>,
       },
     },
     {
@@ -378,7 +378,7 @@ export const descriptors: FlowDef = {
       stop: {
         title: 'Running out of fds',
         edge: true,
-        body: '`accept` fails with `EMFILE` at the `ulimit -n` limit, and `http.Server` backs off (up to 1 s) instead of spinning. Go raises the soft limit at startup and opens every fd `O_CLOEXEC`. Leaked `resp.Body`s are the usual cause.',
+        body: <><code>accept</code> fails with <code>EMFILE</code> at the <code>ulimit -n</code> limit, and <code>http.Server</code> backs off (up to 1 s) instead of spinning. Go raises the soft limit at startup and opens every fd <code>O_CLOEXEC</code>. Leaked <code>resp.Body</code>s are the usual cause.</>,
       },
     },
   ],

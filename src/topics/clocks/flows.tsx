@@ -288,7 +288,7 @@ export const vector: FlowDef = {
       add: [dot('c1', X.C, 110), lbl('c1t', 484, 110, '[0,0,1]')],
     },
     {
-      caption: 'a happened before b only if every slot of a is ≤ the same slot of b. [1,0,0] ≤ [1,1,0], so A’s event came before B’s.',
+      caption: 'a happened before b exactly when every slot of a is ≤ b’s and the vectors differ. [1,0,0] ≤ [1,1,0], so A’s event came first.',
       set: { c1: { tone: 'ink' }, c1t: { tone: 'ink' } },
       add: [{ t: 'text', id: 'o1', x: 280, y: 226, text: '[1,0,0] ≤ [1,1,0]: A → B' }],
     },
@@ -477,7 +477,7 @@ export const truetime: FlowDef = {
       add: [
         { t: 'text', id: 'ack2', x: 296, y: 196, text: 'ack', tone: 'red', anchor: 'start' },
         { t: 'box', id: 't2', x: 250, y: 120, w: 120, h: 52, text: 'T2', sub: '[110, 118]' },
-        { t: 'text', id: 's2', x: 440, y: 100, text: 's2 = 118 > 108', tone: 'red' },
+        { t: 'text', id: 's2', x: 310, y: 100, text: 's2 = 118 > 108', tone: 'red' },
       ],
       stop: {
         title: 'Uncertainty costs latency',

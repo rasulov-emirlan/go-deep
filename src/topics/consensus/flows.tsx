@@ -112,7 +112,7 @@ export const quorum: FlowDef = new B(300)
     drop: ['stall'],
     add: [msg('a2', 's2', 's1', 176, 196, 'ack'), msg('ok2', 's1', 'c', 216, 236, 'ok')],
   })
-  .step('Why it is safe: any two majorities of the same cluster share a node. S2 acked the write and is in every later election too.', {
+  .step('Why it is safe: any two majorities of the same cluster share a node. S2 acked the write and sits in both majorities.', {
     drop: 'all',
     add: [
       region('ra', 130, 112, 220, 76),
