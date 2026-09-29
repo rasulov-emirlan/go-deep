@@ -115,12 +115,6 @@ pre.code.light .k { color: var(--ink); }
 pre.code.light .s { color: var(--g500); }
 pre.code.light .n { color: var(--red); }
 
-/* callouts */
-.callout { border-left: 3px solid var(--ink); padding: .8rem 1rem; background: var(--g100); margin: 0 0 1.2rem; max-width: var(--col); }
-.callout.red { border-left-color: var(--red); }
-.callout .kicker { margin-bottom: .25rem; }
-.callout p:last-child { margin-bottom: 0; }
-
 /* lab frame (visualizations) */
 .lab { border: 2px solid var(--ink); background: #fff; margin: 1.5rem 0 2rem; }
 .lab-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .55rem .9rem; border-bottom: 1px solid var(--g300); background: var(--paper); flex-wrap: wrap; }
@@ -163,42 +157,6 @@ pre.code.light .n { color: var(--red); }
 svg text { font-family: var(--mono); }
 .viz-scroll { overflow-x: auto; }
 
-/* quiz */
-.quiz { border: 1px solid var(--g300); background: #fff; margin-bottom: 1.25rem; max-width: 56rem; }
-.quiz-q { padding: 1rem 1.1rem .4rem; }
-.quiz-q h4 { font: 600 1rem/1.4 var(--body); margin: 0 0 .7rem; }
-.quiz-opts { display: grid; gap: .4rem; padding: 0 1.1rem 1rem; }
-.quiz-opt { text-align: left; border: 1px solid var(--g300); background: var(--paper); padding: .55rem .75rem; cursor: pointer; font: 14px/1.4 var(--body); display: flex; gap: .6rem; transition: border-color .15s ease; }
-.quiz-opt .l { font: 700 .75rem var(--mono); color: var(--g500); padding-top: .12rem; }
-.quiz-opt:hover:not(:disabled) { border-color: var(--ink); }
-.quiz-opt.right { border: 2px solid var(--ink); background: var(--g100); }
-.quiz-opt.right .l { color: var(--ink); }
-.quiz-opt.wrong { border: 2px solid var(--red); background: var(--red-soft); }
-.quiz-opt.wrong .l { color: var(--red); }
-.quiz-opt:disabled { cursor: default; }
-.quiz-opt code { font-size: .85em; }
-.quiz-exp { border-top: 1px solid var(--g300); padding: .8rem 1.1rem; background: var(--g100); font-size: .92rem; }
-.quiz-exp .kicker { margin-bottom: .2rem; }
-.quiz-exp p:last-child { margin: 0; }
-
-/* flashcards / interview */
-.cards { display: grid; gap: 0; border-top: 2px solid var(--ink); max-width: 56rem; }
-.card { border-bottom: 1px solid var(--g300); }
-.card > button { all: unset; box-sizing: border-box; cursor: pointer; display: flex; gap: .9rem; align-items: baseline; padding: .9rem .2rem; width: 100%; }
-.card > button:focus-visible { outline: 2px solid var(--red); }
-.card .qn { font: 700 .75rem var(--mono); color: var(--g500); min-width: 1.8rem; }
-.card .qt { font: 600 1rem/1.45 var(--body); flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.card .lvl { font: 500 .62rem var(--mono); text-transform: uppercase; letter-spacing: .06em; border: 1px solid var(--g300); padding: .1rem .35rem; color: var(--g500); white-space: nowrap; }
-.card .lvl.hard { border-color: var(--red); color: var(--red); }
-.card .plus { font: 700 1rem var(--mono); width: 1rem; text-align: center; }
-.card.open .plus { color: var(--red); }
-.card .ans { padding: 0 .2rem 1.1rem 2.9rem; color: var(--g800); font-size: .95rem; }
-.card .ans p:last-child { margin-bottom: 0; }
-.card .ans pre.code { font-size: 12px; }
-.card .know { margin-top: .6rem; }
-.card.known .qt { color: var(--g500); }
-.card.known .qn::after { content: ' ✓'; color: var(--red); }
-
 .filters { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
 
 /* legend */
@@ -210,7 +168,6 @@ svg text { font-family: var(--mono); }
   .two { grid-template-columns: 1fr; }
   .hero .wrap { padding-top: 3rem; padding-bottom: 2.5rem; }
   .section { padding: 2.5rem 0; }
-  .card .ans { padding-left: .2rem; }
   .topnav { gap: .7rem; }
 }
 
@@ -219,6 +176,7 @@ svg text { font-family: var(--mono); }
 .story:focus-visible { outline: 2px solid var(--red); outline-offset: 3px; }
 .story-head { display: flex; justify-content: space-between; align-items: center; gap: .6rem; padding: .5rem .8rem; border-bottom: 1px solid var(--g300); background: var(--paper); }
 .story-head .kicker { margin: 0; color: var(--ink); }
+.story-head .btn { white-space: nowrap; flex-shrink: 0; }
 .stage { position: relative; aspect-ratio: 800 / 360; overflow: hidden; background: #fff; container-type: inline-size; }
 .st-prop { position: absolute; transition: all .6s ease; border: 2px solid var(--ink); background: #fff; }
 .st-line { border-color: var(--ink); }

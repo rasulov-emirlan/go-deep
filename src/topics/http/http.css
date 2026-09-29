@@ -3,41 +3,14 @@
 .ht-msg b { color: var(--red); font-weight: 700; }
 .ht-msg i { color: var(--g500); }
 
-.ht-check { display: inline-flex; align-items: center; gap: .35rem; font: 500 .7rem var(--mono); text-transform: uppercase; letter-spacing: .05em; cursor: pointer; }
-.ht-check input { accent-color: var(--red); }
-.ht-rtt { display: flex; align-items: center; gap: .8rem; margin-bottom: .8rem; }
-.ht-rtt .kicker { margin: 0; min-width: 6.5rem; color: var(--ink); }
-.ht-rtt input { flex: 1; accent-color: var(--red); min-width: 0; }
-
-.ht-pick { display: grid; gap: 4px; margin-bottom: 1rem; }
-.ht-pick button { display: grid; grid-template-columns: 8.5rem 1fr 4.2rem; align-items: center; gap: .6rem; padding: .45rem .6rem; border: 1.5px solid var(--g300); background: #fff; cursor: pointer; text-align: left; font: inherit; color: var(--ink); }
-.ht-pick button:hover { border-color: var(--ink); }
-.ht-pick button.on { border-color: var(--red); box-shadow: inset 4px 0 0 var(--red); }
-.ht-name { font: 500 .72rem var(--mono); text-transform: uppercase; letter-spacing: .04em; }
-.ht-bar { height: 10px; background: var(--g100); position: relative; }
-.ht-bar i { position: absolute; inset: 0 auto 0 0; background: var(--ink); transition: width .35s ease; }
-.ht-pick button.on .ht-bar i { background: var(--red); }
-.ht-ms { font: 700 .8rem var(--mono); text-align: right; }
-
-.ht-timeline { border-top: 2px solid var(--ink); padding-top: .7rem; }
-.ht-total { font-size: .95rem; margin-bottom: .6rem; }
-.ht-total b { font: 700 1.5rem var(--mono); color: var(--red); margin-right: .3rem; }
-.ht-row { display: grid; grid-template-columns: 2.4rem 1fr; column-gap: .5rem; row-gap: 2px; margin-bottom: .45rem; }
-.ht-rt { font: 700 .7rem var(--mono); color: var(--g500); grid-row: span 2; align-self: start; padding-top: 1px; }
-.ht-track { position: relative; height: 12px; background: var(--g100); }
-.ht-track i { position: absolute; top: 0; bottom: 0; background: var(--ink); animation: ht-grow .35s ease; transform-origin: left; }
-.ht-track i.k-dns { background: var(--g500); }
-.ht-track i.k-http { background: var(--red); }
-.ht-lbl { font: 500 .72rem var(--mono); color: var(--g800); }
-.ht-note { margin: .6rem 0 0; font-size: .9rem; color: var(--g800); }
-.ht-note.warn { border-left: 3px solid var(--red); padding-left: .6rem; }
+.ht-try { margin: 0 0 .8rem; color: var(--g500); }
+.ht-total { font-size: 1rem; margin-bottom: .7rem; }
+.ht-total b { display: block; font: 700 2.4rem/1.1 var(--head); color: var(--red); }
+.ht-trips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-width: 26rem; }
+.ht-trips span { padding: .6rem 0; text-align: center; font: 700 .75rem var(--mono); background: var(--ink); color: var(--paper); animation: ht-grow .3s ease; transform-origin: left; }
+.ht-trips span.k-http { background: var(--red); }
 @keyframes ht-grow { from { transform: scaleX(0); } }
 
-@media (max-width: 520px) {
-  .ht-pick button { grid-template-columns: 1fr 3.8rem; row-gap: 4px; }
-  .ht-pick .ht-bar { grid-column: 1 / -1; grid-row: 2; }
-  .ht-rtt .kicker { min-width: 5.8rem; }
-}
 .ht-cell { display: flex; flex-direction: column; align-items: center; gap: .35em; line-height: 1.2; font-size: clamp(8px, 1.7cqw, 14px); }
 .ht-cell b { font: 700 clamp(9px, 2.1cqw, 18px) var(--mono); text-transform: uppercase; }
 .st-red .ht-cell b { color: var(--red); }

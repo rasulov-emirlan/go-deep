@@ -141,7 +141,7 @@ export function Story({ title, frames, id }: { title: string; frames: Frame[]; i
       <div className="story-head">
         <span className="kicker">{title}</span>
         <button className={'btn sm ' + (auto ? 'on' : 'ghost')} onClick={() => (auto ? setAuto(false) : (last && setI(0), setAuto(true)))}>
-          {auto ? '❚❚ Pause' : `▶ Autoplay · ${stops} stops`}
+          {auto ? '❚❚ Pause' : `▶ Autoplay${stops ? ` · ${stops} stop${stops > 1 ? 's' : ''}` : ''}`}
         </button>
       </div>
       <Stage props={propIds.map(findProp).map(up)} actors={actorIds.map(findActor).map(up)} h={bottom - top} />

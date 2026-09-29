@@ -1,12 +1,7 @@
 import { expect, test } from '@playwright/test'
 
-const pages = [
-  { path: '/', text: 'Watch' },
-  { path: '/scheduler', text: 'Watch the scheduler work' },
-  { path: '/maps', text: 'Swiss map lab' },
-  { path: '/gc', text: 'Paint the reachable town' },
-  ...['slices', 'interfaces', 'channels', 'sync', 'patterns', 'indexes', 'transactions', 'kafka', 'http', 'scaling', 'profiling'].map((s) => ({ path: '/' + s, text: 'Asked in real interviews' })),
-]
+const topics = ['scheduler', 'maps', 'gc', 'slices', 'interfaces', 'channels', 'sync', 'patterns', 'indexes', 'transactions', 'kafka', 'http', 'scaling', 'profiling']
+const pages = [{ path: '/', text: 'Watch' }, ...topics.map((s) => ({ path: '/' + s, text: 'Asked in real interviews' }))]
 
 for (const p of pages)
   test(`${p.path} renders without errors`, async ({ page }) => {
@@ -17,101 +12,59 @@ for (const p of pages)
     expect(errors).toEqual([])
   })
 
-test('guided tour stops to explain, and reproduces the runnext order', async ({ page }) => {
-  await page.goto('/scheduler')
-  const tour = page.locator('#lab .story')
-  let explained = 0
-  for (let i = 0; i < 30; i++) {
-    const ok = tour.getByRole('button', { name: /^OK/ })
-    if (await ok.count()) {
-      explained++
-      await ok.click()
-      continue
-    }
-    if (await tour.getByText('P0 runs g2 — from runnext').count()) break
-    await tour.getByRole('button', { name: 'Step →' }).click()
-  }
-  await expect(tour.getByText('P0 runs g2 — from runnext')).toBeVisible()
-  expect(explained).toBeGreaterThan(2)
-})
-
 test('story steps forward with Next', async ({ page }) => {
   await page.goto('/scheduler')
   const story = page.locator('#model .story').first()
-  await expect(story.getByText('1/5')).toBeVisible()
+  await expect(story.getByText('1/6')).toBeVisible()
   await story.getByRole('button', { name: 'Next →' }).click()
-  await expect(story.getByText('2/5')).toBeVisible()
+  await expect(story.getByText('2/6')).toBeVisible()
   await expect(story.locator('img').first()).toBeVisible()
 })
 
-test('predict-the-output puzzle accepts the verified answer', async ({ page }) => {
-  await page.goto('/scheduler')
-  const q = page.locator('.quiz').filter({ hasText: 'five goroutines' })
-  for (const n of ['4', '0', '1', '2', '3']) await q.getByRole('button', { name: n, exact: true }).click()
-  await expect(q.getByText('Correct')).toBeVisible()
-})
-
-test('swiss lab grows from small map to a table on the 9th key', async ({ page }) => {
-  await page.goto('/maps')
-  const box = page.locator('#sandbox details').filter({ hasText: 'Swiss map lab' })
-  await box.locator('summary').click()
-  const lab = box.locator('.lab')
-  await lab.getByRole('button', { name: '+8 keys' }).click()
-  await expect(lab.getByText('Small map — a single group')).toBeVisible()
-  await lab.getByRole('button', { name: '+1 key' }).click()
-  await expect(lab.getByText(/Table T\d/).first()).toBeVisible()
-})
-
-test('tri-color sandbox: no barrier loses C, hybrid keeps it', async ({ page }) => {
+test('story autoplay halts at a stop until OK', async ({ page }) => {
   await page.goto('/gc')
-  await page.locator('#sandbox summary', { hasText: 'Tri-color' }).click()
-  const lab = page.locator('#sandbox .lab').first()
-  await lab.getByRole('button', { name: 'Run all' }).click()
-  await expect(lab.getByText('use-after-free: C')).toBeVisible()
-  await lab.getByRole('button', { name: 'Hybrid (Go 1.8+)' }).click()
-  await lab.getByRole('button', { name: 'Run all' }).click()
-  await expect(lab.getByText('every reachable object survived').first()).toBeVisible()
-})
-
-test('gc guided tour stops on each case and ends in use-after-free without a barrier', async ({ page }) => {
-  await page.goto('/gc')
-  const tour = page.locator('#guided-gc')
-  await tour.getByRole('button', { name: /hide it in the heap/ }).click()
-  const step = tour.getByRole('button', { name: /^Step/ })
-  const ok = tour.getByRole('button', { name: /^OK/ })
-  for (let i = 0; i < 40 && !(await tour.getByText('Saved by:').count()); i++) {
-    if (await ok.count()) await ok.first().click()
-    else await step.click()
-  }
-  await expect(tour.getByText(/use-after-free/).first()).toBeVisible()
-  await expect(tour.getByText('Saved by: Dijkstra, Yuasa, Hybrid (Go 1.8+)')).toBeVisible()
-  await tour.getByRole('button', { name: 'Hybrid (Go 1.8+)' }).click()
-  for (let i = 0; i < 40 && !(await tour.getByText(/^Safe with|Safe with/).count()); i++) {
-    if (await ok.count()) await ok.first().click()
-    else await step.click()
-  }
-  await expect(tour.getByText(/Safe with “Hybrid/)).toBeVisible()
-})
-
-test('gc story autoplay halts at a stop until OK', async ({ page }) => {
-  await page.goto('/gc')
-  const story = page.locator('#story-mark')
+  const story = page.locator('#mark .story')
   await story.getByRole('button', { name: /Autoplay/ }).click()
-  await expect(story.getByRole('button', { name: /OK, next/ })).toBeVisible({ timeout: 6000 })
-  await expect(story.getByText(/the first of two short pauses/)).toBeVisible()
+  const ok = story.getByRole('button', { name: /OK, next/ })
+  await expect(ok).toBeVisible({ timeout: 12000 })
+  await page.waitForTimeout(2000)
+  await expect(story.getByText('4/7')).toBeVisible()
+  await ok.click()
+  await expect(story.getByText('5/7')).toBeVisible()
 })
 
-test('maps guided tour stops on the false positive and explains it', async ({ page }) => {
-  await page.goto('/maps')
-  const tour = page.locator('#tour .story')
-  await tour.getByRole('button', { name: /^2 · insert/ }).click()
-  for (let i = 0; i < 40 && !(await tour.getByText('the fingerprint matched, but it’s someone else').count()); i++) {
-    const ok = tour.getByRole('button', { name: /^OK, next/ })
-    if (await ok.count()) await ok.click()
-    else await tour.getByRole('button', { name: /^Step/ }).click()
-  }
-  await expect(tour.getByText('the fingerprint matched, but it’s someone else')).toBeVisible()
-  await expect(tour.locator('.story-chips span.on', { hasText: 'false positive' })).toHaveCount(1)
+test('append lab: b overwrites a, then moves out', async ({ page }) => {
+  await page.goto('/slices')
+  const lab = page.locator('.lab', { hasText: 'Append lab' })
+  await lab.getByRole('button', { name: /b = append/ }).click()
+  await expect(lab.getByText('a changed!')).toBeVisible()
+  for (let i = 0; i < 3 && !(await lab.getByText('copied it to a new array').count()); i++) await lab.getByRole('button', { name: /b = append/ }).click()
+  await expect(lab.getByText('copied it to a new array')).toBeVisible()
+})
+
+test('nil box: a nil pointer in an interface is not nil', async ({ page }) => {
+  await page.goto('/interfaces')
+  const lab = page.locator('.lab', { hasText: 'Nil box' })
+  await lab.getByRole('button', { name: '(*T)(nil)' }).click()
+  await expect(lab.getByText('err == nil → false')).toBeVisible()
+  await lab.getByRole('button', { name: 'nil', exact: true }).click()
+  await expect(lab.getByText('err == nil → true')).toBeVisible()
+})
+
+test('crash lab: commit first loses m2', async ({ page }) => {
+  await page.goto('/kafka')
+  const lab = page.locator('.lab', { hasText: 'Crash the consumer' })
+  await lab.getByRole('button', { name: 'Commit first' }).click()
+  await expect(lab.getByText('m2 lost')).toBeVisible()
+  await lab.getByRole('button', { name: 'Commit after' }).click()
+  await lab.getByRole('button', { name: 'No dedup' }).click()
+  await expect(lab.getByText('m2 charged twice')).toBeVisible()
+})
+
+test('flame lab: tapping the regex bar is the fix', async ({ page }) => {
+  await page.goto('/profiling')
+  await page.getByRole('group', { name: 'flame graph' }).getByRole('button', { name: 'regexp.MustCompile' }).first().click()
+  await expect(page.locator('.profiling-verdict')).toBeVisible()
 })
 
 test('question bank drill: reveal, grade, progress persists', async ({ page }) => {

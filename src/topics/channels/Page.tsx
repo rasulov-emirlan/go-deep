@@ -3,13 +3,11 @@ import { Story } from '../../components/Story'
 import { NextTopic, TopicHero } from '../../components/TopicShell'
 import { TopQuestions } from '../../bank/TopQuestions'
 import channels from '../../bank/cats/channels.json'
-import { ChanLab } from './ChanLab'
-import { anatomy, deadlockLeak, handoff, nilClosed, selectStory } from './stories'
+import { deadlockLeak, handoff, nilClosed, selectStory } from './stories'
 import './channels.css'
 
 const toc = [
-  { id: 'hchan', label: 'hchan' },
-  { id: 'handoff', label: 'Handoff vs buffer' },
+  { id: 'handoff', label: 'Handshake or mailbox' },
   { id: 'nil-closed', label: 'nil & closed' },
   { id: 'select', label: 'select' },
   { id: 'deadlock', label: 'Deadlock vs leak' },
@@ -26,21 +24,16 @@ export default function ChannelsPage() {
             Channels & <span className="r">select</span>
           </>
         }
-        lead="A channel is a locked queue with two waiting rooms; everything else, from panics to deadlocks, follows from that."
+        lead="A channel passes values between goroutines and makes them wait for each other when needed."
         toc={toc}
       />
 
-      <Section id="hchan" n="01" kicker="runtime/chan.go" title="A lock, a ring, two queues">
-        <p className="prose">Every channel is one heap struct. Senders arrive from the left and receivers from the right.</p>
-        <Story title="hchan anatomy" frames={anatomy} />
+      <Section id="handoff" n="01" kicker="Unbuffered vs buffered" title="Handshake or mailbox">
+        <p className="prose">Inside, a channel is a small queue behind a lock, plus lines of goroutines waiting to send or receive.</p>
+        <Story title="Handshake, then mailbox" frames={handoff} />
       </Section>
 
-      <Section id="handoff" n="02" kicker="Unbuffered vs buffered" title="Handshake or mailbox">
-        <p className="prose">An unbuffered channel is a meeting point. A buffered one lets the sender leave the value and walk away, until the buffer is full.</p>
-        <Story title="Handoff, then buffer" frames={handoff} />
-      </Section>
-
-      <Section id="nil-closed" n="03" kicker="The table everyone asks" title="nil and closed channels">
+      <Section id="nil-closed" n="02" kicker="The table everyone asks" title="nil and closed channels">
         <Story title="nil, closed, who closes" frames={nilClosed} />
         <table className="ch-table">
           <thead>
@@ -68,31 +61,27 @@ export default function ChannelsPage() {
             </tr>
           </tbody>
         </table>
-        <ChanLab />
       </Section>
 
-      <Section id="select" n="04" kicker="select" title="Wait on many, run one">
-        <p className="prose">
-          <code>select</code> is how a goroutine waits for whichever channel is ready first, with an optional timeout or way out.
-        </p>
-        <Story title="select, default, nil, timeout" frames={selectStory} />
+      <Section id="select" n="03" kicker="select" title="Wait on many, run one">
+        <Story title="select, default, timeout" frames={selectStory} />
       </Section>
 
-      <Section id="deadlock" n="05" kicker="Failure modes" title="Deadlock is loud, leaks are silent">
-        <Story title="Deadlock vs goroutine leak" frames={deadlockLeak} />
+      <Section id="deadlock" n="04" kicker="Stuck goroutines" title="Deadlock is loud, leaks are silent">
+        <Story title="Deadlock vs leak" frames={deadlockLeak} />
       </Section>
 
-      <Section id="asked" n="06" kicker="Interview prep" title="Asked in real interviews">
+      <Section id="asked" n="05" kicker="Interview prep" title="Asked in real interviews">
         <TopQuestions
           from={[channels]}
           ids={[
-            'channels-hchan-internals',
+            'channels-what-and-kinds',
             'channels-buffered-vs-unbuffered',
             'channels-nil-closed-behavior',
             'channels-who-closes',
             'channels-select',
-            'channels-select-closed-send-panic',
             'channels-non-blocking-select',
+            'channels-select-closed-send-panic',
             'channels-deadlock',
           ]}
         />

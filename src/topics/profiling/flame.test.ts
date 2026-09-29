@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { build, index, layout, ms, PROFILE, TARGET, top, verdict } from './flame'
+import { build, index, layout, ms, PROFILE, TARGET, verdict } from './flame'
 
 const root = build(PROFILE)
 const idx = index(root)
@@ -28,20 +28,6 @@ describe('flame profile', () => {
       expect(r.x + r.w).toBeLessThanOrEqual(pr.x + pr.w + 1e-9)
       expect(r.w).toBeCloseTo(r.cum / 1000)
     }
-  })
-  it('zoom: focus fills the width, ancestors stay, siblings vanish', () => {
-    const rects = layout(root, TARGET)
-    const f = rects.find((r) => r.id === TARGET)!
-    expect(f).toMatchObject({ x: 0, w: 1 })
-    expect(rects.filter((r) => r.depth < f.depth).every((r) => r.w === 1 && TARGET.startsWith(r.id))).toBe(true)
-    expect(rects.some((r) => r.name.includes('json'))).toBe(false)
-    expect(rects.find((r) => r.name === 'regexp/syntax.Parse')!.w).toBeCloseTo(110 / 310)
-  })
-  it('top sums flat across stacks: mallocgc appears 3 times', () => {
-    const t = top(root, 5)
-    expect(t[0]).toEqual({ name: 'json.(*encodeState).reflectValue', flat: 160, cum: 220 })
-    expect(t[1]).toEqual({ name: 'runtime.mallocgc', flat: 150, cum: 150 })
-    expect(t.map((x) => x.name)).toContain('regexp/syntax.Parse')
   })
   it('verdicts', () => {
     expect(verdict(root, TARGET).kind).toBe('yes')

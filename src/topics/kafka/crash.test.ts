@@ -61,4 +61,11 @@ describe('simulate', () => {
     expect(r.crashed).toBe(true)
     expect(r.verdict).toBe('exactly')
   })
+  it('the lab: crash mid-m2 of 4, all four combinations', () => {
+    const lab = (mode: 'before' | 'after', idempotent: boolean) => simulate({ mode, idempotent, batch: 1, n: 4, crashAfter: 5 })
+    expect(lab('before', false).applied).toEqual([1, 1, 0, 1])
+    expect(lab('before', true).verdict).toBe('lost')
+    expect(lab('after', false).applied).toEqual([1, 1, 2, 1])
+    expect(lab('after', true).verdict).toBe('effectively')
+  })
 })

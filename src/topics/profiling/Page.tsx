@@ -10,10 +10,10 @@ import './profiling.css'
 
 const toc = [
   { id: 'cpu', label: 'CPU & flame graphs' },
-  { id: 'memory', label: 'Heap & leaks' },
+  { id: 'memory', label: 'Memory leaks' },
   { id: 'metrics', label: 'Metrics & p99' },
   { id: 'traces', label: 'Traces' },
-  { id: 'interview', label: 'Interview' },
+  { id: 'interview', label: 'Asked in interviews' },
 ]
 
 export default function ProfilingPage() {
@@ -26,34 +26,30 @@ export default function ProfilingPage() {
             Profiling & <span className="r">observability</span>
           </>
         }
-        lead="Profiles tell you where one process spends CPU and memory; metrics, logs and traces tell you where a system hurts."
+        lead="Profiles show where one program spends CPU and memory; metrics and traces show where a system hurts."
         toc={toc}
       />
 
-      <Section id="cpu" n="01" kicker="pprof · CPU" title="Sample stacks, stack the samples">
-        <p className="prose">The CPU profiler doesn’t time functions. It photographs the call stack 100 times a second and counts.</p>
-        <Story title="From SIGPROF to flame graph" frames={cpuProfile} />
+      <Section id="cpu" n="01" kicker="pprof · CPU" title="Where does the CPU go?">
+        <Story title="Samples → flame graph" frames={cpuProfile} />
         <div className="profiling-lab">
           <FlameLab />
         </div>
       </Section>
 
-      <Section id="memory" n="02" kicker="heap · goroutine · block · trace" title="Memory, leaks and waiting">
-        <p className="prose">One import gives you six profiles. Knowing which one answers your question is the interview.</p>
+      <Section id="memory" n="02" kicker="heap · goroutines" title="Finding a memory leak">
         <Story title="Hunting a leak" frames={memory} />
       </Section>
 
-      <Section id="metrics" n="03" kicker="Prometheus" title="RED, USE and the tail">
-        <p className="prose">Metrics are the alarm. Pick few, pick well, and alert on percentiles.</p>
-        <Story title="Why p99, not the mean" frames={metrics} />
+      <Section id="metrics" n="03" kicker="Prometheus" title="What to measure">
+        <Story title="Why p99, not the average" frames={metrics} />
       </Section>
 
-      <Section id="traces" n="04" kicker="OpenTelemetry" title="One request, many services">
-        <p className="prose">A trace is a tree of spans sharing one id, passed from service to service in a header.</p>
-        <Story title="Following traceparent" frames={traces} />
+      <Section id="traces" n="04" kicker="OpenTelemetry" title="Follow one request">
+        <Story title="Following a trace" frames={traces} />
       </Section>
 
-      <Section id="interview" n="05" kicker="Asked in real interviews" title="Questions you will be asked">
+      <Section id="interview" n="05" kicker="Interview prep" title="Asked in real interviews">
         <TopQuestions
           from={[tooling, devops]}
           ids={[

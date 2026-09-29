@@ -5,22 +5,12 @@
 .st-ink .kafka-mono { color: var(--paper); }
 
 .kafka-lab { display: grid; gap: 1rem; }
-.kafka-run .kicker { display: block; margin-bottom: .4rem; }
-.kafka-tape { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
-.kafka-op { font: 600 .72rem/1 var(--mono); padding: .45rem .5rem; border: 1.5px solid var(--ink); background: #fff; color: var(--ink); cursor: pointer; }
-span.kafka-op { cursor: default; }
-.kafka-op.commit { border-style: dashed; }
-.kafka-op.done.process { background: var(--ink); color: var(--paper); }
-.kafka-op.done.commit { background: var(--g200); }
-.kafka-op.never { opacity: .35; }
-.kafka-op.done.again { background: var(--red); border-color: var(--red); color: #fff; }
-button.kafka-op:hover { border-color: var(--red); }
-.kafka-boom { font: 700 .72rem var(--mono); color: var(--red); text-transform: uppercase; letter-spacing: .05em; padding: 0 .2rem; }
-.kafka-res { display: grid; grid-template-columns: repeat(6, 1fr); gap: .3rem; max-width: 30rem; }
-.kafka-msg { border: 2px solid var(--ink); padding: .35rem .2rem; text-align: center; display: grid; gap: .1rem; font-family: var(--mono); }
+.kafka-try { margin: 0; color: var(--g500); }
+.kafka-res { display: grid; grid-template-columns: repeat(4, 1fr); gap: .4rem; max-width: 22rem; }
+.kafka-msg { border: 2px solid var(--ink); padding: .5rem .2rem; text-align: center; display: grid; gap: .1rem; font-family: var(--mono); }
 .kafka-msg b { font-size: .8rem; }
-.kafka-msg span { font-size: 1rem; font-weight: 700; }
-.kafka-msg small { font-size: .6rem; color: var(--g500); text-transform: uppercase; }
-.kafka-msg.bad { border-color: var(--red); background: var(--red-soft); color: var(--red); }
+.kafka-msg span { font-size: 1.3rem; font-weight: 700; }
+.kafka-msg.bad { border-color: var(--red); background: var(--red); color: #fff; }
 .kafka-verdict { margin: 0; font-size: 1rem; max-width: 40rem; }
-.kafka-verdict b { font-family: var(--head); font-size: 1.15rem; }
+.kafka-verdict b { font-family: var(--head); font-size: 1.5rem; display: block; }
+.kafka-verdict b.r { color: var(--red); }

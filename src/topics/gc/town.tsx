@@ -176,10 +176,8 @@ export const SPR = {
   marker: 'science-lightbulb',
   program: 'fairy-tale-messenger-running',
   sweeper: 'fairy-tale-witch-broom',
-  assist: 'convict-working-hard',
   pirate: 'adventure-pirate-lifting-goods',
   barrier: 'science-welding',
-  stuck: 'dandy-raining',
 }
 
 /** Where a gopher stands to work on a house: right of it (marker) or left of it (program). */

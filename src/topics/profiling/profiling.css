@@ -3,25 +3,16 @@
 .profiling-fr {
   position: absolute; height: 24px; border: 1px solid #fff; background: var(--g200); color: var(--ink);
   font: 500 11px/22px var(--mono); padding: 0 4px; text-align: left; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-  cursor: pointer; transition: left .35s ease, width .35s ease, background .15s ease;
+  cursor: pointer; transition: background .15s ease;
 }
 .profiling-fr:hover { background: var(--g300); }
 .profiling-fr.root { background: var(--g100); color: var(--g500); }
-.profiling-fr.mark { background: var(--ink); color: var(--paper); }
-.profiling-fr.on { background: var(--red); color: #fff; }
+.profiling-fr.on { background: var(--ink); color: var(--paper); }
 .profiling-info { margin-top: .8rem; border-left: 3px solid var(--g300); padding: .5rem .75rem; background: var(--g100); min-height: 5.5rem; font-size: .92rem; }
-.profiling-info.yes { border-left-color: var(--ink); }
-.profiling-info.close { border-left-color: var(--g500); }
-.profiling-info.no { border-left-color: var(--red); }
+.profiling-info.yes { border-left-color: var(--red); }
 .profiling-info p { margin: .3rem 0 0; }
-.profiling-info code { overflow-wrap: anywhere; }
-.profiling-nums { display: flex; gap: 1.2rem; font: 12px var(--mono); margin-top: .3rem; color: var(--g500); }
-.profiling-nums b { color: var(--ink); }
-.profiling-top { margin-top: .9rem; border-collapse: collapse; font: 12px var(--mono); width: 100%; max-width: 28rem; }
-.profiling-top caption { text-align: left; }
-.profiling-top th { text-align: left; font-weight: 500; color: var(--g500); border-bottom: 1px solid var(--ink); padding: .2rem .4rem; }
-.profiling-top td { padding: .25rem .4rem; border-bottom: 1px solid var(--g200); }
-.profiling-top td:last-child { overflow-wrap: anywhere; }
-.profiling-top tr { cursor: pointer; }
-.profiling-top tr.on td { background: var(--ink); color: var(--paper); }
+.profiling-info code { overflow-wrap: anywhere; margin-right: .6rem; }
+.profiling-verdict { display: block; font: 700 1.6rem/1.2 var(--head); color: var(--g500); }
+.profiling-info.yes .profiling-verdict { color: var(--red); }
+.profiling-nums { font: 12px var(--mono); color: var(--g500); }
 .profiling-lab { max-width: 60rem; }
