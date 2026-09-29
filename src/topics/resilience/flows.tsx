@@ -114,7 +114,7 @@ export const deadlineFlow: FlowDef = {
       stop: {
         title: 'Background() drops it',
         edge: true,
-        body: 'Under overload, zombie work is most of the load. In gRPC-Go the deadline travels only if you pass the handler’s ctx (or a child) to outgoing calls.',
+        body: 'Under overload, zombie work can be most of the load. In gRPC-Go the deadline travels only if you pass the handler’s ctx (or a child) to outgoing calls.',
       },
     },
     {
@@ -232,9 +232,9 @@ export const amplifyFlow: FlowDef = {
       caption: 'Fix two: a retry budget lets retries run only while they stay under a share of requests, say 10%. Worst case ≈ 1.1×. gRPC uses a token bucket.',
       set: {
         a1: { text: '≤10% retries', tone: 'ink' },
-        e1: { text: '≤1.1×' },
-        e2: { text: '≤1.1×' },
-        e3: { text: '≤1.1×' },
+        e1: { text: '1.1×' },
+        e2: { text: '1.1×' },
+        e3: { text: '1.1×' },
         g: { d: grid(1) },
         big: { text: '≈1.1×' },
       },

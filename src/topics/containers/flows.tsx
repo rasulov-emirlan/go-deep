@@ -247,7 +247,7 @@ export const cpu: FlowDef = {
     },
     {
       caption: 'A request arriving at 50 ms finds every thread frozen and waits for the next period. Average CPU can look low while p99 latency jumps.',
-      add: [{ t: 'msg', id: 'req', y: 270, x1: 280, x2: 512, text: 'request waits', tone: 'red', dashed: true }],
+      add: [{ t: 'msg', id: 'req', y: 284, x1: 280, x2: 512, text: 'request waits', tone: 'red', dashed: true }],
       stop: {
         title: 'Low average, bad p99',
         edge: true,
