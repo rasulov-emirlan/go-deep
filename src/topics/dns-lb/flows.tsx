@@ -149,8 +149,7 @@ export const l4Flow: FlowDef = {
           <>
             grpc-go re-resolves only after a connection breaks, at most every 30 s.
             <Code>{`keepalive.ServerParameters{
-  MaxConnectionAge:      5 * time.Minute,
-  MaxConnectionAgeGrace: 30 * time.Second,
+  MaxConnectionAge: 5 * time.Minute,
 }`}</Code>
           </>
         ),
@@ -173,12 +172,12 @@ export const l4Flow: FlowDef = {
 
 /* ---------- D. idle timeout: who closes first ---------- */
 const lanes3 = (targetSub: string): El[] => [
-  { id: 'c', t: 'lane', x: 80, y: 8, len: 320, text: 'client' },
-  { id: 'lbn', t: 'lane', x: 280, y: 8, len: 320, text: 'ALB', sub: 'idle 60 s', w: 100 },
-  { id: 'tg', t: 'lane', x: 480, y: 8, len: 320, text: 'target', sub: targetSub, w: 130 },
+  { id: 'c', t: 'lane', x: 80, y: 8, len: 330, text: 'client' },
+  { id: 'lbn', t: 'lane', x: 280, y: 8, len: 330, text: 'ALB', sub: 'idle 60 s', w: 100 },
+  { id: 'tg', t: 'lane', x: 480, y: 8, len: 330, text: 'target', sub: targetSub, w: 130 },
 ]
 export const idleFlow: FlowDef = {
-  h: 330,
+  h: 340,
   steps: [
     {
       caption: 'The ALB keeps an idle connection to its target for 60 s. This target’s keep-alive is only 30 s: the wrong way round.',
@@ -195,8 +194,8 @@ export const idleFlow: FlowDef = {
     {
       caption: 'The target answers RST, so the ALB returns 502 to a client whose request was fine.',
       add: [
-        { id: 'rst', t: 'msg', from: 'tg', to: 'lbn', y: 235, y2: 262, text: 'RST', tone: 'red' },
-        { id: 'e502', t: 'msg', from: 'lbn', to: 'c', y: 272, y2: 300, text: '502', tone: 'red' },
+        { id: 'rst', t: 'msg', from: 'tg', to: 'lbn', y: 245, y2: 272, text: 'RST', tone: 'red' },
+        { id: 'e502', t: 'msg', from: 'lbn', to: 'c', y: 288, y2: 314, text: '502', tone: 'red' },
       ],
       stop: {
         title: 'Who must close last?',

@@ -169,8 +169,8 @@ export const counterFlow: FlowDef = {
         lane('b', X.b, 'B', 325),
         lane('c', X.c, 'C', 325),
         msg('wa', 'cl', 'a', 56, 74, 'v1', { dashed: true }),
-        msg('wb', 'cl', 'b', 56, 270, 'v1', { dashed: true }),
-        msg('wc', 'cl', 'c', 56, 292, 'v1', { dashed: true }),
+        msg('wb', 'cl', 'b', 56, 270, '', { dashed: true }),
+        msg('wc', 'cl', 'c', 56, 292, '', { dashed: true }),
       ],
     },
     {

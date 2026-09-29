@@ -300,7 +300,7 @@ export const deadPeer: FlowDef = {
       ],
     },
     {
-      caption: 'Keepalive is the traffic. Go probes after 15 s idle, then every 15 s, 9 times: dead peer found in about 150 s. Raw Linux keepalive is off, then 7200 s.',
+      caption: 'Keepalive is the traffic. Go probes after 15 s idle, then every 15 s, 9 times: about 150 s. Raw Linux: off, then 7200 s idle.',
       drop: ['nosig'],
       add: [
         { t: 'msg', id: 'p1', from: 'c', to: 's', y: 76, y2: 86, text: 'probe', lost: true },
