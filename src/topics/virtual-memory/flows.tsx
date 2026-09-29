@@ -302,7 +302,7 @@ export const rss: FlowDef = {
       ],
     },
     {
-      caption: 'The child writes half of it: 128 MB private, 130 MB still shared. RSS counts every resident page in each process, so it adds up to more than is really used.',
+      caption: 'The child writes half: 128 MB private, 130 MB shared. RSS counts every resident page in each process, so the sum overstates real use.',
       drop: ['pss'],
       add: [box('sh', 265, 68, 260, 38, 'shared 130 MB', { tone: 'grey' }), tx('sum', 280, 190, 'sum of RSS 526 MB, really used ~386 MB', { tone: 'red', size: 14 })],
       set: { chi: { w: 256, text: 'private 128 MB', tone: 'red' } },
@@ -343,9 +343,9 @@ export const oom: FlowDef = {
       caption: 'Reclaim failed, so the OOM killer scores every process and sends SIGKILL to the highest score.',
       drop: ['lb1', 'o1', 'o2', 'o3'],
       add: [
-        box('s1', 10, 28, 120, 32, 'A'),
-        box('s2', 10, 68, 300, 32, 'B: highest score', { tone: 'red' }),
-        box('s3', 10, 108, 60, 32, 'C'),
+        box('s1', 10, 22, 120, 28, 'A'),
+        box('s2', 10, 56, 300, 28, 'B: highest score', { tone: 'red' }),
+        box('s3', 10, 90, 60, 28, 'C'),
       ],
       set: { steps: { text: 'score = RSS + swap + page tables + oom_score_adj' } },
       stop: {
