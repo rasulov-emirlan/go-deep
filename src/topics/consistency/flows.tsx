@@ -377,7 +377,7 @@ export const raftSplit: FlowDef = {
         edge: true,
         body: (
           <>
-            <p>etcd’s default Get goes through Raft (ReadIndex), so it is linearizable. The option skips that and may be stale.</p>
+            <p>etcd’s default Get goes through Raft (ReadIndex), so it is linearizable. The serializable option skips that and may be stale.</p>
             <Code>{`cli.Get(ctx, "k")
 cli.Get(ctx, "k",
   clientv3.WithSerializable())`}</Code>
@@ -422,7 +422,7 @@ export const pacelc: FlowDef = {
         { t: 'box', id: 'ee', x: 290, y: 20, w: 250, h: 60, label: 'ELSE', text: 'Latency or C' },
         { t: 'box', id: 'x1', x: 20, y: 110, w: 520, h: 52, text: 'PA/EL', sub: 'Dynamo · Cassandra · SimpleDB' },
         { t: 'box', id: 'x2', x: 20, y: 176, w: 520, h: 52, text: 'PC/EL', sub: 'PNUTS' },
-        { t: 'box', id: 'x3', x: 20, y: 242, w: 520, h: 76, text: 'per request', sub: 'DynamoDB ConsistentRead=true\nCassandra consistency level', tone: 'red' },
+        { t: 'box', id: 'x3', x: 20, y: 242, w: 520, h: 56, text: 'per request', sub: 'DynamoDB ConsistentRead · Cassandra level', tone: 'red' },
       ],
     },
   ],

@@ -24,7 +24,7 @@ export const costume: FlowDef = {
     {
       caption: 'Flag one: a new PID namespace. The same process is PID 1 inside it, and still 4123 to the host. Namespaces change what a process can see.',
       add: [
-        { t: 'box', id: 'pidbox', x: 200, y: 82, w: 160, h: 100, label: 'pid ns', tone: 'red', dashed: true },
+        { t: 'box', id: 'pidbox', x: 200, y: 82, w: 160, h: 100, label: 'pid ns', tone: 'red', dashed: true, z: -1 },
         { t: 'text', id: 'r-pid', x: 375, y: 105, text: 'pid: 1 (host: 4123)', anchor: 'start', tone: 'red' },
       ],
     },

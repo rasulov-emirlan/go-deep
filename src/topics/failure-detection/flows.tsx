@@ -77,13 +77,13 @@ export const slowOrDead: FlowDef = {
       caption: 'Crash, stall, lost packets: the monitor sees the same thing, silence. A detector can only guess.',
       drop: ['M', 'N', 'p1', 'a1', 'p2', 'p3', 'p4', 'timer', 'timer-t', 'dead', 'a2', 'stall'],
       add: [
-        { t: 'box', id: 'mon', x: 20, y: 70, w: 140, h: 100, tone: 'ink', label: 'monitor', text: 'sees only', sub: 'silence' },
-        { t: 'box', id: 'c1', x: 310, y: 20, w: 240, h: 44, text: 'N crashed' },
-        { t: 'box', id: 'c2', x: 310, y: 100, w: 240, h: 44, text: 'N stalled (GC)' },
-        { t: 'box', id: 'c3', x: 310, y: 180, w: 240, h: 44, text: 'link dropped packets' },
-        { t: 'line', id: 'l1', x1: 162, y1: 105, x2: 306, y2: 44, tone: 'red', dashed: true, arrow: true },
-        { t: 'line', id: 'l2', x1: 162, y1: 120, x2: 306, y2: 122, tone: 'red', dashed: true, arrow: true },
-        { t: 'line', id: 'l3', x1: 162, y1: 135, x2: 306, y2: 200, tone: 'red', dashed: true, arrow: true },
+        { t: 'box', id: 'mon', x: 20, y: 150, w: 140, h: 100, tone: 'ink', label: 'monitor', text: 'sees only', sub: 'silence' },
+        { t: 'box', id: 'c1', x: 310, y: 50, w: 240, h: 50, text: 'N crashed' },
+        { t: 'box', id: 'c2', x: 310, y: 175, w: 240, h: 50, text: 'N stalled (GC)' },
+        { t: 'box', id: 'c3', x: 310, y: 300, w: 240, h: 50, text: 'link dropped packets' },
+        { t: 'line', id: 'l1', x1: 162, y1: 185, x2: 306, y2: 82, tone: 'red', dashed: true, arrow: true },
+        { t: 'line', id: 'l2', x1: 162, y1: 200, x2: 306, y2: 200, tone: 'red', dashed: true, arrow: true },
+        { t: 'line', id: 'l3', x1: 162, y1: 215, x2: 306, y2: 322, tone: 'red', dashed: true, arrow: true },
       ],
       stop: {
         title: 'Silence is ambiguous',
@@ -130,7 +130,7 @@ export const phiAccrual: FlowDef = {
       drop: ['lab1', 'ax1', 'tk1', 'mk1', 'dd1', 'lab2', 'ax2', 'tk2', 'dies', 'ln2'],
       add: [
         { t: 'line', id: 'axh', x1: 40, y1: 200, x2: 520, y2: 200, tone: 'grey' },
-        ...[8, 30, 68, 100, 78, 42, 20, 8].map<El>((hh, k) => ({ t: 'box', id: `hb${k}`, x: 50 + k * 28, y: 200 - hh, w: 28, h: hh, tone: 'soft' })),
+        ...[8, 30, 68, 100, 78, 42, 20, 8].map<El>((hh, k) => ({ t: 'box', id: `hb${k}`, x: 50 + k * 28, y: 200 - hh, w: 28, h: hh, tone: 'grey' })),
         txt('hx', 160, 226, 'gap between beats', 'grey'),
         txt('hl', 60, 40, 'recent gaps (window of 1000)', 'ink', 'start'),
       ],
@@ -178,7 +178,7 @@ export const phiAccrual: FlowDef = {
 
 /* ---------- 3. SWIM ---------- */
 
-const P: Record<string, Pt> = { A: [155, 175], B: [405, 175], C: [280, 50], D: [280, 300], E: [368, 87], F: [368, 263], G: [192, 263], H: [192, 87] }
+const P: Record<string, Pt> = { A: [80, 175], B: [480, 175], C: [280, 50], D: [280, 300], E: [421, 87], F: [421, 263], G: [139, 263], H: [139, 87] }
 const ring = (): El[] => Object.entries(P).map(([k, p]) => node('n' + k, p, k))
 const L = (id: string, a: string, b: string, o: Parameters<typeof link>[3] = {}) => link(id, P[a], P[b], o)
 const note = (text: string, tone: Tone = 'ink') => txt('note', 10, 24, text, tone, 'start')
@@ -209,7 +209,7 @@ export const swim: FlowDef = {
     {
       caption: 'Nobody gets an ack, so B is marked suspect, not dead. A gossips that by piggybacking it on the pings it sends anyway.',
       set: { r1: { tone: 'red', dashed: true }, r2: { tone: 'red', dashed: true }, r3: { tone: 'red', dashed: true }, nB: { tone: 'red', dashed: true }, note: { text: 'no acks:\nB is suspect', tone: 'red' } },
-      add: [txt('stB', 440, 175, 'suspect\ninc 4', 'red', 'start'), L('g1', 'A', 'H', { tone: 'red' }), L('g2', 'A', 'G', { tone: 'red' })],
+      add: [txt('stB', 480, 214, 'suspect\ninc 4', 'red'), L('g1', 'A', 'H', { tone: 'red' }), L('g2', 'A', 'G', { tone: 'red' })],
     },
     {
       caption: 'The rumour reaches B. B is alive, so it raises its own incarnation number to 5 and gossips Alive(5). That beats Suspect(4).',
@@ -280,22 +280,22 @@ export const gray: FlowDef = {
     {
       caption: 'A real request needs the worker pool, which is stuck on a stalled disk. The client waits.',
       add: [
-        { t: 'box', id: 'pool', x: 244, y: 145, w: 72, h: 110, tone: 'red', dashed: true, text: 'pool\nfull' },
+        { t: 'box', id: 'pool', x: 305, y: 185, w: 100, h: 46, tone: 'red', dashed: true, text: 'pool full' },
         { t: 'msg', id: 'o1', y: 150, y2: 166, from: 'C', to: 'N', text: 'GET /order' },
       ],
     },
     {
       caption: 'The monitor asks again and gets 200: “healthy”. The client’s request timed out. Observer and user disagree, a gray failure.',
       add: [
-        { t: 'msg', id: 'h2', y: 205, y2: 221, from: 'M', to: 'N', text: 'GET /health', tone: 'red' },
-        { t: 'msg', id: 'h2r', y: 236, y2: 252, from: 'N', to: 'M', text: '200 OK', tone: 'red' },
-        { t: 'box', id: 'mbox', x: 50, y: 268, w: 100, h: 32, text: 'healthy' },
-        txt('cto', 460, 200, 'timed out', 'red'),
+        { t: 'msg', id: 'h2', y: 215, y2: 231, from: 'M', to: 'N', text: 'GET /health', tone: 'red' },
+        { t: 'msg', id: 'h2r', y: 246, y2: 262, from: 'N', to: 'M', text: '200 OK', tone: 'red' },
+        { t: 'box', id: 'mbox', x: 50, y: 280, w: 100, h: 32, text: 'healthy' },
+        txt('cto', 460, 255, 'timed out', 'red'),
       ],
     },
     {
       caption: 'Fix: probe the path users take. This probe is a real `/order` request, so the stuck pool shows up and the node is ejected.',
-      add: [{ t: 'msg', id: 'pr', y: 322, y2: 338, from: 'M', to: 'N', text: 'GET /order', tone: 'red', lost: true }],
+      add: [{ t: 'msg', id: 'pr', y: 334, y2: 350, from: 'M', to: 'N', text: 'GET /order', tone: 'red', lost: true }],
       set: { mbox: { tone: 'red', text: 'eject' } },
       stop: {
         title: 'Probe the real path',
@@ -353,7 +353,7 @@ export const partitions: FlowDef = {
     {
       caption: 'C hears no leader, times out, bumps its term. B adopts it and rejects A’s stale heartbeats, so A steps down. Pre-Vote and CheckQuorum help, with edge cases.',
       set: { C2: { tone: 'red' }, A2: { tone: 'grey' }, lead2: { text: 'steps down', tone: 'red' } },
-      add: [link('vote', [440, 210], [120, 210], { tone: 'red', text: 'vote? term 8', off: 8 })],
+      add: [link('vote', [440, 210], [120, 210], { tone: 'red', text: 'vote? term 8', off: 12 })],
     },
     {
       caption: 'One-way failure: X can send but hears nothing. It times out, bumps its term, and its votes keep unseating a healthy leader.',
@@ -415,10 +415,10 @@ export const splitBrain: FlowDef = {
       caption: 'Both accept writes: split brain. After the heal one history must be thrown away (one EC2 MongoDB case lost 2 hours of writes).',
       set: { P: { tone: 'red' } },
       add: [
-        { t: 'box', id: 'c1', x: 40, y: 210, w: 130, h: 40, text: 'client 1' },
-        { t: 'box', id: 'c2', x: 390, y: 210, w: 130, h: 40, text: 'client 2' },
-        { t: 'line', id: 'w1', x1: 105, y1: 206, x2: 105, y2: 172, arrow: true, tone: 'red', text: 'x=1' },
-        { t: 'line', id: 'w2', x1: 455, y1: 206, x2: 455, y2: 172, arrow: true, tone: 'red', text: 'x=2' },
+        { t: 'box', id: 'c1', x: 40, y: 240, w: 130, h: 40, text: 'client 1' },
+        { t: 'box', id: 'c2', x: 390, y: 240, w: 130, h: 40, text: 'client 2' },
+        { t: 'line', id: 'w1', x1: 105, y1: 236, x2: 105, y2: 180, arrow: true, tone: 'red', text: 'x=1' },
+        { t: 'line', id: 'w2', x1: 455, y1: 236, x2: 455, y2: 180, arrow: true, tone: 'red', text: 'x=2' },
       ],
       stop: {
         title: 'Two nodes have no majority',
