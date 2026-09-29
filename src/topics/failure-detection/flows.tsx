@@ -187,7 +187,7 @@ export const swim: FlowDef = {
   h: 340,
   steps: [
     {
-      caption: 'Every second, A picks one random member (B) and pings it. Cost per node stays constant however big the cluster is.',
+      caption: 'Every second, A picks one random member (B) and pings it. SWIM is designed so each node’s load stays constant as the cluster grows.',
       add: [...ring(), L('ping', 'A', 'B', { text: 'ping' }), note('A probes B')],
     },
     {
@@ -221,7 +221,7 @@ export const swim: FlowDef = {
         edge: true,
         body: (
           <>
-            That is why Alive(5) safely overrides Suspect(4). A node that restarts and forgets its number can lose to stale “dead” gossip, so memberlist skips the incarnation ahead on rejoin.
+            That is why Alive(5) safely overrides Suspect(4). A node that restarts and forgets its number can lose to stale “dead” gossip, so memberlist has a skip-ahead path for rejoining nodes.
           </>
         ),
       },
