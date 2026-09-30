@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { liveTopics } from '../topics/registry'
+import { Further } from './Further'
 import { Rate } from './Rate'
 
 export function TopicHero({ slug, title, lead, toc }: { slug: string; title: ReactNode; lead: ReactNode; toc: { id: string; label: string }[] }) {
@@ -31,6 +32,7 @@ export function NextTopic({ slug }: { slug: string }) {
   return (
     <section className="section">
       <div className="wrap">
+        <Further slug={slug} />
         <Rate topic={slug} />
         <span className="kicker">Next up</span>
         <h2>

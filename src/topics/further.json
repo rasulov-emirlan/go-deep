@@ -1,0 +1,2790 @@
+{
+ "scheduler": [
+  {
+   "url": "https://www.youtube.com/watch?v=YHRO5WQGh0k",
+   "title": "GopherCon 2018: The Scheduler Saga - Kavya Joshi",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "note": "Builds the G-M-P scheduler up from first principles, with clear diagrams of run queues and work stealing"
+  },
+  {
+   "url": "https://www.ardanlabs.com/blog/2018/08/scheduling-in-go-part2.html",
+   "title": "Scheduling In Go: Part II - Go Scheduler",
+   "by": "William Kennedy (Ardan Labs)",
+   "kind": "article",
+   "lang": "en",
+   "section": "steal",
+   "note": "Step-by-step pictures of P/M/G, handoff on syscalls, netpoller and work stealing"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=-K11rY57K7k",
+   "title": "Go scheduler: Implementing language with lightweight concurrency",
+   "by": "Dmitry Vyukov (Hydra)",
+   "kind": "video",
+   "lang": "en",
+   "note": "The scheduler's author on why it is designed this way: stacks, syscalls, netpoll, preemption"
+  },
+  {
+   "url": "https://morsmachine.dk/netpoller",
+   "title": "The Go netpoller",
+   "by": "Daniel Morsing",
+   "kind": "article",
+   "lang": "en",
+   "section": "wait",
+   "note": "Short classic on how blocking network I/O parks a goroutine without holding an OS thread"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=KBZlN0izeiY",
+   "title": "GopherCon 2017: Understanding Channels - Kavya Joshi",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "section": "wait",
+   "note": "Shows exactly how a goroutine blocked on a channel is parked (gopark) and woken by the scheduler"
+  },
+  {
+   "url": "https://go.dev/blog/container-aware-gomaxprocs",
+   "title": "Container-aware GOMAXPROCS",
+   "by": "Go Blog (Michael Pratt, Carlos Amedee)",
+   "kind": "article",
+   "lang": "en",
+   "section": "procs",
+   "note": "Official Go 1.25 change: GOMAXPROCS now follows the cgroup CPU limit, and why throttling hurt before"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=P2Tzdg8n9hw",
+   "title": "Секреты внутреннего устройства планировщика Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "model",
+   "note": "Balun's deep dive into G/M/P, run queues, work stealing and sysmon"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=kedW1xO3Zbo",
+   "title": "Анатомия Go: Как работает планировщик горутин на самом деле",
+   "by": "Николай Тузов — Golang",
+   "kind": "video",
+   "lang": "ru",
+   "section": "model",
+   "note": "Tuzov's long, very detailed walk through the scheduler in plain language"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=8z6FAaNPA-M",
+   "title": "Как устроен планировщик в Golang | Олег Козырев, Авито",
+   "by": "AvitoTech",
+   "kind": "video",
+   "lang": "ru",
+   "section": "steal",
+   "note": "Compact Avito talk: how goroutines are placed, stolen and preempted"
+  }
+ ],
+ "maps": [
+  {
+   "url": "https://go.dev/blog/swisstable",
+   "title": "Faster Go maps with Swiss Tables",
+   "by": "Go Blog (Michael Pratt)",
+   "kind": "article",
+   "lang": "en",
+   "note": "Official explainer of the Go 1.24+ map: control words, groups, probing, and incremental table splits"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=ncHmEUmJZf4",
+   "title": "CppCon 2017: Matt Kulukundis \"Designing a Fast, Efficient, Cache-friendly Hash Table, Step by Step\"",
+   "by": "CppCon",
+   "kind": "video",
+   "lang": "en",
+   "section": "lookup",
+   "note": "The original Swiss table talk: how the 7-bit tags + group scan make lookups fast. Go's design comes from here"
+  },
+  {
+   "url": "https://go.dev/blog/maps",
+   "title": "Go maps in action",
+   "by": "Go Blog (Andrew Gerrand)",
+   "kind": "article",
+   "lang": "en",
+   "section": "danger",
+   "note": "Canonical usage guide: nil map writes, concurrent access needs a lock, iteration order is not specified"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=Tl7mi9QmLns",
+   "title": "GopherCon 2016: Inside the Map Implementation - Keith Randall",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "section": "grow",
+   "note": "PRE-1.24 HISTORY: the old bucket+overflow map and its incremental growth; useful contrast with Swiss tables"
+  },
+  {
+   "url": "https://dave.cheney.net/2018/05/29/how-the-go-runtime-implements-maps-efficiently-without-generics",
+   "title": "How the Go runtime implements maps efficiently (without generics)",
+   "by": "Dave Cheney",
+   "kind": "article",
+   "lang": "en",
+   "note": "PRE-1.24 HISTORY: how the compiler hands the runtime a type descriptor per map; buckets are now gone"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=tRZ5qMaKWYI",
+   "title": "Как устроена новая хеш-таблица в Golang",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "lookup",
+   "note": "Go 1.24+ Swiss-table map internals: groups, control bytes, growth"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=P_SXTUiA-9Y",
+   "title": "Как на самом деле устроен тип Map в Golang? | Golang под капотом",
+   "by": "Николай Тузов — Golang",
+   "kind": "video",
+   "lang": "ru",
+   "section": "grow",
+   "note": "Pre-1.24 history: the old bucket/overflow map and incremental evacuation"
+  }
+ ],
+ "gc": [
+  {
+   "url": "https://go.dev/doc/gc-guide",
+   "title": "A Guide to the Go Garbage Collector",
+   "by": "Go Team",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "when",
+   "note": "Interactive sliders: play with GOGC and GOMEMLIMIT and watch heap size and GC CPU cost change"
+  },
+  {
+   "url": "https://go.dev/blog/ismmkeynote",
+   "title": "Getting to Go: The Journey of Go's Garbage Collector",
+   "by": "Rick Hudson (Go Blog)",
+   "kind": "article",
+   "lang": "en",
+   "section": "mark",
+   "note": "Why Go chose a non-moving concurrent tri-color collector, told by its designer, with slides"
+  },
+  {
+   "url": "https://go.dev/blog/greenteagc",
+   "title": "The Green Tea Garbage Collector",
+   "by": "Go Blog (Michael Knyszek, Austin Clements)",
+   "kind": "article",
+   "lang": "en",
+   "section": "mark",
+   "note": "Default in Go 1.26: marks memory page-by-page instead of object-by-object; animated walkthroughs"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=gPJkM95KpKo",
+   "title": "GopherCon 2025: Advancing Go Garbage Collection with Green Tea - Michael Knyszek",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "section": "mark",
+   "note": "The talk version of Green Tea: why object-graph marking is cache-hostile and how pages fix it"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=ZMZpH4yT7M0",
+   "title": "Understanding Allocations: the Stack and the Heap - GopherCon SG 2019",
+   "by": "Singapore Gophers (Jacob Walker)",
+   "kind": "video",
+   "lang": "en",
+   "section": "escape",
+   "note": "Escape analysis live: reads -gcflags=-m output and benchmarks what actually lands on the heap"
+  },
+  {
+   "url": "https://github.com/golang/proposal/blob/master/design/17503-eliminate-rescan.md",
+   "title": "Proposal: Eliminate STW stack re-scanning (hybrid write barrier)",
+   "by": "Austin Clements, Rick Hudson",
+   "kind": "paper",
+   "lang": "en",
+   "section": "barrier",
+   "note": "Design doc for Go's hybrid Yuasa+Dijkstra write barrier and why it removed stack rescans"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=p5OAXkbiiCY",
+   "title": "Секрет сборщика мусора в Go раскрыт",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "mark",
+   "note": "Tri-colour mark-and-sweep explained step by step"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=sGnz8xwCzWs",
+   "title": "Сборщик мусора Go - устройство и оптимизации | Оптимизации в Go",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "when",
+   "note": "GC architecture plus tuning: GOGC, GOMEMLIMIT, reducing allocation pressure"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=nNV_95WIlIU",
+   "title": "Green Tea GC: как устроен новый сборщик мусора в Go?",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "mark",
+   "note": "Green Tea GC (Go 1.25+ experiment, default in 1.26): span-based marking"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=7K0HweCBJwI",
+   "title": "Секреты внутреннего устройства аллокатора Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "escape",
+   "note": "Where heap objects actually live: mcache/mcentral/mheap and size classes"
+  }
+ ],
+ "memory-layout": [
+  {
+   "url": "https://go101.org/article/memory-layout.html",
+   "title": "Memory Layouts",
+   "by": "Go 101 (Tapir Liu)",
+   "kind": "article",
+   "lang": "en",
+   "section": "order",
+   "note": "Alignment rules and sizes for every Go type, with padding worked out byte by byte"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=WDIkqP4JbkE",
+   "title": "code::dive 2014 - Scott Meyers: CPU Caches and Why You Care",
+   "by": "NOKIA Technology Center Wrocław",
+   "kind": "video",
+   "lang": "en",
+   "section": "sharing",
+   "note": "The classic talk on cache lines and false sharing, with real benchmark numbers (C++, applies 1:1 to Go)"
+  },
+  {
+   "url": "https://100go.co/92-false-sharing/",
+   "title": "Writing concurrent code that leads to false sharing (#92)",
+   "by": "Teiva Harsanyi (100 Go Mistakes)",
+   "kind": "article",
+   "lang": "en",
+   "section": "fix",
+   "note": "Go-specific false-sharing benchmark and the padding fix, with a cache-line diagram"
+  },
+  {
+   "url": "https://mechanical-sympathy.blogspot.com/2011/07/false-sharing.html",
+   "title": "False Sharing",
+   "by": "Martin Thompson",
+   "kind": "article",
+   "lang": "en",
+   "section": "sharing",
+   "note": "The canonical write-up that named the problem: MESI ping-pong between cores, measured"
+  },
+  {
+   "url": "https://dave.cheney.net/2014/03/25/the-empty-struct",
+   "title": "The empty struct",
+   "by": "Dave Cheney",
+   "kind": "article",
+   "lang": "en",
+   "section": "zero",
+   "note": "Why struct{} takes zero bytes, shares one address, and where it's useful"
+  },
+  {
+   "url": "https://pkg.go.dev/golang.org/x/tools/go/analysis/passes/fieldalignment",
+   "title": "fieldalignment analyzer",
+   "by": "golang.org/x/tools",
+   "kind": "docs",
+   "lang": "en",
+   "section": "order",
+   "note": "The linter that finds structs that would shrink if their fields were reordered"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=fSrXheYgmTg",
+   "title": "Выравнивание структур данных в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "order",
+   "note": "Alignment and padding rules, and how field order changes struct size"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=TjzeCWaTOtM",
+   "title": "Оптимизируем код на Go в 10 раз | Как избежать false sharing в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "sharing",
+   "note": "False sharing demo with a 10x speedup after padding counters"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=bsqUnXZBFi4",
+   "title": "Задача с Go собеседования: false sharing",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "fix",
+   "note": "Short interview-style false sharing task and its fix"
+  }
+ ],
+ "slices": [
+  {
+   "url": "https://go.dev/blog/slices-intro",
+   "title": "Go Slices: usage and internals",
+   "by": "Go Blog (Andrew Gerrand)",
+   "kind": "article",
+   "lang": "en",
+   "section": "header",
+   "note": "The canonical box diagrams of array vs slice header (ptr, len, cap) and re-slicing"
+  },
+  {
+   "url": "https://go.dev/blog/slices",
+   "title": "Arrays, slices (and strings): The mechanics of 'append'",
+   "by": "Go Blog (Rob Pike)",
+   "kind": "article",
+   "lang": "en",
+   "section": "append",
+   "note": "Builds append by hand, showing when it reuses the array and when it must copy; why pass-by-value bites"
+  },
+  {
+   "url": "https://go.dev/blog/generic-slice-functions",
+   "title": "Robust generic functions on slices",
+   "by": "Go Blog (Valentin Deleplace)",
+   "kind": "article",
+   "lang": "en",
+   "section": "funcs",
+   "note": "Why slices.Delete must return a new slice and clears the tail; great aliasing diagrams"
+  },
+  {
+   "url": "https://go.dev/blog/strings",
+   "title": "Strings, bytes, runes and characters in Go",
+   "by": "Go Blog (Rob Pike)",
+   "kind": "article",
+   "lang": "en",
+   "section": "strings",
+   "note": "Strings are read-only byte slices; how UTF-8, runes and range loops actually interact"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=7ij3u-0YsJI",
+   "title": "Ты не все знаешь о массивах и слайсах в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "header",
+   "note": "Long deep dive: array vs slice header, append growth, aliasing traps"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=10LW7NROfOQ",
+   "title": "GoLang Slice в деталях, простым языком",
+   "by": "Николай Тузов — Golang",
+   "kind": "video",
+   "lang": "ru",
+   "section": "append",
+   "note": "Tuzov's plain-language slice walkthrough: len, cap, append reallocation"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=SrjmgWtvOJw",
+   "title": "Задача с Go собеседования: утечки памяти при работе со срезами",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "funcs",
+   "note": "Interview task: a small subslice pinning a huge backing array"
+  }
+ ],
+ "interfaces": [
+  {
+   "url": "https://research.swtch.com/interfaces",
+   "title": "Go Data Structures: Interfaces",
+   "by": "Russ Cox",
+   "kind": "article",
+   "lang": "en",
+   "section": "words",
+   "note": "The classic diagrams of the two-word interface value and itab method tables"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=ynoY2xz-F8s",
+   "title": "GopherCon 2016: Understanding nil - Francesc Campoy",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "section": "nil",
+   "note": "Why a nil *T inside an error is not nil, drawn as (type, value) pairs, plus nil for every other type"
+  },
+  {
+   "url": "https://go.dev/doc/faq#nil_error",
+   "title": "Why is my nil error value not equal to nil?",
+   "by": "Go FAQ",
+   "kind": "docs",
+   "lang": "en",
+   "section": "nil",
+   "note": "Official two-paragraph answer to the most famous interface gotcha"
+  },
+  {
+   "url": "https://go.dev/doc/effective_go#embedding",
+   "title": "Effective Go: Embedding",
+   "by": "Go Team",
+   "kind": "docs",
+   "lang": "en",
+   "section": "embed",
+   "note": "Embedding promotes methods, but the receiver stays the inner type: why it isn't inheritance"
+  },
+  {
+   "url": "https://go.dev/blog/errors-are-values",
+   "title": "Errors are values",
+   "by": "Go Blog (Rob Pike)",
+   "kind": "article",
+   "lang": "en",
+   "section": "errors",
+   "note": "Program with errors instead of repeating if err != nil: the errWriter pattern"
+  },
+  {
+   "url": "https://go.dev/blog/go1.13-errors",
+   "title": "Working with Errors in Go 1.13",
+   "by": "Go Blog (Damien Neil, Jonathan Amsterdam)",
+   "kind": "article",
+   "lang": "en",
+   "section": "errors",
+   "note": "Wrapping with %w, errors.Is / errors.As, and when you should NOT wrap"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=eYHCCht8eX4",
+   "title": "Почему интерфейсы лучше размещать в месте использования - GoLang best practices",
+   "by": "Николай Тузов — Golang",
+   "kind": "video",
+   "lang": "ru",
+   "note": "Why Go interfaces belong to the consumer, with practical examples"
+  }
+ ],
+ "defer": [
+  {
+   "url": "https://go.dev/blog/defer-panic-and-recover",
+   "title": "Defer, Panic, and Recover",
+   "by": "Go Blog (Andrew Gerrand)",
+   "kind": "article",
+   "lang": "en",
+   "note": "The three rules of defer (eager args, LIFO, named results) plus panic/recover, with runnable examples"
+  },
+  {
+   "url": "https://go.dev/ref/spec#Handling_panics",
+   "title": "The Go Spec: Handling panics",
+   "by": "Go Team",
+   "kind": "docs",
+   "lang": "en",
+   "section": "panic",
+   "note": "Exact rules for when recover returns non-nil: only when called directly by a deferred function"
+  },
+  {
+   "url": "https://go.dev/ref/spec#Defer_statements",
+   "title": "The Go Spec: Defer statements",
+   "by": "Go Team",
+   "kind": "docs",
+   "lang": "en",
+   "section": "results",
+   "note": "Short, precise: arguments evaluated at defer time, deferred funcs may modify named results"
+  },
+  {
+   "url": "https://github.com/golang/proposal/blob/master/design/34481-opencoded-defers.md",
+   "title": "Proposal: Low-cost defers through inline code",
+   "by": "Dan Scales, Keith Randall, Austin Clements",
+   "kind": "paper",
+   "lang": "en",
+   "section": "stack",
+   "note": "How Go 1.14 made defer almost free (open-coded defers) and when it falls back to the defer chain"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=p2JixdG950Y",
+   "title": "Паники при работе с горутинами в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "fatal",
+   "note": "Why a panic in another goroutine can't be recovered by the caller"
+  }
+ ],
+ "generics": [
+  {
+   "url": "https://go.dev/blog/intro-generics",
+   "title": "An Introduction To Generics",
+   "by": "Go Blog (Robert Griesemer, Ian Lance Taylor)",
+   "kind": "article",
+   "lang": "en",
+   "section": "params",
+   "note": "Type parameters, constraints as type sets, and inference, from the designers"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=Pa_e9EeCdy8",
+   "title": "GopherCon 2021: Generics! - Robert Griesemer & Ian Lance Taylor",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "note": "The designers present generics and give their rules of thumb for when (not) to use them"
+  },
+  {
+   "url": "https://go.dev/blog/when-generics",
+   "title": "When To Use Generics",
+   "by": "Go Blog (Ian Lance Taylor)",
+   "kind": "article",
+   "lang": "en",
+   "section": "versus",
+   "note": "Concrete guidelines: write code, not types; prefer interfaces when you just call a method"
+  },
+  {
+   "url": "https://planetscale.com/blog/generics-can-make-your-go-code-slower",
+   "title": "Generics can make your Go code slower",
+   "by": "Vicent Martí (PlanetScale)",
+   "kind": "article",
+   "lang": "en",
+   "section": "shapes",
+   "note": "Disassembly showing GC-shape stenciling + dictionaries, and when generic calls stop inlining"
+  },
+  {
+   "url": "https://github.com/golang/proposal/blob/master/design/generics-implementation-gcshape.md",
+   "title": "Generics implementation - GC Shape Stenciling",
+   "by": "Keith Randall",
+   "kind": "paper",
+   "lang": "en",
+   "section": "shapes",
+   "note": "The design doc behind 'one copy per shape': what a shape is and what dictionaries carry"
+  },
+  {
+   "url": "https://go.dev/blog/deconstructing-type-parameters",
+   "title": "Deconstructing Type Parameters",
+   "by": "Go Blog (Ian Lance Taylor)",
+   "kind": "article",
+   "lang": "en",
+   "section": "limits",
+   "note": "Reads the slices.Clone signature piece by piece; shows the edges of what constraints can express"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=PXsojiyWOXA",
+   "title": "Пробуем дженерики Go на практике",
+   "by": "Николай Тузов — Golang",
+   "kind": "video",
+   "lang": "ru",
+   "section": "params",
+   "note": "Hands-on first look at type parameters and constraints"
+  }
+ ],
+ "channels": [
+  {
+   "url": "https://divan.dev/posts/go_concurrency_visualize/",
+   "title": "Visualizing Concurrency in Go",
+   "by": "Ivan Daniluk (divan)",
+   "kind": "interactive",
+   "lang": "en",
+   "note": "3D WebGL animations of goroutines and channel sends: ping-pong, fan-in, workers, prime sieve"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=KBZlN0izeiY",
+   "title": "GopherCon 2017: Understanding Channels - Kavya Joshi",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "section": "handoff",
+   "note": "Inside hchan: the ring buffer, sudog wait queues and how a blocked sender gets parked and woken"
+  },
+  {
+   "url": "https://www.ardanlabs.com/blog/2017/10/the-behavior-of-channels.html",
+   "title": "The Behavior Of Channels",
+   "by": "William Kennedy (Ardan Labs)",
+   "kind": "article",
+   "lang": "en",
+   "section": "handoff",
+   "note": "Channels as signalling with or without guarantee: unbuffered vs buffered vs closed, with diagrams"
+  },
+  {
+   "url": "https://dave.cheney.net/2014/03/19/channel-axioms",
+   "title": "Channel Axioms",
+   "by": "Dave Cheney",
+   "kind": "article",
+   "lang": "en",
+   "section": "nil-closed",
+   "note": "The four rules of nil and closed channels, each with a tiny runnable example and the reason why"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=f6kdp27TYZs",
+   "title": "Google I/O 2012 - Go Concurrency Patterns",
+   "by": "Google for Developers",
+   "kind": "video",
+   "lang": "en",
+   "section": "select",
+   "note": "Rob Pike's classic: generators, fan-in, select with timeouts and quit channels, live-coded"
+  },
+  {
+   "url": "https://go.dev/doc/go1.26#goroutineleak-profiles",
+   "title": "Go 1.26 Release Notes: Experimental goroutine leak profile",
+   "by": "The Go Team",
+   "kind": "docs",
+   "lang": "en",
+   "section": "deadlock",
+   "note": "New in 1.26: a pprof profile that finds goroutines blocked forever on unreachable channels"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=ZTJcaP4G4JM",
+   "title": "Как на самом деле устроены каналы в Golang? | Golang channels internals",
+   "by": "Николай Тузов — Golang",
+   "kind": "video",
+   "lang": "ru",
+   "section": "handoff",
+   "note": "hchan internals: buffer ring, sendq/recvq, how a blocked send hands off"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=k3PgD5k12XE",
+   "title": "Секреты внутреннего устройства каналов в Golang",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "handoff",
+   "note": "Short Balun explainer of channel internals"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=luQlkud-jKE",
+   "title": "Паттерны использования каналов в Go | Concurrency в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "select",
+   "note": "Channel patterns in practice: select, done channels, pipelines"
+  }
+ ],
+ "sync": [
+  {
+   "url": "https://www.youtube.com/watch?v=5erqWdlhQLA",
+   "title": "\"go test -race\" Under the Hood - Kavya Joshi",
+   "by": "Strange Loop Conference",
+   "kind": "video",
+   "lang": "en",
+   "section": "race",
+   "note": "How the race detector uses vector clocks and shadow memory to catch unsynchronised n++"
+  },
+  {
+   "url": "https://go.dev/doc/articles/race_detector",
+   "title": "Data Race Detector",
+   "by": "The Go Team",
+   "kind": "docs",
+   "lang": "en",
+   "section": "race",
+   "note": "Reading a race report plus a catalogue of typical races (loop vars, unprotected maps, counters)"
+  },
+  {
+   "url": "https://victoriametrics.com/blog/go-sync-mutex/",
+   "title": "Go sync.Mutex: Normal and Starvation Mode",
+   "by": "Phuong Le (VictoriaMetrics)",
+   "kind": "article",
+   "lang": "en",
+   "section": "mutex",
+   "note": "Illustrated walk through Mutex internals: spinning, the wait queue and starvation mode"
+  },
+  {
+   "url": "https://victoriametrics.com/blog/go-sync-waitgroup/",
+   "title": "Go sync.WaitGroup and The Alignment Problem",
+   "by": "Phuong Le (VictoriaMetrics)",
+   "kind": "article",
+   "lang": "en",
+   "section": "wg",
+   "note": "What the WaitGroup counter and waiter bits really are, and why Add must happen before go"
+  },
+  {
+   "url": "https://victoriametrics.com/blog/go-sync-cond/",
+   "title": "Go sync.Cond, the Most Overlooked Sync Mechanism",
+   "by": "Phuong Le (VictoriaMetrics)",
+   "kind": "article",
+   "lang": "en",
+   "section": "tools",
+   "note": "When Cond beats a channel (broadcast to many waiters) and how Wait/Signal work inside"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=5zXAHh5tJqQ",
+   "title": "GopherCon 2018: Rethinking Classical Concurrency Patterns - Bryan C. Mills",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "section": "tools",
+   "note": "Replace condition variables and worker pools with channels-as-locks; dense and very senior"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=h6-Jiohy1Ak",
+   "title": "Внутреннее устройство мьютексов в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "mutex",
+   "note": "sync.Mutex internals: spinning, starvation mode, semaphores"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=ANQJPn6WAZA",
+   "title": "Mutex убивает производительность? Разбираем Lock Contention в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "mutex",
+   "note": "What lock contention costs and how to reduce it"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=WDodf7gZUuc",
+   "title": "Data Race vs Race Condition в Go: в чём разница?",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "race",
+   "note": "Data race vs race condition: two different bugs, with Go examples"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=NNaxnmRF8Iw",
+   "title": "Lock-free структуры данных в Go | Cтек Трайбера | Concurrency в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "tools",
+   "note": "Lock-free Treiber stack with atomics and CAS in Go"
+  }
+ ],
+ "memory-model": [
+  {
+   "url": "https://research.swtch.com/hwmm",
+   "title": "Hardware Memory Models (Memory Models, Part 1)",
+   "by": "Russ Cox",
+   "kind": "article",
+   "lang": "en",
+   "section": "unseen",
+   "note": "Litmus tests showing how x86 and ARM let other cores see writes late or out of order"
+  },
+  {
+   "url": "https://research.swtch.com/plmm",
+   "title": "Programming Language Memory Models (Memory Models, Part 2)",
+   "by": "Russ Cox",
+   "kind": "article",
+   "lang": "en",
+   "section": "edges",
+   "note": "Why compilers reorder too, and how happens-before and DRF-SC restore sanity"
+  },
+  {
+   "url": "https://research.swtch.com/gomm",
+   "title": "Updating the Go Memory Model (Memory Models, Part 3)",
+   "by": "Russ Cox",
+   "kind": "article",
+   "lang": "en",
+   "section": "torn",
+   "note": "The design behind Go's model: racy programs have limited, not undefined, behaviour"
+  },
+  {
+   "url": "https://go.dev/ref/mem",
+   "title": "The Go Memory Model",
+   "by": "The Go Team",
+   "kind": "docs",
+   "lang": "en",
+   "section": "simple",
+   "note": "The spec itself; opens with the rule 'if you must read the rest to understand, don't be clever'"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=5erqWdlhQLA",
+   "title": "\"go test -race\" Under the Hood - Kavya Joshi",
+   "by": "Strange Loop Conference",
+   "kind": "video",
+   "lang": "en",
+   "section": "edges",
+   "note": "Happens-before made concrete: vector clocks show which accesses are ordered and which race"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=Sx3l0VLcXtI",
+   "title": "Особенности и ловушки модели памяти в Go: тайны синхронизации",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "edges",
+   "note": "Go memory model traps: happens-before, visibility, what sync guarantees"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=YHIYT_jPR7Q",
+   "title": "Секреты атомиков в Go | Барьеры памяти - Concurrency в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "unseen",
+   "note": "Atomics and memory barriers: why a plain write may never be seen"
+  }
+ ],
+ "patterns": [
+  {
+   "url": "https://go.dev/blog/pipelines",
+   "title": "Go Concurrency Patterns: Pipelines and cancellation",
+   "by": "Sameer Ajmani (Go blog)",
+   "kind": "article",
+   "lang": "en",
+   "section": "fan",
+   "note": "Canonical fan-out/fan-in with bounded parallelism and a done channel that stops every stage"
+  },
+  {
+   "url": "https://go.dev/blog/context",
+   "title": "Go Concurrency Patterns: Context",
+   "by": "Sameer Ajmani (Go blog)",
+   "kind": "article",
+   "lang": "en",
+   "section": "context",
+   "note": "Why context exists and how cancellation propagates down a request's call tree"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=5zXAHh5tJqQ",
+   "title": "GopherCon 2018: Rethinking Classical Concurrency Patterns - Bryan C. Mills",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "section": "pool",
+   "note": "Argues against idle worker pools: start goroutines on demand and bound them with a semaphore"
+  },
+  {
+   "url": "https://pkg.go.dev/golang.org/x/sync/errgroup",
+   "title": "errgroup package",
+   "by": "golang.org/x/sync",
+   "kind": "docs",
+   "lang": "en",
+   "section": "fan",
+   "note": "Group.SetLimit + WithContext: bounded fan-out that cancels siblings on the first error"
+  },
+  {
+   "url": "https://victoriametrics.com/blog/go-graceful-shutdown/",
+   "title": "Graceful Shutdown in Go: Practical Patterns",
+   "by": "Phuong Le (VictoriaMetrics)",
+   "kind": "article",
+   "lang": "en",
+   "section": "shutdown",
+   "note": "Signal handling, readiness flip, Server.Shutdown and draining, in the order Kubernetes needs"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=QDDwwePbDtw",
+   "title": "Google I/O 2013 - Advanced Go Concurrency Patterns",
+   "by": "Google for Developers",
+   "kind": "video",
+   "lang": "en",
+   "note": "Sameer Ajmani builds a feed subscriber with a for-select loop, clean Close and no leaks"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=luQlkud-jKE",
+   "title": "Паттерны использования каналов в Go | Concurrency в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "fan",
+   "note": "Worker pools, fan-in/fan-out, pipelines and cancellation with channels"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=7OJYXdtNAfc",
+   "title": "Concurrency задачи с Go собеседований - Подготовка к Golang собеседованию",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "pool",
+   "note": "Concurrency interview tasks worked through live"
+  }
+ ],
+ "indexes": [
+  {
+   "url": "https://use-the-index-luke.com/sql/anatomy",
+   "title": "Anatomy of an SQL Index",
+   "by": "Markus Winand",
+   "kind": "article",
+   "lang": "en",
+   "section": "find",
+   "note": "Leaf nodes, B-tree traversal and why lookups are logarithmic, drawn step by step"
+  },
+  {
+   "url": "https://www.cs.usfca.edu/~galles/visualization/BPlusTree.html",
+   "title": "B+ Tree Visualization",
+   "by": "David Galles (USF)",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "find",
+   "note": "Insert and search keys yourself and watch nodes split and the tree grow"
+  },
+  {
+   "url": "https://use-the-index-luke.com/sql/where-clause/the-equals-operator/concatenated-keys",
+   "title": "Concatenated Indexes",
+   "by": "Markus Winand",
+   "kind": "article",
+   "lang": "en",
+   "section": "order",
+   "note": "Why (a, b) serves WHERE a but not WHERE b, with execution plans"
+  },
+  {
+   "url": "https://use-the-index-luke.com/sql/where-clause/functions",
+   "title": "Functions in the WHERE clause",
+   "by": "Markus Winand",
+   "kind": "article",
+   "lang": "en",
+   "section": "ignored",
+   "note": "How wrapping a column in a function (LOWER, casts) silently disables its index"
+  },
+  {
+   "url": "https://use-the-index-luke.com/sql/dml",
+   "title": "Modifying Data: the cost of indexes on writes",
+   "by": "Markus Winand",
+   "kind": "article",
+   "lang": "en",
+   "section": "costs",
+   "note": "Measured insert/update/delete slowdown per extra index"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=u7ii_Lvm9rM",
+   "title": "#08 - B+Trees: The Best Data Structure in the World (CMU Intro to Database Systems)",
+   "by": "CMU Database Group",
+   "kind": "video",
+   "lang": "en",
+   "note": "University lecture on B+tree internals: node layout, splits, merges, prefix and duplicate keys"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=aaecM4wKdhY",
+   "title": "Вся правда об индексах в PostgreSQL / Олег Бартунов, Александр Коротков (PostgreSQL)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "find",
+   "note": "Postgres core developers on how index types really work"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=mnEU2_cwE_s",
+   "title": "Владимир Ситников — B-tree индексы в базах данных на примере PostgreSQL",
+   "by": "Heisenbug — конференция по тестированию",
+   "kind": "video",
+   "lang": "ru",
+   "section": "order",
+   "note": "B-tree internals and composite index column order in PostgreSQL"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=AZF9QZeJ-v8",
+   "title": "PostgreSQL и тормозящие запросы: что делать, когда индексы есть, а толку - нет?",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "ignored",
+   "note": "Why queries stay slow even with indexes, and what to do"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=ju9F8OvnL4E",
+   "title": "Андрей Сальников — Индексы в PostgreSQL. Как понять, что создавать",
+   "by": "Joker — Конференция о будущем разработки",
+   "kind": "video",
+   "lang": "ru",
+   "section": "costs",
+   "note": "How to decide which indexes to create, and what they cost"
+  }
+ ],
+ "transactions": [
+  {
+   "url": "https://www.youtube.com/watch?v=5ZjhNTM8XU8",
+   "title": "\"Transactions: myths, surprises and opportunities\"",
+   "by": "Strange Loop Conference (Martin Kleppmann)",
+   "kind": "video",
+   "lang": "en",
+   "note": "What ACID really promises and which anomalies each isolation level lets through"
+  },
+  {
+   "url": "https://github.com/ept/hermitage",
+   "title": "Hermitage: testing transaction isolation levels",
+   "by": "Martin Kleppmann",
+   "kind": "article",
+   "lang": "en",
+   "section": "reads",
+   "note": "Runnable anomaly tests plus a table of what each database's levels actually prevent"
+  },
+  {
+   "url": "https://brandur.org/postgres-atomicity",
+   "title": "How Postgres Makes Transactions Atomic",
+   "by": "Brandur Leach",
+   "kind": "article",
+   "lang": "en",
+   "section": "mvcc",
+   "note": "Illustrated walk through xmin/xmax, the commit log and snapshots"
+  },
+  {
+   "url": "https://www.postgresql.org/docs/current/transaction-iso.html",
+   "title": "Transaction Isolation",
+   "by": "PostgreSQL docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "reads",
+   "note": "Authoritative table of phenomena per level, incl. Postgres's snapshot-based Repeatable Read"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=tUFha9-DuSk",
+   "title": "#20 - MVCC: Multi-Version Concurrency Control (CMU Intro to Database Systems)",
+   "by": "CMU Database Group",
+   "kind": "video",
+   "lang": "en",
+   "section": "mvcc",
+   "note": "Version chains, snapshot visibility and garbage collection across real engines"
+  },
+  {
+   "url": "https://jepsen.io/analyses/postgresql-12.3",
+   "title": "Jepsen: PostgreSQL 12.3",
+   "by": "Kyle Kingsbury (Jepsen)",
+   "kind": "article",
+   "lang": "en",
+   "section": "writes",
+   "note": "A real serializability bug found by testing: shows how write anomalies surface in practice"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=J_ZCo6RBNj4",
+   "title": "Анатомия конкурентного доступа к данным в PostgreSQL / Виктор Егоров (DataEgret)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "reads",
+   "note": "How PostgreSQL handles concurrent access: snapshots, isolation, locks"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=-vkYC4C3Qr4",
+   "title": "Под капотом: разбираемся с MVCC в DB",
+   "by": "EPAM Moscow ITsubbotnik",
+   "kind": "video",
+   "lang": "ru",
+   "section": "mvcc",
+   "note": "MVCC under the hood: row versions and visibility"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=TDWC66qzxCs",
+   "title": "Девять кругов ада или PostgreSQL Vacuum / Алексей Лесовский (PostgreSQL-Consulting LLC)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "mvcc",
+   "note": "The cost of MVCC: dead tuples and VACUUM pitfalls"
+  }
+ ],
+ "mongo-vs-postgres": [
+  {
+   "url": "https://jepsen.io/analyses/mongodb-4.2.6",
+   "title": "Jepsen: MongoDB 4.2.6",
+   "by": "Kyle Kingsbury (Jepsen)",
+   "kind": "article",
+   "lang": "en",
+   "section": "writes",
+   "note": "What weak read/write concerns really lose, and transaction anomalies found under faults"
+  },
+  {
+   "url": "https://www.mongodb.com/docs/manual/reference/write-concern/",
+   "title": "Write Concern",
+   "by": "MongoDB docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "writes",
+   "note": "Exactly what w:1, w:majority and j:true wait for before acking"
+  },
+  {
+   "url": "https://www.mongodb.com/docs/manual/data-modeling/",
+   "title": "Data Modeling in MongoDB",
+   "by": "MongoDB docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "model",
+   "note": "Embed vs reference: the official guide to shaping documents around access patterns"
+  },
+  {
+   "url": "https://www.postgresql.org/docs/current/datatype-json.html",
+   "title": "JSON Types (json vs jsonb, GIN indexing)",
+   "by": "PostgreSQL docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "schema",
+   "note": "How Postgres stores and indexes schemaless JSON inside a strict schema"
+  },
+  {
+   "url": "https://www.mongodb.com/docs/manual/core/schema-validation/",
+   "title": "Schema Validation",
+   "by": "MongoDB docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "schema",
+   "note": "Adding JSON Schema rules to a Mongo collection: the 'flexible but checked' middle ground"
+  },
+  {
+   "url": "https://www.mongodb.com/docs/manual/sharding/",
+   "title": "Sharding",
+   "by": "MongoDB docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "scale",
+   "note": "Shard keys, chunks, mongos routing and balancing, with diagrams"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=SNzOZKvFZ68",
+   "title": "Postgres vs Mongo / Олег Бартунов (Postgres Professional)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "model",
+   "note": "Postgres core dev compares JSONB with MongoDB documents and performance"
+  }
+ ],
+ "kafka": [
+  {
+   "url": "https://softwaremill.com/kafka-visualisation/",
+   "title": "Kafka Visualization",
+   "by": "SoftwareMill",
+   "kind": "interactive",
+   "lang": "en",
+   "note": "Animate producers, partitions, replicas and consumer groups; kill brokers and watch"
+  },
+  {
+   "url": "https://kafka.apache.org/43/design/design/#message-delivery-semantics",
+   "title": "Kafka design: Message Delivery Semantics",
+   "by": "Apache Kafka docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "commit",
+   "note": "Official account of at-most/at-least/exactly-once and where the offset commit sits"
+  },
+  {
+   "url": "https://developer.confluent.io/courses/architecture/consumer-group-protocol/",
+   "title": "Consumer Group Protocol",
+   "by": "Confluent Developer",
+   "kind": "article",
+   "lang": "en",
+   "section": "groups",
+   "note": "How the group coordinator assigns partitions and rebalances, with diagrams"
+  },
+  {
+   "url": "https://www.confluent.io/blog/exactly-once-semantics-are-possible-heres-how-apache-kafka-does-it/",
+   "title": "Exactly-Once Semantics Are Possible: Here's How Kafka Does It",
+   "by": "Neha Narkhede (Confluent)",
+   "kind": "article",
+   "lang": "en",
+   "section": "commit",
+   "note": "Idempotent producer and transactions explained by Kafka's co-creator"
+  },
+  {
+   "url": "https://microservices.io/patterns/data/transactional-outbox.html",
+   "title": "Pattern: Transactional outbox",
+   "by": "Chris Richardson (microservices.io)",
+   "kind": "article",
+   "lang": "en",
+   "section": "outbox",
+   "note": "The canonical write-up of the outbox pattern and its relay options"
+  },
+  {
+   "url": "https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/",
+   "title": "Reliable Microservices Data Exchange With the Outbox Pattern",
+   "by": "Gunnar Morling (Debezium)",
+   "kind": "article",
+   "lang": "en",
+   "section": "outbox",
+   "note": "Outbox relayed via CDC from the WAL instead of polling, with a full working example"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=_3-gugDc5zA",
+   "title": "Что каждый разработчик должен знать про Kafka?",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "log",
+   "note": "What every developer should know about Kafka: partitions, groups, offsets"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=8Ef2V9UacfU",
+   "title": "Андрей Серебрянский — Exactly once в Kafka: как все сломать (и починить)",
+   "by": "Joker — Конференция о будущем разработки",
+   "kind": "video",
+   "lang": "ru",
+   "section": "commit",
+   "note": "How exactly-once in Kafka breaks, and how to fix it"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=OnVoIAAJeOk",
+   "title": "Паттерн Outbox - теория и практика | Архитектура Микросервисов",
+   "by": "Николай Тузов — Golang",
+   "kind": "video",
+   "lang": "ru",
+   "section": "outbox",
+   "note": "Transactional outbox: theory and a Go implementation"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=BtmYjTO1EpI",
+   "title": "Брокер сообщений Kafka в условиях повышенной нагрузки / Артём Выборнов (Rambler&Co)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "groups",
+   "note": "Running Kafka under heavy load: partitions, consumers, pitfalls"
+  }
+ ],
+ "queues": [
+  {
+   "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-visibility-timeout.html",
+   "title": "Amazon SQS visibility timeout",
+   "by": "AWS docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "sqs",
+   "note": "Receive-hide-delete lifecycle, extending the timeout and in-flight limits"
+  },
+  {
+   "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-queue-types.html",
+   "title": "Amazon SQS queue types",
+   "by": "AWS docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "sqs",
+   "note": "Standard vs FIFO: ordering, duplicates and throughput trade-offs"
+  },
+  {
+   "url": "https://docs.cloud.google.com/pubsub/docs/subscription-overview",
+   "title": "Pub/Sub subscription overview",
+   "by": "Google Cloud docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "pubsub",
+   "note": "One topic, many subscriptions, each gets every message; pull vs push, ack deadlines"
+  },
+  {
+   "url": "https://docs.cloud.google.com/pubsub/docs/exactly-once-delivery",
+   "title": "Pub/Sub exactly-once delivery",
+   "by": "Google Cloud docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "pubsub",
+   "note": "What exactly-once means for Pub/Sub acks and its limits"
+  },
+  {
+   "url": "https://kafka.apache.org/43/design/design/#the-share-consumer",
+   "title": "Kafka design: The Share Consumer (queues for Kafka)",
+   "by": "Apache Kafka docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "choose",
+   "note": "Kafka now offers per-message ack queue semantics on a log; blurs the log-vs-queue choice"
+  },
+  {
+   "url": "https://docs.cloud.google.com/pubsub/docs/migrating-from-kafka-to-pubsub",
+   "title": "Migrate from Kafka to Pub/Sub",
+   "by": "Google Cloud docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "choose",
+   "note": "Side-by-side of Kafka and Pub/Sub concepts: retention, ordering, replay, scaling"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=55EYEoVipzs",
+   "title": "Kafka vs RabbitMQ - в чем реальная разница?",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "choose",
+   "note": "Log-based Kafka vs broker-based RabbitMQ: the real differences"
+  }
+ ],
+ "http": [
+  {
+   "url": "https://github.com/alex/what-happens-when",
+   "title": "What happens when you type google.com into your browser and press enter?",
+   "by": "Alex Gaynor et al.",
+   "kind": "article",
+   "lang": "en",
+   "section": "url",
+   "note": "Exhaustive step list from keypress through DNS, ARP, TCP, TLS to HTTP and rendering"
+  },
+  {
+   "url": "https://tls13.xargs.org/",
+   "title": "The Illustrated TLS 1.3 Connection",
+   "by": "Michael Driscoll",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "url",
+   "note": "Every byte of a real TLS 1.3 handshake, annotated and clickable"
+  },
+  {
+   "url": "https://brandur.org/idempotency-keys",
+   "title": "Implementing Stripe-like Idempotency Keys in Postgres",
+   "by": "Brandur Leach",
+   "kind": "article",
+   "lang": "en",
+   "section": "anatomy",
+   "note": "How to make POST safe to retry: idempotency keys, recovery points and atomic phases"
+  },
+  {
+   "url": "https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/",
+   "title": "The complete guide to Go net/http timeouts",
+   "by": "Filippo Valsorda (Cloudflare)",
+   "kind": "article",
+   "lang": "en",
+   "section": "pool",
+   "note": "Timeline diagrams of which client/server timeout covers which phase of a connection"
+  },
+  {
+   "url": "https://calendar.perfplanet.com/2020/head-of-line-blocking-in-quic-and-http-3-the-details/",
+   "title": "Head-of-Line Blocking in QUIC and HTTP/3: The Details",
+   "by": "Robin Marx",
+   "kind": "article",
+   "lang": "en",
+   "section": "versions",
+   "note": "Packet-level diagrams of HOL blocking in HTTP/1.1, HTTP/2 over TCP and HTTP/3 over QUIC"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=4rYPXgCKamM",
+   "title": "HTTP/3 and QUIC: Who, what, where, when and, WHY? by Robin Marx",
+   "by": "Devoxx",
+   "kind": "video",
+   "lang": "en",
+   "section": "versions",
+   "note": "Why HTTP/2 still stalls on packet loss and what QUIC changes, with clear animations"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=tnj-Wx9WLVY",
+   "title": "Андрей Чупин — Ускоряем сетевой слой ВКонтакте с HTTP/3",
+   "by": "Mobius — конференция по мобильной разработке",
+   "kind": "video",
+   "lang": "ru",
+   "section": "versions",
+   "note": "VK moving to HTTP/3: head-of-line blocking and real gains"
+  }
+ ],
+ "scaling": [
+  {
+   "url": "https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/",
+   "title": "Timeouts, retries, and backoff with jitter",
+   "by": "Marc Brooker (Amazon Builders' Library)",
+   "kind": "article",
+   "lang": "en",
+   "section": "retries",
+   "note": "How retries amplify outages across layers and the budgets and jitter AWS uses to stop them"
+  },
+  {
+   "url": "https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/",
+   "title": "Exponential Backoff And Jitter",
+   "by": "Marc Brooker (AWS Architecture Blog)",
+   "kind": "article",
+   "lang": "en",
+   "section": "retries",
+   "note": "Simulated charts comparing no jitter, full, equal and decorrelated jitter under contention"
+  },
+  {
+   "url": "https://aws.amazon.com/builders-library/caching-challenges-and-strategies/",
+   "title": "Caching challenges and strategies",
+   "by": "Amazon Builders' Library",
+   "kind": "article",
+   "lang": "en",
+   "section": "cache",
+   "note": "Cold starts, thundering herds, negative caching and what happens when the cache disappears"
+  },
+  {
+   "url": "https://encore.dev/blog/queueing",
+   "title": "Queueing – An interactive study of queueing strategies",
+   "by": "Sam Rose (Encore)",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "pool",
+   "note": "Playable simulations of FIFO, LIFO, timeouts and dropped requests when workers are saturated"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=mBUCF1WGI_I",
+   "title": "Distributed Systems 5.1: Replication",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "replicas",
+   "note": "Cambridge lecture: why replicate, retries and idempotence, and conflicts between replicas"
+  },
+  {
+   "url": "https://go.dev/doc/database/manage-connections",
+   "title": "Managing connections",
+   "by": "The Go Team",
+   "kind": "docs",
+   "lang": "en",
+   "section": "pool",
+   "note": "What SetMaxOpenConns, SetMaxIdleConns and SetConnMaxLifetime actually control in sql.DB"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=iLMlYgQoTIE",
+   "title": "Как кэшировать данные | Теория кэширования - System Design",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "cache",
+   "note": "Caching theory: strategies, invalidation, eviction, stampedes"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=4smZmksvLR8",
+   "title": "Принципы проектирования высоконагруженных приложений",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "note": "Core principles for designing high-load backends"
+  }
+ ],
+ "profiling": [
+  {
+   "url": "https://github.com/DataDog/go-profiler-notes/blob/main/guide/README.md",
+   "title": "The Busy Developer's Guide to Go Profiling, Tracing and Observability",
+   "by": "Felix Geisendörfer",
+   "kind": "article",
+   "lang": "en",
+   "note": "Best single map of every Go profiler and tracer: what each measures, overhead, when to use it"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=7hg4T2Qqowk",
+   "title": "GopherCon 2021: Go Profiling and Observability from Scratch - Felix Geisendörfer",
+   "by": "Gopher Academy",
+   "kind": "video",
+   "lang": "en",
+   "section": "cpu",
+   "note": "How the CPU profiler samples stacks and how to read the result as a flame graph"
+  },
+  {
+   "url": "https://www.brendangregg.com/flamegraphs.html",
+   "title": "Flame Graphs",
+   "by": "Brendan Gregg",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "cpu",
+   "note": "From the inventor: clickable SVG flame graphs and how to read width vs height"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=6qAfkJGWsns",
+   "title": "GopherCon Europe 2022: Bill Kennedy - Practical Memory Profiling",
+   "by": "GopherCon Europe",
+   "kind": "video",
+   "lang": "en",
+   "section": "memory",
+   "note": "Live hunt for allocations with benchmarks, -memprofile and escape-analysis output"
+  },
+  {
+   "url": "https://sre.google/sre-book/monitoring-distributed-systems/",
+   "title": "Monitoring Distributed Systems (the four golden signals)",
+   "by": "Google SRE Book",
+   "kind": "article",
+   "lang": "en",
+   "section": "metrics",
+   "note": "Latency, traffic, errors, saturation, and why you measure percentiles, not averages"
+  },
+  {
+   "url": "https://go.dev/blog/flight-recorder",
+   "title": "Flight Recorder in Go 1.25",
+   "by": "Carlos Amedee, Michael Knyszek (Go blog)",
+   "kind": "article",
+   "lang": "en",
+   "section": "traces",
+   "note": "Keep the last seconds of execution trace in memory and dump it when one request goes slow"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=OEUIzg-IeyM",
+   "title": "Go за гранью скорости: pprof на проде | avito.code",
+   "by": "AvitoTech",
+   "kind": "video",
+   "lang": "ru",
+   "section": "cpu",
+   "note": "Avito: running pprof against production services"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=-ztpTp1hQpE",
+   "title": "Как избежать утечек памяти в Golang?",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "memory",
+   "note": "Common Go memory leaks (goroutines, slices, timers) and how to find them"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=KSOBLn9MQCU",
+   "title": "Разбор метрик рантайма Go приложений",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "metrics",
+   "note": "Which Go runtime metrics to watch and what each one tells you"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=KRcrAEB0DAg",
+   "title": "OpenTelemetry - лучшие практики | Observability, как в BigTech",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "traces",
+   "note": "OpenTelemetry tracing practices for Go services"
+  }
+ ],
+ "clocks": [
+  {
+   "url": "https://www.youtube.com/watch?v=FQ_2N3AQu0M",
+   "title": "Distributed Systems 3.1: Physical time",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "two",
+   "note": "Quartz drift, atomic clocks, leap seconds and time-of-day vs monotonic clocks"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=mAyW-4LeXZo",
+   "title": "Distributed Systems 3.2: Clock synchronisation",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "skew",
+   "note": "How NTP estimates skew, and why synced clocks still can't order events"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=x-D8iFU1d-o",
+   "title": "Distributed Systems 4.1: Logical time",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "logical",
+   "note": "Lamport clocks vs vector clocks worked through message by message"
+  },
+  {
+   "url": "https://cse.buffalo.edu/tech-reports/2014-04.pdf",
+   "title": "Logical Physical Clocks and Consistent Snapshots in Globally Distributed Databases",
+   "by": "Kulkarni, Demirbas et al.",
+   "kind": "paper",
+   "lang": "en",
+   "section": "hybrid",
+   "note": "The original HLC paper: short, readable, with the full algorithm"
+  },
+  {
+   "url": "https://www.cockroachlabs.com/blog/living-without-atomic-clocks/",
+   "title": "Living without atomic clocks: Where CockroachDB and Spanner diverge",
+   "by": "Cockroach Labs",
+   "kind": "article",
+   "lang": "en",
+   "section": "hybrid",
+   "note": "HLC plus uncertainty intervals in production, contrasted with TrueTime commit-wait"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=oeycOVX70aE",
+   "title": "Distributed Systems 8.2: Google's Spanner",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "truetime",
+   "note": "TrueTime intervals and commit-wait explained with diagrams"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=DFLEkWi-vRc",
+   "title": "Распределенные транзакции и путешествия во времени. Стас Кельвич, Postgres Professional",
+   "by": "AvitoTech",
+   "kind": "video",
+   "lang": "ru",
+   "section": "truetime",
+   "note": "Distributed transactions ordered by physical clocks in Postgres (Clock-SI)"
+  }
+ ],
+ "consistency": [
+  {
+   "url": "https://jepsen.io/consistency",
+   "title": "Consistency Models",
+   "by": "Jepsen",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "models",
+   "note": "Clickable map of consistency models and how they imply each other"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=noUNH3jDLC0",
+   "title": "Distributed Systems 7.2: Linearizability",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "models",
+   "note": "Linearizability defined on timelines, and why quorums alone don't give it"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=9uCP3qHNbWw",
+   "title": "Distributed Systems 7.3: Eventual consistency",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "models",
+   "note": "Eventual vs strong consistency and the CAP trade-off in one short lecture"
+  },
+  {
+   "url": "https://martin.kleppmann.com/2015/05/11/please-stop-calling-databases-cp-or-ap.html",
+   "title": "Please stop calling databases CP or AP",
+   "by": "Martin Kleppmann",
+   "kind": "article",
+   "lang": "en",
+   "section": "cap",
+   "note": "Why CAP labels mislead, and which guarantees to talk about instead"
+  },
+  {
+   "url": "https://brooker.co.za/blog/2014/07/16/pacelc.html",
+   "title": "CAP and PACELC: Thinking More Clearly About Consistency",
+   "by": "Marc Brooker",
+   "kind": "article",
+   "lang": "en",
+   "section": "cap",
+   "note": "Short, clear case that the latency/consistency trade-off (PACELC) matters more than CAP"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=QdkS6ZjeR7Q",
+   "title": "\"Jepsen II: Linearizable Boogaloo\"",
+   "by": "Strange Loop Conference (Kyle Kingsbury)",
+   "kind": "video",
+   "lang": "en",
+   "section": "quorum",
+   "note": "How Jepsen finds lost writes and stale reads in real databases under partitions"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=E6olZgkiTyU",
+   "title": "Как реплицировать данные, сохраняя производительность и консистентность / Андрей Каледин, Тинькофф",
+   "by": "Yandex for Developers",
+   "kind": "video",
+   "lang": "ru",
+   "section": "models",
+   "note": "Tinkoff: replicating data while keeping performance and consistency"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=O_vur-0XBVo",
+   "title": "Ломаем PostgreSQL с помощью Jepsen и верифицируем локи в TLA+ / Евгений Дюков / Yandex Cloud",
+   "by": "Yandex Infrastructure",
+   "kind": "video",
+   "lang": "ru",
+   "section": "quorum",
+   "note": "Jepsen testing in practice: finding consistency bugs in PostgreSQL clusters"
+  }
+ ],
+ "replication": [
+  {
+   "url": "https://www.youtube.com/watch?v=mBUCF1WGI_I",
+   "title": "Distributed Systems 5.1: Replication",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "leader",
+   "note": "Retries, idempotence, timestamps and why replicas need conflict resolution"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=uNxl3BFcKSA",
+   "title": "Distributed Systems 5.2: Quorums",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "quorum",
+   "note": "W + R > N on a diagram, plus read repair"
+  },
+  {
+   "url": "https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf",
+   "title": "Dynamo: Amazon's Highly Available Key-value Store",
+   "by": "DeCandia et al. (Amazon)",
+   "kind": "paper",
+   "lang": "en",
+   "section": "repair",
+   "note": "Origin of sloppy quorums, hinted handoff, anti-entropy Merkle trees and vector clocks"
+  },
+  {
+   "url": "https://www.postgresql.org/docs/current/runtime-config-replication.html",
+   "title": "Replication settings (synchronous_commit, synchronous_standby_names)",
+   "by": "PostgreSQL docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "leader",
+   "note": "Real knobs for ack-early vs ack-late: remote_write, on, remote_apply, ANY/FIRST quorums"
+  },
+  {
+   "url": "https://developer.confluent.io/courses/architecture/data-replication/",
+   "title": "Kafka Data Replication Protocol",
+   "by": "Confluent Developer",
+   "kind": "article",
+   "lang": "en",
+   "section": "kafka",
+   "note": "Leader, followers, ISR and high watermark with diagrams"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=PPDffzAy86I",
+   "title": "Data Plane – Apache Kafka's Replication Protocol",
+   "by": "Confluent",
+   "kind": "video",
+   "lang": "en",
+   "section": "kafka",
+   "note": "Short visual walk through leader epochs, ISR shrink/expand and the high watermark"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=mvVhI-HOjUQ",
+   "title": "Асинхронная репликация без цензуры / Олег Царёв (Mail.Ru Group)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "leader",
+   "note": "Asynchronous replication, honestly: lag, loss, failover"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=I8ijlHkMScY",
+   "title": "Изобретая синхронную репликацию / Владислав Шпилевой (Ubisoft)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "leader",
+   "note": "Building synchronous replication and what it really guarantees"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=V033-W6Xxk0",
+   "title": "BARSiC — асинхронная репликация и консенсус для 70 баз данных / Григорий Бутейко (VK, ВКонтакте)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "note": "VK: async replication plus consensus across 70 databases"
+  }
+ ],
+ "consensus": [
+  {
+   "url": "https://thesecretlivesofdata.com/raft/",
+   "title": "The Secret Lives of Data: Raft",
+   "by": "Ben Johnson",
+   "kind": "interactive",
+   "lang": "en",
+   "note": "Animated step-by-step Raft: elections, log replication, partitions"
+  },
+  {
+   "url": "https://raft.github.io/raftscope/index.html",
+   "title": "RaftScope",
+   "by": "Diego Ongaro",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "election",
+   "note": "Live 5-node Raft cluster: stop servers, drop requests, watch terms and logs"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=uXEYuDwm7e4",
+   "title": "Distributed Systems 6.2: Raft",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "log",
+   "note": "Raft's election and log-repair rules walked through with pseudocode"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=rN6ma561tak",
+   "title": "Distributed Systems 6.1: Consensus",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "majority",
+   "note": "Why consensus needs majorities, FLP, and leader election with terms"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=vYp4LYbnnW8",
+   "title": "Designing for Understandability: The Raft Consensus Algorithm",
+   "by": "Diego Ongaro",
+   "kind": "video",
+   "lang": "en",
+   "section": "election",
+   "note": "Raft explained by its author, from terms to membership change"
+  },
+  {
+   "url": "https://raft.github.io/raft.pdf",
+   "title": "In Search of an Understandable Consensus Algorithm (Extended Version)",
+   "by": "Diego Ongaro, John Ousterhout",
+   "kind": "paper",
+   "lang": "en",
+   "section": "reads",
+   "note": "The Raft paper; Figure 2 is the whole algorithm; sections 6 and 8 cover membership and reads"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=In273TwbrK8",
+   "title": "TFTDS. Семинар 6. Алгоритм RAFT",
+   "by": "Лекторий ФПМИ",
+   "kind": "video",
+   "lang": "ru",
+   "section": "election",
+   "note": "University seminar walking through Raft: elections, log, commit"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=phB2nygfkMw",
+   "title": "Паксос в картинках / Константин Осипов (ScyllaDB)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "majority",
+   "note": "Paxos explained with pictures by a database engineer"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=7tB45Y5OOYM",
+   "title": "Не всемогущий etcd, или Почему он не тянет большие нагрузки / Алексей Волков",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "reads",
+   "note": "Why etcd (Raft) struggles under heavy load"
+  }
+ ],
+ "locks": [
+  {
+   "url": "https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html",
+   "title": "How to do distributed locking",
+   "by": "Martin Kleppmann",
+   "kind": "article",
+   "lang": "en",
+   "section": "fencing",
+   "note": "The canonical GC-pause-and-expired-lease diagram, and why fencing tokens are the actual fix"
+  },
+  {
+   "url": "https://antirez.com/news/101",
+   "title": "Is Redlock safe?",
+   "by": "Salvatore Sanfilippo (antirez)",
+   "kind": "article",
+   "lang": "en",
+   "section": "redlock",
+   "note": "The Redis author's rebuttal to Kleppmann. Read both sides of the debate before you pick one"
+  },
+  {
+   "url": "https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/",
+   "title": "Distributed Locks with Redis",
+   "by": "Redis docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "redlock",
+   "note": "The Redlock algorithm as specified: quorum, clock drift allowance, and the safe unlock script"
+  },
+  {
+   "url": "https://pkg.go.dev/go.etcd.io/etcd/client/v3/concurrency",
+   "title": "etcd client/v3/concurrency package",
+   "by": "etcd",
+   "kind": "docs",
+   "lang": "en",
+   "section": "leases",
+   "note": "Go API for lease-backed Mutex and Election. Each key's revision can act as a fencing token"
+  },
+  {
+   "url": "https://research.google/pubs/the-chubby-lock-service-for-loosely-coupled-distributed-systems/",
+   "title": "The Chubby lock service for loosely-coupled distributed systems",
+   "by": "Mike Burrows (Google)",
+   "kind": "paper",
+   "lang": "en",
+   "section": "kinds",
+   "note": "Google's coarse-grained lock service. Covers leases, sequencers (fencing) and why advisory locks"
+  },
+  {
+   "url": "https://jepsen.io/analyses/etcd-3.4.3",
+   "title": "Jepsen: etcd 3.4.3",
+   "by": "Kyle Kingsbury (Jepsen)",
+   "kind": "article",
+   "lang": "en",
+   "section": "ttl",
+   "note": "Shows etcd locks letting two holders in under pauses and partitions. Lease locks can't be trusted alone"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=kSHb0APPqbs",
+   "title": "System Design - Распределенные блокировки | BACKEND разработка",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "ttl",
+   "note": "Distributed locks: TTLs, fencing and their failure modes"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=O_vur-0XBVo",
+   "title": "Ломаем PostgreSQL с помощью Jepsen и верифицируем локи в TLA+ / Евгений Дюков / Yandex Cloud",
+   "by": "Yandex Infrastructure",
+   "kind": "video",
+   "lang": "ru",
+   "section": "fencing",
+   "note": "Breaking PostgreSQL with Jepsen and verifying locks in TLA+"
+  }
+ ],
+ "failure-detection": [
+  {
+   "url": "https://www.youtube.com/watch?v=43TDfUNsM3E",
+   "title": "Distributed Systems 2.4: Fault tolerance",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "silence",
+   "note": "Cambridge lecture: failure detectors, and why a timeout can't tell a crash from a slow node"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=aVYEY75qn3c",
+   "title": "PWLSF 09/2014 - Armon Dadgar on SWIM",
+   "by": "PapersWeLove",
+   "kind": "video",
+   "lang": "en",
+   "section": "swim",
+   "note": "HashiCorp's co-founder walks through SWIM (the protocol under memberlist/Consul): probes, suspicion"
+  },
+  {
+   "url": "https://arxiv.org/abs/1707.00788",
+   "title": "Lifeguard: Local Health Awareness for More Accurate Failure Detection",
+   "by": "Dadgar, Phillips, Currey (HashiCorp)",
+   "kind": "paper",
+   "lang": "en",
+   "section": "partial",
+   "note": "A slow node falsely accusing healthy ones, and memberlist's fix. Shipped in Go"
+  },
+  {
+   "url": "https://blog.acolyer.org/2017/06/15/gray-failure-the-achilles-heel-of-cloud-scale-systems/",
+   "title": "Gray failure: the Achilles' heel of cloud-scale systems",
+   "by": "Adrian Colyer (the morning paper)",
+   "kind": "article",
+   "lang": "en",
+   "section": "partial",
+   "note": "Readable summary of Microsoft's gray-failure paper: the detector says fine while the app sees broken"
+  },
+  {
+   "url": "https://thesecretlivesofdata.com/raft/",
+   "title": "Raft: Understandable Distributed Consensus",
+   "by": "The Secret Lives of Data",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "split",
+   "note": "Animated Raft: watch a partition create a stale leader and terms stop it from committing"
+  },
+  {
+   "url": "https://kubernetes.io/docs/concepts/architecture/nodes/",
+   "title": "Nodes (heartbeats and node controller)",
+   "by": "Kubernetes docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "k8s",
+   "note": "Official source for Lease heartbeats, grace period and eviction. Check defaults for your version"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=29MJugEzrtA",
+   "title": "Как мы переживаем сплит-брейн и продолжаем писать данные по S3-протоколу / С. Богатырев (YADRO)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "split",
+   "note": "Surviving split-brain while keeping writes going (YADRO S3)"
+  }
+ ],
+ "sharding": [
+  {
+   "url": "https://dgryski.medium.com/consistent-hashing-algorithmic-tradeoffs-ef6b8e2fcae8",
+   "title": "Consistent Hashing: Algorithmic Tradeoffs",
+   "by": "Damian Gryski",
+   "kind": "article",
+   "lang": "en",
+   "section": "others",
+   "note": "A Go dev compares ring+vnodes, rendezvous, jump, multi-probe and Maglev, with benchmarks and Go code"
+  },
+  {
+   "url": "https://arxiv.org/abs/1406.2294",
+   "title": "A Fast, Minimal Memory, Consistent Hash Algorithm (Jump Hash)",
+   "by": "Lamping, Veach (Google)",
+   "kind": "paper",
+   "lang": "en",
+   "section": "others",
+   "note": "Short, readable paper. Jump hash is ~5 lines of code with no ring and no memory, only numbered shards"
+  },
+  {
+   "url": "https://research.google/pubs/maglev-a-fast-and-reliable-software-network-load-balancer/",
+   "title": "Maglev: A Fast and Reliable Software Network Load Balancer",
+   "by": "Google",
+   "kind": "paper",
+   "lang": "en",
+   "section": "others",
+   "note": "Where Maglev hashing comes from: a lookup table that gives O(1) picks and small churn"
+  },
+  {
+   "url": "https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf",
+   "title": "Dynamo: Amazon's Highly Available Key-value Store",
+   "by": "DeCandia et al. (Amazon)",
+   "kind": "paper",
+   "lang": "en",
+   "section": "ring",
+   "note": "The paper that popularised the ring with virtual nodes, and why Dynamo moved to fixed partitions"
+  },
+  {
+   "url": "https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/",
+   "title": "Redis cluster specification",
+   "by": "Redis docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "move",
+   "note": "16384 fixed slots plus MOVED/ASK redirects: a concrete protocol for moving live data slot by slot"
+  },
+  {
+   "url": "https://www.figma.com/blog/how-figmas-databases-team-lived-to-tell-the-scale/",
+   "title": "How Figma's Databases Team Lived to Tell the Scale",
+   "by": "Figma Engineering",
+   "kind": "article",
+   "lang": "en",
+   "section": "cost",
+   "note": "Real horizontal Postgres sharding: choosing shard keys, cross-shard queries, logical-then-physical split"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=d6BtxBKhQoc",
+   "title": "System Design - теория шардирования | Как масштабировать базы данных",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "mod",
+   "note": "Sharding theory: key choice, hash vs range, consistent hashing, resharding"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=URHoFbn4rt8",
+   "title": "Sharding: patterns and antipatterns / К.Осипов (Mail ru, Tarantool), А.Рыбак (Badoo)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "cost",
+   "note": "Sharding patterns and anti-patterns (Tarantool, Badoo)"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=DfaTNXCsYRg",
+   "title": "Подходы к реализации шардинга в современных [No]SQL-системах / Константин Осипов (Tarantool)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "others",
+   "note": "How modern SQL/NoSQL systems implement sharding"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=UD173d_fkJE",
+   "title": "Шардирование: с нуля до Яндекс Диска / Андрей Колнооченко (Яндекс 360)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "move",
+   "note": "Sharding from scratch at Yandex Disk, including moving live data"
+  }
+ ],
+ "dist-transactions": [
+  {
+   "url": "https://www.youtube.com/watch?v=-_rdWB9hN1c",
+   "title": "Distributed Systems 7.1: Two-phase commit",
+   "by": "Martin Kleppmann",
+   "kind": "video",
+   "lang": "en",
+   "section": "twopc",
+   "note": "Cambridge lecture: 2PC step by step, and why a coordinator crash leaves participants stuck in doubt"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=xDuwrtwYHu8",
+   "title": "Applying the Saga Pattern",
+   "by": "Caitie McCaffrey (GOTO 2015)",
+   "kind": "video",
+   "lang": "en",
+   "section": "saga",
+   "note": "The classic saga talk: compensating transactions, and why they must be idempotent"
+  },
+  {
+   "url": "https://www.morling.dev/blog/revisiting-the-outbox-pattern/",
+   "title": "Revisiting the Outbox Pattern",
+   "by": "Gunnar Morling",
+   "kind": "article",
+   "lang": "en",
+   "section": "outbox",
+   "note": "Debezium's creator on outbox semantics, ordering, polling vs CDC, and when to skip the pattern"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=D837piu2co0",
+   "title": "Ins and Outs of the Outbox Pattern",
+   "by": "Gunnar Morling (Confluent, Current 2025)",
+   "kind": "video",
+   "lang": "en",
+   "section": "outbox",
+   "note": "Talk version: implementing the outbox safely, backfills, and alternatives to it"
+  },
+  {
+   "url": "https://brandur.org/idempotency-keys",
+   "title": "Implementing Stripe-like Idempotency Keys in Postgres",
+   "by": "Brandur Leach",
+   "kind": "article",
+   "lang": "en",
+   "section": "idempotency",
+   "note": "Full design: atomic phases, recovery points, and what to do when a retry hits a half-done request"
+  },
+  {
+   "url": "https://www.cs.cornell.edu/andru/cs711/2002fa/reading/sagas.pdf",
+   "title": "Sagas",
+   "by": "Garcia-Molina, Salem (1987)",
+   "kind": "paper",
+   "lang": "en",
+   "section": "saga-edges",
+   "note": "The short original paper. States that sagas give up isolation, which is where the anomalies come from"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=OnVoIAAJeOk",
+   "title": "Паттерн Outbox - теория и практика | Архитектура Микросервисов",
+   "by": "Николай Тузов — Golang",
+   "kind": "video",
+   "lang": "ru",
+   "section": "outbox",
+   "note": "Transactional outbox: theory and a Go implementation"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=b42gkdta_6s",
+   "title": "Алексей Кашин — Надежно отправляем события в Apache Kafka. От CDC до паттерна Transactional Outbox",
+   "by": "Joker — Конференция о будущем разработки",
+   "kind": "video",
+   "lang": "ru",
+   "section": "outbox",
+   "note": "From CDC to transactional outbox: reliably publishing events to Kafka"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=OOP_4kuzaWI",
+   "title": "PG Saga: зависимые изменения данных в нескольких сервисах / Константин Евтеев (Avito)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "saga",
+   "note": "Avito's saga implementation for changes spanning several services"
+  }
+ ],
+ "resilience": [
+  {
+   "url": "https://encore.dev/blog/queueing",
+   "title": "Queueing: An interactive study of queueing strategies",
+   "by": "Sam Rose",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "overload",
+   "note": "Play with FIFO vs LIFO, timeouts and priority queues. Watch a queue fill with requests nobody needs"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=rvHd4Y76-fs",
+   "title": "Try again: The tools and techniques behind resilient systems (ARC403)",
+   "by": "Marc Brooker (AWS re:Invent 2024)",
+   "kind": "video",
+   "lang": "en",
+   "section": "retries",
+   "note": "Why best-practice retries amplify systemic failures, plus circuit breakers, metastability and simulation"
+  },
+  {
+   "url": "https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/",
+   "title": "Exponential Backoff And Jitter",
+   "by": "Marc Brooker (AWS)",
+   "kind": "article",
+   "lang": "en",
+   "section": "retries",
+   "note": "Simulated charts of full vs equal vs decorrelated jitter. The source of the 'full jitter' advice"
+  },
+  {
+   "url": "https://brooker.co.za/blog/2022/02/28/retries.html",
+   "title": "Fixing retries with token buckets and circuit breakers",
+   "by": "Marc Brooker",
+   "kind": "article",
+   "lang": "en",
+   "section": "breaker",
+   "note": "Simulation comparing retry budgets with circuit breakers under partial and total failure"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=7w47SGaLsSw",
+   "title": "HotOS 2021: Metastable Failures in Distributed Systems",
+   "by": "ACM SIGOPS",
+   "kind": "video",
+   "lang": "en",
+   "section": "meta",
+   "note": "Short talk that named the pattern: the trigger goes away, the feedback loop stays"
+  },
+  {
+   "url": "https://sre.google/sre-book/addressing-cascading-failures/",
+   "title": "Addressing Cascading Failures (SRE Book ch. 22)",
+   "by": "Google SRE",
+   "kind": "article",
+   "lang": "en",
+   "section": "deadlines",
+   "note": "Deadline propagation, retry amplification across layers, load shedding: Google's playbook in one chapter"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=WWTq-tbZwUE",
+   "title": "Паттерны отказоустойчивой архитектуры / Александр Кривощёков (Яндекс Еда)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "breaker",
+   "note": "Yandex Eats fault-tolerance patterns: timeouts, retries, circuit breakers"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=w4suQQtnYmY",
+   "title": "System Design - ограничитель трафика | BACKEND разработка",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "overload",
+   "note": "Designing a rate limiter"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=C6CGk6ZQdmM",
+   "title": "Вадим Мартынов — Боремся с метастабильными состояниями отказа",
+   "by": "DevOops",
+   "kind": "video",
+   "lang": "ru",
+   "section": "meta",
+   "note": "Metastable failures: why systems stay broken after the trigger"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=HM1Ua_X7O-I",
+   "title": "Сложность метастабильных состояний отказа на примере Такси / Яндекс Go Infra Meetup #2",
+   "by": "Yandex for Developers",
+   "kind": "video",
+   "lang": "ru",
+   "section": "meta",
+   "note": "Metastable failure case study from Yandex Taxi"
+  }
+ ],
+ "tcp": [
+  {
+   "url": "https://blog.cloudflare.com/syn-packet-handling-in-the-wild/",
+   "title": "SYN packet handling in the wild",
+   "by": "Marek Majkowski (Cloudflare)",
+   "kind": "article",
+   "lang": "en",
+   "section": "queues",
+   "note": "SYN queue vs accept queue with diagrams. What backlog really limits and how to see drops with ss/nstat"
+  },
+  {
+   "url": "https://blog.cloudflare.com/how-to-stop-running-out-of-ephemeral-ports-and-start-to-love-long-lived-connections/",
+   "title": "How to stop running out of ephemeral ports and start to love long-lived connections",
+   "by": "Cloudflare",
+   "kind": "article",
+   "lang": "en",
+   "section": "queues",
+   "note": "The 4-tuple limit in practice: bind-before-connect, IP_BIND_ADDRESS_NO_PORT, SO_REUSEADDR"
+  },
+  {
+   "url": "https://vincent.bernat.ch/en/blog/2014-tcp-time-wait-state-linux",
+   "title": "Coping with the TCP TIME-WAIT state on busy Linux servers",
+   "by": "Vincent Bernat",
+   "kind": "article",
+   "lang": "en",
+   "section": "queues",
+   "note": "Best TIME-WAIT explainer. 2014: tcp_tw_recycle it mentions was removed in Linux 4.12, never use it"
+  },
+  {
+   "url": "https://blog.netherlabs.nl/articles/2009/01/18/the-ultimate-so_linger-page-or-why-is-my-tcp-not-reliable",
+   "title": "The ultimate SO_LINGER page, or: why is my tcp not reliable",
+   "by": "Bert Hubert",
+   "kind": "article",
+   "lang": "en",
+   "section": "close",
+   "note": "Why close() after write() can still lose data, and when a RST replaces a FIN. Behind net.TCPConn.SetLinger"
+  },
+  {
+   "url": "https://blog.cloudflare.com/when-tcp-sockets-refuse-to-die/",
+   "title": "When TCP sockets refuse to die",
+   "by": "Marek Majkowski (Cloudflare)",
+   "kind": "article",
+   "lang": "en",
+   "section": "timing",
+   "note": "Experiments with keepalive vs TCP_USER_TIMEOUT vs retransmit timers on dead peers. Explains silent hangs"
+  },
+  {
+   "url": "https://brooker.co.za/blog/2024/05/09/nagle.html",
+   "title": "It's always TCP_NODELAY. Every damn time.",
+   "by": "Marc Brooker",
+   "kind": "article",
+   "lang": "en",
+   "section": "timing",
+   "note": "How Nagle plus delayed ACK adds ~40ms stalls. Go's net package sets TCP_NODELAY by default"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=0pG_r4S3YtU",
+   "title": "Сети для Golang-разработчика. Никита Иващенко, Ozon Tech",
+   "by": "Видео с мероприятий {speach!",
+   "kind": "video",
+   "lang": "ru",
+   "note": "Networking for Go developers (Ozon): TCP from a service's point of view"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=F0Zif5Enbgc",
+   "title": "Тюнинг параметров TCP-соединений в высокоскоростных сетях / Валерий Красников (Сбербанк )",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "queues",
+   "note": "Tuning TCP connection parameters under high load"
+  }
+ ],
+ "dns-lb": [
+  {
+   "url": "https://messwithdns.net/",
+   "title": "Mess With DNS",
+   "by": "Julia Evans",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "dns",
+   "note": "Get a real subdomain, change records, and watch resolvers query it live. Caching becomes visible"
+  },
+  {
+   "url": "https://jvns.ca/blog/2021/12/06/dns-doesn-t-propagate/",
+   "title": "DNS \"propagation\" is actually caches expiring",
+   "by": "Julia Evans",
+   "kind": "article",
+   "lang": "en",
+   "section": "dns",
+   "note": "Every layer that caches your record (and negative answers), and why old IPs linger past the TTL"
+  },
+  {
+   "url": "https://samwho.dev/load-balancing/",
+   "title": "Load Balancing",
+   "by": "Sam Rose",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "grpc",
+   "note": "Animated round-robin vs least-connections vs PEWMA with uneven request costs"
+  },
+  {
+   "url": "https://kubernetes.io/blog/2018/11/07/grpc-load-balancing-on-kubernetes-without-tears/",
+   "title": "gRPC Load Balancing on Kubernetes without Tears",
+   "by": "William Morgan (Kubernetes blog)",
+   "kind": "article",
+   "lang": "en",
+   "section": "grpc",
+   "note": "Why a ClusterIP Service pins every HTTP/2 stream to one pod, and the fixes (client LB, mesh)"
+  },
+  {
+   "url": "https://grpc.io/blog/grpc-load-balancing/",
+   "title": "gRPC Load Balancing",
+   "by": "gRPC",
+   "kind": "article",
+   "lang": "en",
+   "section": "grpc",
+   "note": "Official comparison of proxy vs client-side vs lookaside LB, the options grpc-go gives you"
+  },
+  {
+   "url": "https://blog.cloudflare.com/the-complete-guide-to-golang-net-http-timeouts/",
+   "title": "The complete guide to Go net/http timeouts",
+   "by": "Filippo Valsorda (Cloudflare)",
+   "kind": "article",
+   "lang": "en",
+   "section": "timeouts",
+   "note": "Timeline diagrams of which Server/Transport timeout covers which phase. Idle vs read vs write"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=TD8qZgAtqRs",
+   "title": "Дмитрий Бугайченко — gRPC client-side load balancing — зачем, что, как и WTF?",
+   "by": "Joker — Конференция о будущем разработки",
+   "kind": "video",
+   "lang": "ru",
+   "section": "grpc",
+   "note": "gRPC client-side load balancing: why one connection gets all the load"
+  }
+ ],
+ "tls-quic": [
+  {
+   "url": "https://tls13.xargs.org/",
+   "title": "The Illustrated TLS 1.3 Connection: Every Byte Explained",
+   "by": "Michael Driscoll",
+   "kind": "interactive",
+   "lang": "en",
+   "note": "Click through a real TLS 1.3 handshake byte by byte, including the session tickets used for resumption"
+  },
+  {
+   "url": "https://quic.xargs.org/",
+   "title": "The Illustrated QUIC Connection: Every Byte Explained",
+   "by": "Michael Driscoll",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "path",
+   "note": "The same byte-level walkthrough for QUIC: initial packets, crypto frames, connection IDs"
+  },
+  {
+   "url": "https://blog.cloudflare.com/introducing-0-rtt/",
+   "title": "Introducing Zero Round Trip Time Resumption (0-RTT)",
+   "by": "Cloudflare",
+   "kind": "article",
+   "lang": "en",
+   "section": "resume",
+   "note": "How 0-RTT early data works and the replay attack it opens. Why only idempotent requests should use it"
+  },
+  {
+   "url": "https://letsencrypt.org/docs/dst-root-ca-x3-expiration-september-2021/",
+   "title": "DST Root CA X3 Expiration (September 2021)",
+   "by": "Let's Encrypt",
+   "kind": "docs",
+   "lang": "en",
+   "section": "certs",
+   "note": "Real incident: an expired cross-signed root broke old clients even though leaf certs were valid"
+  },
+  {
+   "url": "https://smallstep.com/blog/everything-pki/",
+   "title": "Everything you should know about certificates and PKI but are too afraid to ask",
+   "by": "Mike Malone (smallstep)",
+   "kind": "article",
+   "lang": "en",
+   "section": "certs",
+   "note": "Long, clear tour of chains, intermediates, SANs and trust stores: the pieces that break in prod"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=4rYPXgCKamM",
+   "title": "HTTP/3 and QUIC: Who, what, where, when and, WHY?",
+   "by": "Robin Marx (Devoxx)",
+   "kind": "video",
+   "lang": "en",
+   "section": "path",
+   "note": "Protocol researcher on why QUIC runs over UDP: head-of-line blocking, connection migration, 0-RTT"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=tnj-Wx9WLVY",
+   "title": "Андрей Чупин — Ускоряем сетевой слой ВКонтакте с HTTP/3",
+   "by": "Mobius — конференция по мобильной разработке",
+   "kind": "video",
+   "lang": "ru",
+   "section": "path",
+   "note": "QUIC/HTTP/3 in production at VK: handshakes and packet loss"
+  }
+ ],
+ "syscalls": [
+  {
+   "url": "https://www.youtube.com/watch?v=01w7viEZzXQ",
+   "title": "GopherCon 2017: A Go Programmer's Guide to Syscalls",
+   "by": "Liz Rice (Gopher Academy)",
+   "kind": "video",
+   "lang": "en",
+   "note": "Live-codes a mini strace in Go: see the syscall number, registers and ptrace in action"
+  },
+  {
+   "url": "https://blog.packagecloud.io/the-definitive-guide-to-linux-system-calls/",
+   "title": "The Definitive Guide to Linux System Calls",
+   "by": "packagecloud",
+   "kind": "article",
+   "lang": "en",
+   "section": "door",
+   "note": "int 0x80 vs syscall/sysenter vs vDSO, down to the registers and kernel entry code"
+  },
+  {
+   "url": "https://lwn.net/Articles/604287/",
+   "title": "Anatomy of a system call, part 1",
+   "by": "LWN.net (David Drysdale)",
+   "kind": "article",
+   "lang": "en",
+   "section": "door",
+   "note": "Walks the kernel side of a syscall: entry, syscall table, SYSCALL_DEFINE macros"
+  },
+  {
+   "url": "https://syscalls.mebeim.net/",
+   "title": "Linux syscall tables",
+   "by": "Marco Bonelli",
+   "kind": "interactive",
+   "lang": "en",
+   "note": "Searchable table of every syscall per arch: number, registers, links to kernel source"
+  },
+  {
+   "url": "https://www.brendangregg.com/blog/2018-02-09/kpti-kaiser-meltdown-performance.html",
+   "title": "KPTI/KAISER Meltdown Initial Performance Regressions",
+   "by": "Brendan Gregg",
+   "kind": "article",
+   "lang": "en",
+   "section": "cost",
+   "note": "Measures what Meltdown page-table isolation added to each crossing, by syscall rate"
+  },
+  {
+   "url": "https://www.ardanlabs.com/blog/2018/08/scheduling-in-go-part2.html",
+   "title": "Scheduling In Go: Part II - Go Scheduler",
+   "by": "William Kennedy (Ardan Labs)",
+   "kind": "article",
+   "lang": "en",
+   "section": "go",
+   "note": "Diagrams of the M detaching from its P on a blocking syscall and the P being handed off"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=FENz1yCD4Dw",
+   "title": "АКОС Семинар №9. Системные вызовы.",
+   "by": "Лекторий ФПМИ",
+   "kind": "video",
+   "lang": "ru",
+   "section": "door",
+   "note": "University seminar: what a Linux system call does, step by step"
+  }
+ ],
+ "virtual-memory": [
+  {
+   "url": "https://www.youtube.com/watch?v=qcBIvnQt0Bw",
+   "title": "Virtual Memory: 1 Introduction",
+   "by": "David Black-Schaffer",
+   "kind": "video",
+   "lang": "en",
+   "section": "translate",
+   "note": "Start of a short, clearly drawn lecture series: page tables, faults, TLBs one idea per clip"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=uyrSn3qbZ8U",
+   "title": "Virtual Memory: 10 Making Virtual Memory Fast",
+   "by": "David Black-Schaffer",
+   "kind": "video",
+   "lang": "en",
+   "section": "translate",
+   "note": "Why every access would need extra memory reads, and how the TLB caches translations"
+  },
+  {
+   "url": "https://blog.codingconfessions.com/p/virtual-memory",
+   "title": "Virtual Memory from First Principles",
+   "by": "Abhinav Upadhyay (Confessions of a Code Addict)",
+   "kind": "article",
+   "lang": "en",
+   "note": "Page tables, TLBs and demand paging tied to real Linux internals, with diagrams"
+  },
+  {
+   "url": "https://pages.cs.wisc.edu/~remzi/OSTEP/vm-paging.pdf",
+   "title": "OSTEP: Paging: Introduction",
+   "by": "Remzi & Andrea Arpaci-Dusseau",
+   "kind": "paper",
+   "lang": "en",
+   "section": "translate",
+   "note": "Free textbook chapter: address translation worked by hand, step by step"
+  },
+  {
+   "url": "https://www.kernel.org/doc/html/latest/mm/overcommit-accounting.html",
+   "title": "Overcommit Accounting",
+   "by": "Linux kernel docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "numbers",
+   "note": "The three vm.overcommit_memory modes: why malloc succeeds and the OOM killer comes later"
+  },
+  {
+   "url": "https://go.dev/doc/gc-guide#Memory_limit",
+   "title": "A Guide to the Go Garbage Collector: Memory limit",
+   "by": "Go team",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "go",
+   "note": "Interactive heap graphs showing GOMEMLIMIT vs GOGC and how Go returns memory to the OS"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=KBZcpSQyVsY",
+   "title": "Устройство виртуальной памяти - Оптимизации в Go",
+   "by": "balun.courses",
+   "kind": "video",
+   "lang": "ru",
+   "section": "translate",
+   "note": "Virtual memory for Go developers: pages, TLB, and optimisations"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=r6oqeWThtio",
+   "title": "Погружение в виртуальную память и большие страницы / Константин Новаковский (Selectel)",
+   "by": "HighLoad Channel",
+   "kind": "video",
+   "lang": "ru",
+   "section": "translate",
+   "note": "Virtual memory and huge pages in depth (Selectel)"
+  }
+ ],
+ "os-scheduling": [
+  {
+   "url": "https://eli.thegreenplace.net/2018/measuring-context-switching-and-memory-overheads-for-linux-threads/",
+   "title": "Measuring context switching and memory overheads for Linux threads",
+   "by": "Eli Bendersky",
+   "kind": "article",
+   "lang": "en",
+   "section": "sched",
+   "note": "Real benchmarks of thread switch cost vs goroutine switch cost, with the code"
+  },
+  {
+   "url": "https://eli.thegreenplace.net/2018/basics-of-futexes/",
+   "title": "Basics of Futexes",
+   "by": "Eli Bendersky",
+   "kind": "article",
+   "lang": "en",
+   "section": "futex",
+   "note": "Builds a mutex on futex from scratch: fast path in userspace, kernel only on contention"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=UE7QX98-kO0",
+   "title": "Throttling: New Developments in Application Performance with CPU Limits",
+   "by": "Dave Chiluk, Indeed (CNCF)",
+   "kind": "video",
+   "lang": "en",
+   "section": "limits",
+   "note": "The engineer who fixed the CFS quota bug explains period/quota throttling with graphs"
+  },
+  {
+   "url": "https://danluu.com/cgroup-throttling/",
+   "title": "The container throttling problem",
+   "by": "Dan Luu",
+   "kind": "article",
+   "lang": "en",
+   "section": "limits",
+   "note": "Twitter's production data on quota throttling at low CPU use and what fixed it"
+  },
+  {
+   "url": "https://go.dev/blog/container-aware-gomaxprocs",
+   "title": "Container-aware GOMAXPROCS",
+   "by": "Go team",
+   "kind": "article",
+   "lang": "en",
+   "section": "limits",
+   "note": "Go 1.25+ reads the cgroup CPU limit for GOMAXPROCS; why this avoids throttling"
+  },
+  {
+   "url": "https://lwn.net/Articles/925371/",
+   "title": "An EEVDF CPU scheduler for Linux",
+   "by": "LWN.net (Jonathan Corbet)",
+   "kind": "article",
+   "lang": "en",
+   "section": "sched",
+   "note": "How EEVDF replaced CFS (Linux 6.6) in picking who runs next: lag, deadlines, fairness"
+  }
+ ],
+ "os-io": [
+  {
+   "url": "https://jvns.ca/blog/2017/06/03/async-io-on-linux--select--poll--and-epoll/",
+   "title": "Async IO on Linux: select, poll, and epoll",
+   "by": "Julia Evans",
+   "kind": "article",
+   "lang": "en",
+   "section": "wait",
+   "note": "Short, friendly tour of the readiness APIs and why epoll scales where select does not"
+  },
+  {
+   "url": "https://morsmachine.dk/netpoller",
+   "title": "The Go netpoller",
+   "by": "Daniel Morsing",
+   "kind": "article",
+   "lang": "en",
+   "section": "go",
+   "note": "How Go parks a goroutine on a socket via epoll instead of burning a thread"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=y4cb39pBp0I",
+   "title": "The Design and Evolution of io_uring by Jens Axboe",
+   "by": "TigerBeetle",
+   "kind": "video",
+   "lang": "en",
+   "section": "wait",
+   "note": "io_uring's author on why Linux AIO failed and how shared rings cut syscalls"
+  },
+  {
+   "url": "https://lwn.net/Articles/752063/",
+   "title": "PostgreSQL's fsync() surprise",
+   "by": "LWN.net (Jonathan Corbet)",
+   "kind": "article",
+   "lang": "en",
+   "section": "cache",
+   "note": "Real story of write() being only a page-cache promise: lost writeback errors ate data"
+  },
+  {
+   "url": "https://danluu.com/file-consistency/",
+   "title": "Files are hard",
+   "by": "Dan Luu",
+   "kind": "article",
+   "lang": "en",
+   "section": "cache",
+   "note": "Research roundup on how apps get fsync/rename crash consistency wrong"
+  },
+  {
+   "url": "https://www.kegel.com/c10k.html",
+   "title": "The C10K problem",
+   "by": "Dan Kegel",
+   "kind": "article",
+   "lang": "en",
+   "section": "wait",
+   "note": "Historic classic (1999+) that framed thread-per-connection vs event loops; read as history"
+  }
+ ],
+ "containers": [
+  {
+   "url": "https://www.youtube.com/watch?v=8fi7uSYlOdc",
+   "title": "Containers From Scratch • Liz Rice • GOTO 2018",
+   "by": "GOTO Conferences",
+   "kind": "video",
+   "lang": "en",
+   "section": "process",
+   "note": "Live-codes a container in ~60 lines of Go: namespaces, chroot, cgroups; nothing magic"
+  },
+  {
+   "url": "https://labs.iximiuz.com/tutorials/build-a-container-from-scratch-in-go-1b92e418",
+   "title": "Build a Container from Scratch in Go (Liz Rice GOTO 2018)",
+   "by": "iximiuz Labs",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "process",
+   "note": "Code along with the talk above in a real browser-based Linux sandbox"
+  },
+  {
+   "url": "https://iximiuz.com/en/posts/container-learning-path/",
+   "title": "Learning Containers From The Bottom Up",
+   "by": "Ivan Velichko",
+   "kind": "article",
+   "lang": "en",
+   "note": "Illustrated learning path from Linux primitives up to runtimes and Kubernetes"
+  },
+  {
+   "url": "https://github.com/Yelp/dumb-init",
+   "title": "dumb-init: A minimal init system for Linux containers",
+   "by": "Yelp",
+   "kind": "docs",
+   "lang": "en",
+   "section": "pid1",
+   "note": "README explains exactly why PID 1 ignores signals and fails to reap zombies"
+  },
+  {
+   "url": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/",
+   "title": "Resource Management for Pods and Containers",
+   "by": "Kubernetes docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "k8s",
+   "note": "Official mapping of requests/limits to CPU shares, CFS quota and the memory cgroup limit"
+  },
+  {
+   "url": "https://kubernetes.io/docs/concepts/scheduling-eviction/node-pressure-eviction/",
+   "title": "Node-pressure Eviction",
+   "by": "Kubernetes docs",
+   "kind": "docs",
+   "lang": "en",
+   "section": "limits",
+   "note": "Kubelet eviction vs kernel OOM kill: who dies first and in which QoS order"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=rJRLZfk3a8U",
+   "title": "Контейнерная виртуализация в Linux",
+   "by": "Computer Science Center",
+   "kind": "video",
+   "lang": "ru",
+   "section": "process",
+   "note": "Lecture: Linux container virtualisation, namespaces and cgroups"
+  }
+ ],
+ "cpu-caches": [
+  {
+   "url": "https://www.youtube.com/watch?v=WDIkqP4JbkE",
+   "title": "code::dive 2014 - Scott Meyers: CPU Caches and Why You Care",
+   "by": "NOKIA Technology Center Wrocław",
+   "kind": "video",
+   "lang": "en",
+   "note": "Best single talk on cache lines, prefetching and false sharing, with benchmarks"
+  },
+  {
+   "url": "https://colin-scott.github.io/personal_website/research/interactive_latency.html",
+   "title": "Latency Numbers Every Programmer Should Know (interactive)",
+   "by": "Colin Scott",
+   "kind": "interactive",
+   "lang": "en",
+   "section": "wall",
+   "note": "Slider over the years showing L1/L2/RAM/SSD/network gaps; the memory wall at a glance"
+  },
+  {
+   "url": "https://igoro.com/archive/gallery-of-processor-cache-effects/",
+   "title": "Gallery of Processor Cache Effects",
+   "by": "Igor Ostrovsky",
+   "kind": "article",
+   "lang": "en",
+   "section": "misses",
+   "note": "Seven tiny experiments with graphs: line size, L1/L2 sizes, associativity, false sharing"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=rX0ItVEVjHc",
+   "title": "CppCon 2014: Mike Acton \"Data-Oriented Design and C++\"",
+   "by": "CppCon",
+   "kind": "video",
+   "lang": "en",
+   "section": "misses",
+   "note": "Layout data for the cache, not the object model; blunt, classic, language-agnostic"
+  },
+  {
+   "url": "https://research.swtch.com/hwmm",
+   "title": "Hardware Memory Models",
+   "by": "Russ Cox",
+   "kind": "article",
+   "lang": "en",
+   "section": "order",
+   "note": "x86-TSO vs ARM reordering with litmus tests; the backdrop to Go's memory model"
+  },
+  {
+   "url": "https://people.freebsd.org/~lstewart/articles/cpumemory.pdf",
+   "title": "What Every Programmer Should Know About Memory",
+   "by": "Ulrich Drepper",
+   "kind": "paper",
+   "lang": "en",
+   "note": "The 114-page deep reference on DRAM, caches, TLBs and NUMA (2007, still accurate)"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=Lrjjqc1bRHo",
+   "title": "Как устроены память и кеши | Сергей Слотин",
+   "by": "Yandex for Backend",
+   "kind": "video",
+   "lang": "ru",
+   "section": "wall",
+   "note": "Sergey Slotin (Algorithmica): how memory and CPU caches really work"
+  },
+  {
+   "url": "https://www.youtube.com/watch?v=TjzeCWaTOtM",
+   "title": "Оптимизируем код на Go в 10 раз | Как избежать false sharing в Go",
+   "by": "Владимир Балун",
+   "kind": "video",
+   "lang": "ru",
+   "section": "sharing",
+   "note": "False sharing measured in Go: 10x from padding"
+  }
+ ]
+}

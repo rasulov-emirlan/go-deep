@@ -13,7 +13,7 @@ export function Rate({ topic }: { topic: string }) {
   const [sections, setSections] = useState<string[]>([])
 
   const openForm = () => {
-    setSections([...document.querySelectorAll('.section h2')].map((h) => h.textContent?.trim() ?? '').filter((s) => s && s !== 'Asked in real interviews' && !s.includes('→')))
+    setSections([...document.querySelectorAll('.section h2:not(.further h2)')].map((h) => h.textContent?.trim() ?? '').filter((s) => s && s !== 'Asked in real interviews' && !s.includes('→')))
     setOpen(true)
   }
 
